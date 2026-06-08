@@ -1,0 +1,5 @@
+src,dst,r_th_K_per_W,contact_type,note
+CP,Center,0.75,vertical,plasma-side CP to upper center
+Center,middle,0.5,radial,center to middle
+middle,edge,0.6,radial,middle to edge
+Center,edge,1.6,radial_long,weak long-range path

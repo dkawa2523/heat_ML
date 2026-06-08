@@ -1,0 +1,24 @@
+[project]
+name = "thermal-cell-practical"
+version = "0.6.0"
+description = "Productized lightweight CAE thermal response surrogate for upper Cell temperature training, monitoring, and residual analysis"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "pyyaml>=6.0",
+  "matplotlib>=3.7",
+  "torch>=2.0"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[project.scripts]
+celltemp = "celltemp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100

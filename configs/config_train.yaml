@@ -1,0 +1,89 @@
+project:
+  seed: 42
+  run_name: graph_rc_demo
+  output_dir: outputs/runs
+  overwrite_run: true
+
+data:
+  raw_dir: data/raw
+  file_pattern: "temp_*.csv"
+  filename_regex: 'temp_(?P<brine>[-+0-9.eE]+)_(?P<heater>[-+0-9.eE]+)_(?P<plasma>[-+0-9.eE]+)\.csv'
+  columns: [time, CP, Center, middle, edge]
+  sensor_cols: [CP, Center, middle, edge]
+  control_cols: [brine, heater, plasma]
+  sep: "[\\s,]+"
+  # false: header-less CAE CSV, true: header row, auto: infer from first line
+  header: false
+  dt: 1.0
+  temp_min: -50.0
+  temp_max: 300.0
+
+split:
+  # choices: random, holdout_max, holdout_min, holdout_corner
+  method: random
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # examples:
+  # method: holdout_max
+  # holdout_control: plasma
+  # method: holdout_corner
+  # corner_controls: [brine, heater, plasma]
+  # corner_direction: max
+
+features:
+  history_steps: 3
+  target: delta_temperature
+  # Optional first-order lag for setpoints. Keep false for pure constant-condition CAE.
+  # Turn true when training data includes step/ramp CAE or monitor logs.
+  use_effective_controls: false
+  control_lag_tau:
+    brine: 3.0
+    heater: 5.0
+    plasma: 0.0
+
+model:
+  # choices: linear_rc, mlp, cnn1d, gru, lstm, tcn, thermal_state_space, graph_rc
+  name: graph_rc
+  hidden_dim: 64
+  dropout: 0.05
+  residual_scale: 0.05
+  graph:
+    node_table: configs/cell_nodes.csv
+    edge_table: configs/cell_edges.csv
+    symmetric: true
+    init_from_resistance: true
+    learn_conductance: true
+    # Useful when sensor_cols has only 3 points but the edge table still contains a 4-point graph.
+    ignore_unknown_edges: false
+    conduction_scale: 0.05
+    use_source_prior: true
+    source_prior_scale: 0.05
+    control_signs:
+      brine: -1.0
+      heater: 1.0
+      plasma: 1.0
+
+train:
+  epochs: 200
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  patience: 40
+  gradient_clip: 1.0
+  print_every: 50
+  device: auto
+  num_threads: 1
+  rollout_loss_weight: 0.0
+  rollout_loss_steps: 3
+  # Softly keeps learned Graph-RC conductance near the resistance-table prior.
+  graph_prior_loss_weight: 0.0
+
+evaluation:
+  make_plots: true
+  max_plots_per_split: 3
+  dynamic_case_keywords: [step, ramp, pulse, recipe, schedule]
+
+compare:
+  runs_dir: outputs/runs
+  output: outputs/model_leaderboard.csv

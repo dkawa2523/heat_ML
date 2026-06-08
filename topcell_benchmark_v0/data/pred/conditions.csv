@@ -1,0 +1,4 @@
+case_id,t_end,dt,init_CP,init_Center,init_middle,init_edge,brine,heater,plasma,schedule_csv
+forecast_const_nominal,180.0,1.0,55.0,55.0,55.0,55.0,20.0,120.0,100.0,
+forecast_plasma_onoff,180.0,1.0,55.0,55.0,55.0,55.0,20.0,120.0,100.0,data/pred/schedules/schedule_plasma_onoff.csv
+forecast_recipe,180.0,1.0,54.0,56.0,59.0,62.0,30.0,160.0,150.0,data/pred/schedules/schedule_recipe.csv

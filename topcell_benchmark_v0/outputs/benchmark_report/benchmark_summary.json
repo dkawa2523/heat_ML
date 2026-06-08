@@ -1,0 +1,15 @@
+{
+  "best_standard_model_by_test_rmse": {
+    "run_name": "bench_lstm_topcell_v0",
+    "model": "lstm",
+    "test_rollout_rmse": 0.3345857567464237,
+    "test_rollout_mae": 0.2705771507330768,
+    "test_rollout_endpoint_mae": 0.2510030183985888
+  },
+  "graph_rc_standard_test_rmse": 2.1714900710435234,
+  "graph_rc_plasma_holdout_test_rmse": 2.300645320385624,
+  "graph_rc_3pt_test_rmse": 1.9381030723429509,
+  "forecast_graph_rc_mean_rmse": 1.7509850455362113,
+  "monitor_base_mean_rmse": 0.21516512422928363,
+  "monitor_corrected_mean_rmse": 0.21637217441049575
+}
