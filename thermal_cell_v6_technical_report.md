@@ -34,6 +34,19 @@ Neural ODE、PINN、DeepONet、FNOは本コードの対象外である。理由�
 
 本レポートの後半では、同梱の `TopCell-ICP-Thermal Benchmark v0` を実際に実行し、モデル比較・Graph-RC診断・forecast・monitor/residualsを評価する。今回の実測ベンチでは、精度面ではLSTM/GRUが強く、Graph-RCは説明性と熱抵抗prior診断には有用だが、現行設定の予測精度では系列モデルに劣る、という結果になった。この点は、本基盤を「精度だけのブラックボックス選定」ではなく、「CAE surrogate精度、物理仮説診断、実測残差監視を分けて見る」ための作業基盤として位置づける理由でもある。
 
+### 0.1 本問題に取り組むエンジニア向けの読み方
+
+最短で全体を把握する場合は、以下の順に読むとよい。
+
+| 確認したいこと | 読む箇所 | 判断ポイント |
+|---|---|---|
+| 何を予測しているか | 2章、9章 | trajectory単位で、過去温度・操作量から次時刻の \(\Delta T\) を予測し、180秒rolloutする問題 |
+| ベンチマークのデータ構成 | 9.1、9.3 | 定数条件が中心で、動的scheduleは最小構成の確認用である |
+| どの結果を重視するか | 11章、12.1、12.2 | R²だけでなく、RMSE、case別誤差、sensor別誤差、時間方向の誤差を見る |
+| どのモデルを主力候補にするか | 12.1、12.7 | 今回の標準splitではLSTM/GRUが主力候補、Graph-RCは診断用途が中心 |
+| 本コードがない場合に対する効果 | 13章 | no-learning baselineに対して、予測誤差を大きく削減し、比較・診断・monitorを一貫化する |
+| 実装や改善へ戻す観点 | 15章、16章 | 採用判断、言えること/言えないこと、次に直すべき箇所を分けて確認する |
+
 ---
 
 ## 1. 開発背景
@@ -593,6 +606,8 @@ $$
 
 同梱ベンチマークは、半導体プラズマチャンバー上部Cellを想定した合成CAE風データである。実機や特定商用装置を再現したものではなく、コード機能評価用の物理風データである。
 
+この問題は、ある時刻までの少数点温度と操作量履歴から、次時刻の温度変化を予測し、それを繰り返して180秒のrolloutを行うCAE surrogate問題として定義している。学習器が直接見るのは、CSVに保存された温度時系列、操作量、ケース名から読める代表条件、およびGraph-RCを使う場合のnode/edge表だけである。真値生成に使った微分方程式、内部の有効操作量、入熱係数、ambient loss係数は学習器には渡さない。
+
 | 項目 | 内容 |
 |---|---|
 | センサー | `CP`, `Center`, `middle`, `edge` |
@@ -605,6 +620,21 @@ $$
 | 初期温度pattern | `cold`, `nominal`, `gradient` |
 | 動的scenario | `step_plasma`, `step_heater`, `step_brine`, `recipe` |
 
+ベンチマークの全体像は以下である。定数条件が大部分を占め、動的scheduleは少数の代表条件で追加している。温度レンジはセンサーごとに異なり、CP側ほど高温側まで広がる。
+
+![Benchmark dataset composition](topcell_benchmark_v0/outputs/benchmark_report/problem_dataset_composition.png)
+
+学習・評価でモデルが解く入出力は、以下のように整理できる。
+
+| 観点 | 内容 |
+|---|---|
+| 入力 | 過去 `history_steps=8` の温度履歴、操作量履歴、次時刻の操作量 |
+| 予測対象 | 各センサーの次時刻温度差 \(\Delta T_{t+1}\) |
+| rollout | 予測した \(\Delta T\) を現在温度へ足し、次ステップの入力履歴へ戻す |
+| 評価単位 | 時刻行ではなく、CSV trajectory単位 |
+| 学習器に隠すもの | 真値生成式、真の熱容量、真の入熱係数、真のambient loss |
+| Graph-RCだけが使う追加情報 | `cell_nodes.csv`, `cell_edges.csv` の熱抵抗prior |
+
 定数条件は、以下の格子で生成される。
 
 | 因子 | 水準 |
@@ -615,6 +645,20 @@ $$
 | initial pattern | `cold`, `nominal`, `gradient` |
 
 したがって、定数条件は \(4 \times 4 \times 4 \times 3 = 192\) trajectoriesである。動的条件は、代表4条件に対して4種類のscheduleを与えるため \(4 \times 4 = 16\) trajectoriesである。疑似実測monitorは、`recipe` と `step_plasma` を元にした2本のログとして作られる。
+
+定数条件は、`brine`, `heater`, `plasma` の格子点を欠けなく埋めるように作っている。各格子点には `cold`, `nominal`, `gradient` の3種類の初期温度状態がある。
+
+![Constant-response control grid](topcell_benchmark_v0/outputs/benchmark_report/problem_constant_control_grid.png)
+
+同じ操作量でも初期温度状態が違うと、序盤の温度差、センサー間の温度勾配、rollout中の誤差伝播が変わる。特に `gradient` は、単に最終温度へ近づくだけでなく、空間方向の熱移動をモデルが扱えているかを見るためのケースである。
+
+![Initial-condition examples](topcell_benchmark_v0/outputs/benchmark_report/problem_initial_condition_examples.png)
+
+動的条件は、定数条件で学習した熱応答に対して、時間変化する操作量を与えたときにモデルが過渡応答を追えるかを見るために入れている。下図は代表例であり、左が操作量schedule、右が対応する温度応答である。
+
+![Dynamic schedule examples](topcell_benchmark_v0/outputs/benchmark_report/problem_dynamic_schedule_examples.png)
+
+ここで重要なのは、標準splitに含まれる動的caseは少数である点である。したがって、標準splitの結果だけで「任意のrecipeに強い」とは判断しない。動的scheduleは、コードが時間変化入力を処理できること、誤差の出方を可視化できること、forecastやmonitor workflowへ接続できることを確認するための最小セットである。
 
 ### 9.2 データ生成の熱モデル
 
@@ -658,7 +702,27 @@ $$
 | E. monitor | 実測風ログのone-step残差 | 任意のbase model |
 | F. residuals | offset / slow bias解析 | `residuals`, `correction` |
 
+各タスクは、モデルの別々の性質を見るために分けている。Aは純粋なrollout精度、Bは条件境界での外挿、Cは時間変化入力への応答、Dはセンサー削減時の動作確認、E/Fは実測ログを想定した監視と補正可否判断である。
+
+![Benchmark task matrix](topcell_benchmark_v0/outputs/benchmark_report/problem_task_matrix.png)
+
 本ベンチマークの狙いは、単に最小RMSEのモデルを選ぶことだけではない。標準splitではCAE surrogateの純粋な逐次予測性能を見て、高plasma外挿では条件境界での振る舞いを見て、3点評価では計測点削減時の劣化を見て、monitor/residualsでは実測ログに近い誤差構造を確認する。Graph-RCは、この中で「精度競争の候補」であると同時に、「熱抵抗表と入熱/冷却重みが破綻していないかを見る診断器」として扱う。
+
+標準splitと高plasma holdoutの構成は以下である。標準splitではtrajectory単位にrandom分割し、train/val/testの全てにplasma水準0, 50, 100, 150が入る。高plasma holdoutでは、testをplasma=150に固定し、train/valはplasma=0, 50, 100のみで構成する。これにより、標準splitの補間性能と、条件境界での外挿性能を分けて見られる。
+
+![Benchmark split composition](topcell_benchmark_v0/outputs/benchmark_report/problem_split_composition.png)
+
+検証項目を読むときの注意点は以下である。
+
+| 検証項目 | 読み方 | 注意 |
+|---|---|---|
+| 標準split RMSE/MAE | 通常のCAE surrogate候補選定 | 今回のtestは定数caseが中心 |
+| case別・sensor別誤差 | どの条件、どの位置で崩れるか | 平均値だけでは局所的な弱点を隠す |
+| endpoint MAE | 最終温度のズレ | 長時間rolloutのバイアス確認に向く |
+| max abs error | 最大逸脱 | 安全側評価や異常case探索に向く |
+| R² | 温度レンジ全体をどれだけ説明したか | 温度範囲が広いと高く出やすく、RMSEと併記する |
+| Graph-RC conductance ratio | 熱抵抗priorの破綻有無 | 精度が低くても診断価値は残る |
+| monitor base/corrected | 実測風ログで補正が効くか | 補正後だけでなくbase性能を見る |
 
 ---
 
@@ -824,6 +888,18 @@ topcell_benchmark_v0/outputs/benchmark_report/
 
 ![TopCell benchmark model comparison](topcell_benchmark_v0/outputs/benchmark_report/model_test_rmse_bar.png)
 
+非データサイエンス読者向けには、まずRMSEを温度誤差の大きさとして読むのがよい。下図では、0.5 ℃未満を主力候補、0.5〜1.0 ℃を要確認だが利用候補、1.0 ℃超を診断用途または改善必要という目安で色分けした。この目安では、LSTM/GRUが主力候補、CNN1D〜TCNが用途次第、Linear-RC/Graph-RCはそのまま主力予測器にするには厳しい。
+
+![Result model decision RMSE](topcell_benchmark_v0/outputs/benchmark_report/result_model_decision_rmse.png)
+
+R²も追加で計算したが、今回のように温度レンジが広いベンチマークでは、R²はどのモデルでも高く見えやすい。例えばGraph-RCでもglobal R²は0.99台になるが、RMSEではLSTMの約6.5倍である。したがって、本レポートではR²を「大まかな温度レンジを追えているか」の補助指標として使い、モデル選定はRMSE/MAE、最大誤差、case別誤差を優先する。
+
+![Result R2 vs RMSE caution](topcell_benchmark_v0/outputs/benchmark_report/result_r2_vs_rmse_caution.png)
+
+rollout評価では、誤差が時間とともに増えて残るかも重要である。LSTM/GRUは序盤に誤差が出た後、0.7 ℃未満に落ち着く。一方Graph-RCは60秒付近まで誤差が増え、その後も2 ℃台のバイアスが残る。これは単発の外れ値ではなく、モデル式または標準化空間での物理項扱いによる持続的なズレを示唆する。
+
+![Result horizon error main models](topcell_benchmark_v0/outputs/benchmark_report/result_horizon_error_main_models.png)
+
 今回の標準splitでは、LSTMが最良であり、GRU、CNN1Dが続いた。`thermal_state_space` は物理寄りモデルとしては比較的安定しているが、最良の系列モデルには届かなかった。一方、Graph-RCは熱抵抗priorを使う説明可能なモデルであるにもかかわらず、RMSEでは最下位となった。
 
 この結果は、レポート前半の設計意図をそのまま否定するものではない。むしろ、以下の切り分けを示している。
@@ -850,6 +926,14 @@ topcell_benchmark_v0/outputs/benchmark_report/
 ![TopCell benchmark RMSE by case kind](topcell_benchmark_v0/outputs/benchmark_report/model_test_rmse_by_kind.png)
 
 動的caseは16 trajectoriesと少なく、代表条件も限定されているため、この結果だけで「動的recipe全般に強い」とは判断しない。むしろ、動的caseが少数であることを明示し、recipe設計に使う前には追加のholdout設計が必要である。
+
+初期温度pattern別に見ると、`gradient` が明確なストレスケースになっている。LSTM/GRUでも `gradient` は他の初期条件より誤差が大きく、Graph-RCでは特に悪化する。したがって、平均RMSEだけでなく、初期温度勾配を持つケースを個別に確認する必要がある。
+
+![Result case group difficulty](topcell_benchmark_v0/outputs/benchmark_report/result_case_group_difficulty.png)
+
+センサー別に見ると、LSTM/GRUでも `Center` が相対的に難しく、Graph-RCでは `CP` と `edge` が大きく崩れる。これは、モデルが全センサーで均等に悪いのではなく、入熱側・外周側の空間バランスで誤差を持っていることを示す。Graph-RCの改善では、edge priorよりもsource/sink項や物理温度空間での計算を優先して疑うべきである。
+
+![Result sensor RMSE heatmap](topcell_benchmark_v0/outputs/benchmark_report/result_sensor_rmse_heatmap.png)
 
 ### 12.3 Graph-RCの外挿・3点評価
 
@@ -947,6 +1031,18 @@ Graph-RCを主力予測器へ近づけるには、次の改善が優先である
 
 ### 13.1 従来課題に対する効果
 
+今回のベンチマークで定量的に言える最も基本的な効果は、「学習済みsurrogateがない状態」に対して、温度時系列を実用的な誤差スケールまで落とせることである。ここでの比較対象は、既存CAEや人手解析そのものではなく、最低限の no-learning baseline として「初期温度を180秒間そのまま保持する」予測である。この基準では、標準testの平均RMSEは42.58 ℃であった。一方、LSTMは0.335 ℃、GRUは0.488 ℃、Graph-RCでも2.171 ℃であり、LSTMではRMSEが約127分の1、Graph-RCでも約20分の1になった。
+
+![Value baseline error reduction](topcell_benchmark_v0/outputs/benchmark_report/value_baseline_error_reduction.png)
+
+この比較は「既存CAEを不要にできる」という意味ではない。むしろ、既存CAE CSVから高速なrollout predictor、モデル比較、誤差診断、forecast、monitor/residualsを作る作業基盤として、本コードが有用であることを示している。コードがない場合、208本のtrajectoryは単なるCSV群であり、どのモデルが候補か、どの条件で崩れるか、Graph-RCのpriorが破綻しているのか、補正が効いたのかを同じ手順で追うのが難しい。
+
+![Value code capability matrix](topcell_benchmark_v0/outputs/benchmark_report/value_code_capability_matrix.png)
+
+また、本コードはraw trajectoryを、意思決定に使える複数の成果物へ変換する。標準split、8モデル比較、Graph-RC特殊タスク、forecast、monitor/residualsが同じCLIと出力規約でつながるため、単発の予測値ではなく、採用判断・弱点調査・次の改善箇所まで追える。
+
+![Value decision artifacts](topcell_benchmark_v0/outputs/benchmark_report/value_decision_artifacts.png)
+
 | 従来課題 | 期待される効果 |
 |---|---|
 | 条件ごとにCAE計算が必要 | 学習済みmodel_packageで新条件を高速rollout予測できる |
@@ -1001,27 +1097,83 @@ flowchart LR
 
 ---
 
-## 15. データサイエンティスト向けレビュー観点
+## 15. 本問題に取り組むエンジニア向けレビュー観点
 
-### 15.1 最初に見るべき成果物
+この章は、データサイエンス専門でないエンジニアが、今回のベンチマーク結果を実装判断へつなげるための確認表である。重要なのは、最良モデルを1つだけ選ぶことではなく、精度評価、物理仮説診断、実測monitor、次の改善箇所を分けて読むことである。
+
+### 15.1 まず読む順番
+
+| 順番 | 見るもの | 判断すること |
+|---:|---|---|
+| 1 | 0章のサマリ | 今回の結論が、LSTM/GRUを主力候補、Graph-RCを診断器として分ける内容であること |
+| 2 | 9章の問題設定と `problem_*.png` | ベンチマークが定数条件中心で、動的scheduleは限定的な確認用であること |
+| 3 | 12.1のRMSE/R²図 | R²が高くてもRMSE差が大きいこと、モデル選定はRMSEとcase別誤差を優先すること |
+| 4 | 12.2のcase別・sensor別図 | `gradient` 初期条件や特定sensorで崩れていないか |
+| 5 | 12.3、12.4のGraph-RC評価 | Graph-RCを主力予測器ではなく、熱抵抗priorや入熱/冷却仮説の診断に使えるか |
+| 6 | 12.5、12.6のforecast/monitor | 新schedule予測と実測風ログの残差監視が同じ出力規約で扱えるか |
+| 7 | 13章の効果説明 | コードがraw CSVを、比較・診断・forecast・monitor成果物へ変換していること |
+
+### 15.2 採用判断チェックリスト
+
+| 目的 | 今回の結果からの判断 | 追加で見るべきもの |
+|---|---|---|
+| 通常の新条件CAE surrogate | まずLSTM/GRUを主力候補にする | `model_leaderboard.csv`, `rollout_summary.csv`, `rollout_by_case.csv` |
+| 熱設計・熱抵抗priorの確認 | Graph-RCを診断器として使う | conductance比、sensor別誤差、edge/source/sinkの寄与 |
+| 高plasma側の条件境界評価 | 標準splitとは別にholdout評価を見る | plasma holdoutのRMSE、OOD警告、max abs error |
+| 動的recipeの事前評価 | workflow確認はできるが、任意recipe保証とは読まない | 動的caseの追加holdout、step別・recipe別のrollout |
+| 3点センサー運用 | 3点モデルの動作確認はできるが、CP除外の制約を明記する | どのsensorを外したか、評価対象が同一か |
+| 実測monitor投入 | まずbase residualを確認し、補正後だけで判断しない | `residual_long.csv`, `residual_summary.csv`, `offset_correction.json` |
+| offset_ema補正の採用 | 今回は自動採用すべき結果ではない | base RMSEとcorrected RMSE、補正量のclamp、時系列残差 |
+
+### 15.3 今回のベンチマークで言えること・言えないこと
+
+| 言えること | 根拠 | 言えないこと・注意 |
+|---|---|---|
+| 本コードはCAE風CSVから、学習・比較・forecast・monitorまで一貫した成果物を作れる | 10章、13章のCLIと出力図表 | 実機運用でそのまま精度保証できるわけではない |
+| 学習済みsurrogateは no-learning baseline より大幅に有効である | 13.1のbaseline比較。初期温度保持RMSE 42.58 ℃に対し、LSTM 0.335 ℃ | 既存CAEを不要にするという意味ではない |
+| 今回の標準splitではLSTM/GRUが精度面の主力候補である | 12.1のRMSE、MAE、R²、時間方向誤差 | 別データや実機ログでも常に最良とは限らない |
+| R²は補助指標として有用だが、単独では判断できない | Graph-RCでもR²は高いが、RMSEではLSTMより大きく劣る | R²が高いことを「温度誤差が十分小さい」と読まない |
+| Graph-RCは熱抵抗prior診断には価値がある | 12.4のconductance診断、物理構造を持つモデル設計 | 現行設定のまま主力予測器にするには精度不足 |
+| monitor/residualsは補正の効き方を検証できる | 12.6でbase/correctedを比較している | 今回offset_emaが悪化したことは、全ての補正が無効という意味ではない |
+
+### 15.4 成果物レビュー観点
 
 | 成果物 | 見る理由 |
 |---|---|
-| `train_history.csv` | 学習過程、過学習確認 |
-| `rollout_summary.csv` | 実推論性能 |
-| `rollout_by_case.csv` | 苦手ケース特定 |
-| `model_leaderboard.csv` | 複数モデル比較 |
-| `residual_summary.csv` | 実測残差の構造把握 |
-| `offset_correction.json` | センサーoffset候補 |
+| `problem_dataset_composition.png` | データ全体、定数/動的case、温度レンジを把握する |
+| `problem_split_composition.png` | 標準splitと高plasma holdoutの違いを確認する |
+| `model_leaderboard.csv` | 複数モデルの全体順位を確認する |
+| `result_model_decision_rmse.png` | エンジニア向けに主力候補・要確認・診断用途を切り分ける |
+| `result_r2_summary.csv` / `result_r2_vs_rmse_caution.png` | R²をRMSEと併読し、過信を避ける |
+| `rollout_by_case.csv` / `result_case_group_difficulty.png` | 苦手case、初期条件依存、外れcaseを探す |
+| `result_sensor_rmse_heatmap.png` | どのsensorで崩れているかを確認する |
+| `residual_long.csv` / `residual_summary.csv` | 実測風ログの残差構造をsensor・時間・条件で見る |
+| `offset_correction.json` | 弱補正がどの程度のoffsetを推定したか確認する |
+| `value_*.png` | 本コードがない場合に対する効果と、成果物の意思決定価値を説明する |
 
-### 15.2 モデル選定基準
+### 15.5 モデル選定基準
 
 1. one-step lossではなく、rollout RMSEを優先する。
-2. endpoint errorとmax abs errorを見る。
-3. 動的schedule caseでの誤差を見る。
-4. Graph-RCならlearned/prior conductance比を見る。
-5. monitor residualで、誤差がoffset / slow drift / 条件依存のどれかを見る。
-6. 補正後性能だけでなく、補正前base性能を必ず見る。
+2. R²は温度レンジを大まかに追えているかの補助指標として使い、単独で採用判断しない。
+3. endpoint errorとmax abs errorを見る。
+4. 平均値だけでなく、case別誤差とsensor別誤差を見る。
+5. 動的schedule caseでの誤差を見る。ただし、今回の動的case数は限定的である。
+6. Graph-RCならlearned/prior conductance比を見る。
+7. monitor residualで、誤差がoffset / slow drift / 条件依存のどれかを見る。
+8. 補正後性能だけでなく、補正前base性能を必ず見る。
+
+### 15.6 実装へ戻すときの完了条件
+
+次の条件を満たしていれば、今回のレポートはエンジニアが次の作業へ進むための判断材料として閉じている。
+
+| 確認項目 | 完了判断 |
+|---|---|
+| 問題設定 | 入力、予測対象、trajectory split、動的caseの限定性が説明されている |
+| ベンチマーク再現性 | 実行コマンド、出力ディレクトリ、主要成果物が明記されている |
+| 結果解釈 | RMSE、R²、case別、sensor別、時間方向誤差を分けて説明している |
+| コード有用性 | no-learning baselineとの比較と、raw CSVを意思決定成果物へ変換する価値を示している |
+| 主張の範囲 | 実機保証、任意recipe保証、Graph-RC主力化を過度に主張していない |
+| 次の改善 | LSTM/GRU運用候補、Graph-RC改善、monitor補正の再検証が分かれている |
 
 ---
 
@@ -1056,7 +1208,51 @@ class MySequenceModel(BaseCellTempModel):
 
 Huber lossは小さい残差では二乗誤差、大きい残差では線形ペナルティとなり、外れ値に対して二乗誤差より頑健である [R10]。Ridge回帰はL2正則化で係数を抑制するため、残差補正を強くしすぎたくない場合に扱いやすい [R11]。
 
-### 16.4 入れない方がよい拡張
+### 16.4 今後の拡張性
+
+本基盤は、重いMLOps基盤ではなく、CAE CSVから学習・評価・推論・monitor/residualsまでを一通り回す軽量コードとして設計されている。そのため、今後の拡張は「既存の入出力規約を保ったまま差し替える」方針が適している。
+
+| 拡張対象 | 現在の差し込み口 | 拡張しやすい内容 | 注意点 |
+|---|---|---|---|
+| モデル | `models.py`, `models_sequence.py`, `models_physics.py` | 新しいsequenceモデル、安定化した物理寄りモデル | `forward(batch)` が標準化済み \(\Delta T\) を返す規約を崩さない |
+| Graph-RC | `thermal_graph.py`, `cell_nodes.csv`, `cell_edges.csv` | node/edge表、熱抵抗prior、source/sink重みの改善 | 精度改善と物理解釈を混同しない |
+| 特徴量 | `features.py`, `control.py` | effective control、履歴長、制御値step特徴量 | train/evaluate/predictで同じ変換を使う |
+| 分割・評価 | `data.py`, `evaluate.py`, `compare.py` | recipe holdout、chamber holdout、動的case専用評価 | 時刻行単位splitへ戻さない |
+| forecast/monitor | `predict.py` | OOD警告、schedule処理、log resampling、出力CSV拡張 | open-loop forecastとmonitor one-stepを混ぜない |
+| 残差補正 | `correction.py`, `residuals.py` | offset、EMA、条件依存の弱補正 | 補正後だけで採用判断しない |
+| レポート生成 | `outputs/benchmark_report` | 図表の自動更新、HTML/PDF化、比較サマリ | 図表と元CSVの対応を保つ |
+
+一方で、任意メッシュ温度場、3次元CAE場、閉ループ制御、実機安全制御まで一気に広げるのは、本基盤の現在の粒度を超える。まずは少数計測点のCAE surrogate、予測誤差診断、実測風monitorを堅くするのが妥当である。
+
+### 16.5 開発ロードマップ
+
+開発計画は、精度改善だけでなく、再現性、運用時の誤用防止、実測データ接続を段階的に進める。
+
+| フェーズ | 目的 | 主な作業 | 完了条件 |
+|---|---|---|---|
+| Phase 0: 現状固定 | 現在のベンチマーク結果を基準線にする | レポート、生成図表、主要CSV、実行コマンドを保存 | 同じ設定で主要指標を再現できる |
+| Phase 1: 評価基盤の堅牢化 | 変更で性能や出力が壊れたことを検知する | benchmark runner、R²を含む指標CSV、画像リンク検査、回帰テスト追加 | `pytest` と小規模benchmarkで主要成果物が生成される |
+| Phase 2: 主力予測器の整備 | LSTM/GRUを実用候補として扱いやすくする | 推奨config、model package命名、OOD警告確認、case別/sensor別レポート自動化 | 新条件forecastで警告・予測・図表が一貫して出る |
+| Phase 3: Graph-RC改善 | 説明性を保ったまま予測精度を上げる | 物理温度空間でのRC項計算、ambient loss、brine sink依存、rollout loss、prior ablation | Graph-RCのRMSEが改善し、conductance診断も破綻しない |
+| Phase 4: monitor/residuals強化 | 実測ログ投入時の判断材料を増やす | base/corrected比較表、sensor別drift、条件依存残差、補正clamp監査 | 補正採用/不採用の理由が成果物から説明できる |
+| Phase 5: 実測データ接続 | 実機ログに近いデータ品質問題へ対応する | data contract、欠損/単位/時刻ずれ検査、chamber/lot/recipe別split | 実測ログを破綻なくmonitor入力へ変換できる |
+| Phase 6: 軽量製品化 | 小規模チームで継続利用できる形にする | model package version、CLIの結果検査、README更新、レポート自動生成 | 新しいCAEデータでも学習からレポートまで手順化される |
+
+優先順位は以下である。
+
+| 優先度 | 開発項目 | 理由 |
+|---|---|---|
+| P0 | 評価・成果物の回帰テスト | 今後の変更で、RMSE、R²、case別CSV、monitor出力が壊れたことを早く検知するため |
+| P0 | LSTM/GRUの推奨運用config | 今回のベンチマークで精度面の主力候補であるため |
+| P1 | Graph-RCの物理項改善 | 現状は診断価値があるが、主力予測器には精度不足であるため |
+| P1 | 動的schedule holdoutの拡充 | 標準splitだけでは任意recipe性能を主張できないため |
+| P1 | monitor/residualsの採用判定表 | 補正を入れるべきか、入れないべきかを説明可能にするため |
+| P2 | HTML/PDFレポート自動生成 | 読み手への共有性を上げるため |
+| P2 | 軽量な実験管理 | run数が増えた段階で必要になるため。現時点では過度なMLOpsは不要 |
+
+このロードマップでは、まず「壊れにくい評価基盤」と「精度面の主力候補」を固め、その後にGraph-RCの物理改善と実測monitorの信頼性を上げる。これにより、本コードは単発ベンチマークから、CAE・熱設計・実測ログを継続的に接続する開発基盤へ拡張できる。
+
+### 16.6 入れない方がよい拡張
 
 | 拡張 | 現段階で避ける理由 |
 |---|---|
