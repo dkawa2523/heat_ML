@@ -43,6 +43,10 @@ def _random_split(
     count = len(shuffled)
     train_ratio = float(cast(int | float | str, split_cfg.get("train_ratio", 0.7)))
     validation_ratio = float(cast(int | float | str, split_cfg.get("val_ratio", 0.15)))
+    if not 0.0 < train_ratio < 1.0:
+        raise ValueError("split.train_ratio must be between 0 and 1")
+    if not 0.0 <= validation_ratio < 1.0 or train_ratio + validation_ratio >= 1.0:
+        raise ValueError("split.val_ratio must be non-negative and leave a test fraction")
     train_count = max(1, round(count * train_ratio))
     validation_count = round(count * validation_ratio)
     if count >= 3:

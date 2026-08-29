@@ -60,14 +60,17 @@ class TrainingResult:
     history: tuple[dict[str, float], ...]
 
 
-def _parameter_prior(model: ThermalRCModel) -> torch.Tensor:
-    parameters = [
+def _log_multipliers(model: ThermalRCModel) -> tuple[torch.Tensor, ...]:
+    return (
         model.log_edge_multiplier,
         model.log_tau_multiplier,
         model.log_source_multiplier,
         model.log_boundary_multiplier,
-    ]
-    nonempty = [item.square().mean() for item in parameters if item.numel()]
+    )
+
+
+def _parameter_prior(model: ThermalRCModel) -> torch.Tensor:
+    nonempty = [item.square().mean() for item in _log_multipliers(model) if item.numel()]
     return torch.stack(nonempty).mean() if nonempty else model.capacity.new_zeros(())
 
 
@@ -175,7 +178,7 @@ def fit_thermal_model(
                 torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip)
             optimizer.step()
             with torch.no_grad():
-                for parameter in model.parameters():
+                for parameter in _log_multipliers(model):
                     parameter.clamp_(-_LOG_MULTIPLIER_LIMIT, _LOG_MULTIPLIER_LIMIT)
             epoch_losses.append(float(data_loss.detach().cpu()))
 

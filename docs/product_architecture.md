@@ -31,6 +31,9 @@ controlを持つため、別索引、ファイル名regex、暗黙の定数contr
 - `random`: time gridとcontrol履歴が同じtrajectoryを自動的に同じgroupへ入れる。
 - `explicit`: 必要な評価だけ、任意の`case_id,split`表を使用する。
 
+`random`の同一判定は記録されたtime gridとcontrol値の完全一致です。logger由来の微小揺らぎを
+同一recipeとしてまとめる必要がある実データでは、根拠のない丸めを加えず`explicit`を使います。
+
 ### Trajectory
 
 - `time: [N]`
@@ -133,7 +136,8 @@ forecastは初期sensor観測をnode状態へ写像し、以降はcommand schedu
 空欄にします。その1ファイルが初期状態、時間軸、将来commandをすべて表し、将来のsensor値が
 混在した入力は拒否します。条件一覧からscheduleファイルを参照する二段構成は持ちません。
 
-出力はsensor温度に加え、未観測node温度とeffective actuatorを持ちます。parameter uncertainty
+出力はsensor温度に加え、全node温度とeffective actuatorを持ちます。sensorとnodeの対応に
+かかわらず列schemaを一定に保ちます。parameter uncertainty
 を含まない状態分散だけを予測区間として見せることは避け、forecastは検証可能な物理軌道へ
 限定します。
 
@@ -164,6 +168,7 @@ artifactは次の3ファイルのみです。
 用途ごとに1つの`config.yaml`だけを持ち、学習・forecast・monitorが共有します。すべての相対パスは
 configの親ディレクトリ基準、乱数seedはtop-levelの1箇所です。出力は隣接する一時directoryへ
 全ファイルを書き終えてから置換するため、入力不正や処理失敗で直前の正常出力を壊しません。
+置換対象を限定するため、`output_dir`はconfigの親directory配下に置きます。
 
 sensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。artifactも既定では
 `project.output_dir/project.run_name/artifact`から導出し、別runを読む場合だけ明示します。
@@ -175,12 +180,11 @@ cli
   → workflows
     → artifact / learning / inference
       → engine / io
-        → domain
-          → config
+        → domain / config
 ```
 
-domainはnumpy以外のframeworkに依存しません。engine/learning/inferenceはpandas/YAMLを読みません。
-CSV・YAMLと数値計算の境界を明確にしています。
+domainとconfigは互いに依存しないleafです。domainはnumpy以外のframeworkに依存しません。
+engine/learning/inferenceはpandas/YAMLを読みません。CSV・YAMLと数値計算の境界を明確にしています。
 
 ## 10. Benchmark boundary
 

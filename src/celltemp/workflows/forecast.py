@@ -35,7 +35,6 @@ def run_forecast(cfg: dict, config_path: str | Path) -> Path:
             )
 
     target, overwrite = output_target(cfg, root, section="forecast")
-    observed_nodes = set(artifact.model.spec.sensor_nodes)
     summaries: list[dict[str, object]] = []
     with staged_output_directory(target, overwrite=overwrite) as out_dir:
         for request in requests:
@@ -44,8 +43,7 @@ def run_forecast(cfg: dict, config_path: str | Path) -> Path:
             for sensor_index, sensor in enumerate(artifact.sensor_names):
                 frame[f"temperature_{sensor}"] = result.sensor_temperature[:, sensor_index]
             for node_index, node in enumerate(artifact.model.spec.node_names):
-                if node not in observed_nodes:
-                    frame[f"state_{node}"] = result.node_temperature[:, node_index]
+                frame[f"state_{node}"] = result.node_temperature[:, node_index]
             for control_index, control in enumerate(artifact.control_names):
                 frame[f"effective_{control}"] = result.actuator[:, control_index]
             output_file = out_dir / f"{request.case_id}.csv"

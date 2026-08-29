@@ -140,6 +140,22 @@ def test_random_split_is_deterministic(cae_project: Path, data_cfg: dict) -> Non
     }
 
 
+@pytest.mark.parametrize(
+    "ratios",
+    [
+        {"train_ratio": 0.0, "val_ratio": 0.1},
+        {"train_ratio": 1.0, "val_ratio": 0.0},
+        {"train_ratio": 0.8, "val_ratio": 0.2},
+    ],
+)
+def test_random_split_rejects_invalid_ratios(
+    cae_project: Path, data_cfg: dict, ratios: dict[str, float]
+) -> None:
+    trajectories = load_trajectories(data_cfg, cae_project)
+    with pytest.raises(ValueError, match=r"split\.(train|val)_ratio"):
+        split_trajectories(trajectories, {"method": "random", **ratios})
+
+
 def test_optional_split_table_is_only_case_id_and_partition(
     cae_project: Path, data_cfg: dict
 ) -> None:

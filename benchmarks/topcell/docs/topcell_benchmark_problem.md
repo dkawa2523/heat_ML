@@ -92,12 +92,13 @@ integrationを使うため、完全に同一の離散モデルではありませ
 
 - F01–F10がすべて有限。
 - F01–F10のcase平均RMSEが`1.0 K`未満。
+- F01–F10のworst-case RMSEが`1.5 K`未満。
 - F01–F10の平均RMSEが未学習engineering priorを下回る。
 - F11のRMSEが`max(0.5 K, core平均の2倍)`を上回り、model gapが可視化される。
 - M01 residual RMSEが`0.35 K`未満。
 - M02 filtered physical temperatureがraw measurementよりtruthへ近い。
 - M03がnormalized residual 4以上で2秒以内に検出される。
-- M04のfiltered stateが欠測中も有限。
+- M04のfiltered stateが欠測中も有限で、全軌道RMSEが`0.25 K`未満。
 - M05がnormalized residual 4以上で5秒以内に検出される。
 
 これらはsynthetic sanity thresholdです。実機の許容温度、警報誤検知率、安全余裕を代替しません。

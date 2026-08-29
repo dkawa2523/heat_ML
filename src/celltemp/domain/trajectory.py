@@ -48,7 +48,8 @@ class Trajectory:
     existed when temperatures and setpoints were stored in same-length tables.
 
     Missing temperatures are represented by ``observation_mask=False``.  Their
-    numeric placeholders are ignored and may be NaN.
+    numeric placeholders are ignored and may be NaN.  Array inputs are copied and
+    stored read-only so external mutation cannot invalidate these invariants.
     """
 
     case_id: str
@@ -61,13 +62,13 @@ class Trajectory:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        time = np.asarray(self.time, dtype=np.float64)
-        temperature = np.asarray(self.temperature, dtype=np.float64)
-        commands = np.asarray(self.commands, dtype=np.float64)
+        time = np.array(self.time, dtype=np.float64, copy=True)
+        temperature = np.array(self.temperature, dtype=np.float64, copy=True)
+        commands = np.array(self.commands, dtype=np.float64, copy=True)
         mask = (
             np.isfinite(temperature)
             if self.observation_mask is None
-            else np.asarray(self.observation_mask, dtype=bool)
+            else np.array(self.observation_mask, dtype=bool, copy=True)
         )
 
         if not self.case_id.strip():
@@ -85,6 +86,8 @@ class Trajectory:
         if len(set(self.control_names)) != len(self.control_names):
             raise ValueError("control_names must be unique")
 
+        for array in (time, temperature, commands, mask):
+            array.setflags(write=False)
         object.__setattr__(self, "time", time)
         object.__setattr__(self, "temperature", temperature)
         object.__setattr__(self, "commands", commands)

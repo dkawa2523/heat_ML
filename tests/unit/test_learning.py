@@ -43,6 +43,8 @@ def test_trajectory_objective_is_zero_for_generating_model() -> None:
 def test_fit_reduces_full_rollout_error() -> None:
     trajectory = _synthetic_trajectory()
     model = ThermalRCModel(_source_system(0.08))
+    extension_parameter = torch.nn.Parameter(torch.tensor(10.0, dtype=torch.float64))
+    model.register_parameter("extension_parameter", extension_parameter)
     before = trajectory_rmse(model, trajectory)
     result = fit_thermal_model(
         model,
@@ -62,6 +64,7 @@ def test_fit_reduces_full_rollout_error() -> None:
     after = trajectory_rmse(model, trajectory)
     assert result.best_epoch > 0
     assert after < before * 0.1
+    assert extension_parameter.item() == 10.0
 
 
 def test_shooting_starts_preserve_the_requested_horizon() -> None:

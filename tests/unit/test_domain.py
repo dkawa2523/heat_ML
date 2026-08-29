@@ -57,6 +57,25 @@ def test_missing_temperature_is_allowed_only_when_masked() -> None:
     assert not trajectory.mask[0, 1]
 
 
+def test_trajectory_owns_read_only_array_values() -> None:
+    time = np.array([0.0, 1.0])
+    temperature = np.array([[20.0], [21.0]])
+    trajectory = Trajectory(
+        case_id="immutable",
+        time=time,
+        temperature=temperature,
+        commands=np.empty((1, 0)),
+        sensor_names=("temperature",),
+        control_names=(),
+    )
+    time[0] = 99.0
+    temperature[0, 0] = 99.0
+    assert trajectory.time[0] == 0.0
+    assert trajectory.temperature[0, 0] == 20.0
+    assert not trajectory.time.flags.writeable
+    assert not trajectory.temperature.flags.writeable
+
+
 def test_trajectory_rejects_sample_length_controls() -> None:
     with pytest.raises(ValueError, match="interval shape"):
         Trajectory(

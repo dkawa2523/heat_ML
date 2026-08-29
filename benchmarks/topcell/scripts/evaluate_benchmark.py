@@ -238,6 +238,7 @@ def acceptance_checks(forecast_cases: pd.DataFrame, monitor_cases: pd.DataFrame)
     return {
         "forecast_core_all_finite": bool(np.isfinite(core["learned_rmse"].to_numpy()).all()),
         "forecast_core_mean_rmse_below_1K": bool(core["learned_rmse"].mean() < 1.0),
+        "forecast_core_worst_rmse_below_1_5K": bool(core["learned_rmse"].max() < 1.5),
         "forecast_core_beats_engineering_prior": bool(
             core["learned_rmse"].mean() < core["prior_rmse"].mean()
         ),
@@ -250,6 +251,7 @@ def acceptance_checks(forecast_cases: pd.DataFrame, monitor_cases: pd.DataFrame)
         ),
         "monitor_sensor_fault_detected_within_2s": bool(fault["detection_delay"] <= 2.0),
         "monitor_missing_data_remains_finite": bool(missing["filtered_finite"]),
+        "monitor_missing_data_rmse_below_0_25K": bool(missing["filtered_rmse_to_truth"] < 0.25),
         "monitor_heat_load_detected_within_5s": bool(disturbance["detection_delay"] <= 5.0),
     }
 

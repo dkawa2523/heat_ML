@@ -35,7 +35,12 @@ Git管理せず、毎回generatorから再構築します。
 py -3.13 benchmarks/topcell/run.py
 ```
 
-## 外部forecast結果
+## 基準実行結果
+
+以下はseed 42でのreference resultです。再実行後の判定と完全精度は
+`work/outputs/benchmark/benchmark_summary.json`を正とします。
+
+### 外部forecast
 
 seed 42、60 epochでの結果です。model gapを除く10ケースの平均RMSEは`0.156 K`、
 engineering priorは`7.202 K`でした。
@@ -53,7 +58,7 @@ engineering priorは`7.202 K`でした。
 初期温度を一意に復元できない影響を明示します。`F11`の大誤差は失敗ではなく、非線形物理項が
 必要な領域を検出するnegative controlです。
 
-## monitor結果
+### Monitor
 
 | case | 主評価 | 結果 |
 |---|---|---:|
@@ -67,7 +72,7 @@ M05ではobserverが未知熱源を既知物理として再構成することは
 検出できることを合格条件にしています。絶対sensor offsetは基準温度なしに物理温度と一意分離
 できないため、M02は初期bias 0からのdrift追跡を評価します。
 
-## 同定結果
+### 同定
 
 内部random splitの平均RMSEはtrain `0.023 K`、validation `0.025 K`、test `0.022 K`です。
 source/boundary/edgeの最大相対誤差は`1.7%`、actuator tauの最大相対誤差は`7.9%`です。

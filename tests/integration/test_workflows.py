@@ -112,8 +112,8 @@ def test_forecast_exposes_hidden_state_without_accepting_future_measurements(
     output = pd.read_csv(output_path)
     assert "temperature_surface_tc" in output
     assert "state_core" in output
-    assert "state_shell" not in output
-    assert np.isfinite(output["state_core"]).all()
+    assert "state_shell" in output
+    assert np.isfinite(output[["state_core", "state_shell"]]).all().all()
 
     previous_output = output_path.read_bytes()
     request.loc[1, "surface_tc"] = 26.0

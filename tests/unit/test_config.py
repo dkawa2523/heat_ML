@@ -35,6 +35,14 @@ def test_empty_yaml_loads_as_empty_dict(tmp_path: Path) -> None:
     assert load_yaml(path) == {}
 
 
+@pytest.mark.parametrize("content", ["- one\n- two\n", "plain text\n"])
+def test_config_yaml_requires_a_mapping_root(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "invalid-root.yaml"
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match="YAML root must be a mapping"):
+        load_config(path)
+
+
 def test_save_yaml_round_trips_and_creates_parent_directories(tmp_path: Path) -> None:
     out = tmp_path / "deep" / "nested" / "cfg.yaml"
     payload = {"engine": {"integrator": "exact"}, "note": "上部Cell温度"}
@@ -88,3 +96,5 @@ def test_malformed_override_raises(tmp_path: Path) -> None:
     path = write_cfg(tmp_path, {})
     with pytest.raises(ValueError, match="override must be key=value"):
         load_config(path, ["model.name"])
+    with pytest.raises(ValueError, match="invalid YAML value"):
+        load_config(path, ["training.epochs=["])

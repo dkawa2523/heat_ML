@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,12 @@ def as_path(value: str | Path, root: Path) -> Path:
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        data = yaml.safe_load(f)
+    if data is None:
+        return {}
+    if not isinstance(data, Mapping):
+        raise ValueError(f"{path}: YAML root must be a mapping")
+    return dict(data)
 
 
 def save_yaml(obj: dict[str, Any], path: str | Path) -> None:
@@ -46,7 +52,7 @@ def load_config(path: str | Path, overrides: list[str] | None = None) -> dict[st
         key, raw = item.split("=", 1)
         try:
             value = yaml.safe_load(raw)
-        except Exception:
-            value = raw
+        except yaml.YAMLError as error:
+            raise ValueError(f"invalid YAML value for override {key}: {raw}") from error
         _set_by_dot_key(cfg, key, value)
     return cfg
