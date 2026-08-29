@@ -1,24 +1,125 @@
 [project]
 name = "thermal-cell-practical"
-version = "0.6.0"
-description = "Productized lightweight CAE thermal response surrogate for upper Cell temperature training, monitoring, and residual analysis"
+version = "1.0.0"
+description = "Physical-unit thermal RC foundation for identification, forecasting, and monitoring"
 requires-python = ">=3.10"
 dependencies = [
   "numpy>=1.24",
   "pandas>=2.0",
   "pyyaml>=6.0",
-  "matplotlib>=3.7",
-  "torch>=2.0"
+  "torch>=2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "ruff>=0.4"]
-
+# Everything `python quality.py pr` and the CI dependency audit need.
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "coverage[toml]>=7.4",
+  "hypothesis>=6.100",
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "types-PyYAML>=6.0",
+  "import-linter>=2.0",
+  "pip-audit>=2.7",
+]
 [project.scripts]
 celltemp = "celltemp.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# ---------------------------------------------------------------------------
+# format / lint
+# ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+# Only data and generated output are out of scope; the benchmark scripts are
+# maintained Python and are linted with everything else.
+extend-exclude = ["benchmarks/topcell/work", "examples/topcell_quickstart/work"]
+
+[tool.ruff.lint]
+# Explicitly selected rule families (never `ALL`) chosen for this codebase:
+#   E,W  pycodestyle       F    pyflakes (undefined names, unused imports)
+#   I    import order      UP   pyupgrade
+#   B    bugbear (real bug patterns)      SIM  simplification
+#   C4   comprehensions    A    builtin shadowing
+#   TID  tidy imports (no relative-parent imports)
+#   PT   pytest style      RUF  ruff-specific
+#   S    flake8-bandit (lightweight security)
+#   C90  mccabe cyclomatic complexity
+#   NPY  numpy-specific correctness (this is a numeric codebase)
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4", "A", "TID", "PT", "RUF", "S", "C90", "NPY"]
+ignore = [
+  # Formatter owns line breaking around operators/indentation.
+  "E203",
+  # `zip(..., strict=)` is py310+; kept off because the codebase targets py310 shapes
+  # that are already length-checked explicitly.
+  "B905",
+]
+
+[tool.ruff.lint.mccabe]
+# Every function, old or new, stays at or below 10. The codebase is at 0 violations.
+max-complexity = 10
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is the mechanism of a test, not a security finding.
+"tests/**" = ["S101"]
+# The quality runner exists to shell out to the tools; every argv is a fixed list.
+"quality.py" = ["S404", "S603", "S607"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["celltemp", "tests"]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# type checking -- mypy is the pre-existing checker for this repo (types-PyYAML
+# is already installed).  Per policy only ONE type checker is configured.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+files = ["src/celltemp", "tests"]
+exclude = "benchmarks/topcell"
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+show_error_codes = true
+
+# ---------------------------------------------------------------------------
+# tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--strict-markers --strict-config -ra"
+markers = [
+  "integration: exercises a full CLI/pipeline path, slower than a unit test",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["celltemp"]
+omit = ["*/benchmarks/topcell/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# The coverage floor lives here, not in a separate baseline file, so there is one
+# obvious place to look and one obvious place to raise it.
+fail_under = 88
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]

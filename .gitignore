@@ -6,14 +6,18 @@ __pycache__/
 .coverage
 htmlcov/
 
+.hypothesis/
+
 .venv/
 venv/
 env/
 
-/outputs/
-*.pt
-*.pkl
+# editable-install build metadata
+*.egg-info/
+build/
+dist/
 
-topcell_benchmark_v0/outputs/*
-!topcell_benchmark_v0/outputs/benchmark_report/
-!topcell_benchmark_v0/outputs/benchmark_report/**
+*.pt
+
+examples/*/work/
+benchmarks/*/work/

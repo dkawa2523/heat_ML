@@ -1,5 +1,0 @@
-sensor,x_mm,y_mm,z_mm,thermal_mass,plasma_weight,heater_weight,brine_weight
-CP,0,0,0,1.00,0.70,0.25,0.20
-Center,0,0,10,1.20,0.60,0.70,0.25
-middle,35,0,10,1.35,0.45,0.60,0.45
-edge,70,0,10,1.50,0.30,0.45,0.75

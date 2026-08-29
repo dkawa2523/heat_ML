@@ -1,1 +1,1 @@
-__version__ = "0.5.0"
+"""Physical-unit thermal identification, forecasting, and monitoring."""

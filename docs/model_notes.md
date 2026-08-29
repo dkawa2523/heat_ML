@@ -1,111 +1,67 @@
-# モデル実装メモ
+# Thermal RC model notes
 
-全モデルは共通して `scaled ΔT` を返します。
+## 同定される量
 
-```text
-入力: state_hist, control_hist, control_next
-出力: target_delta と同じ shape の ΔT
-```
+- edge conductance: edgeごとの倍率
+- actuator tau: actuatorごとの倍率
+- source gain: sourceごとの倍率
+- boundary conductance: boundaryごとの倍率
 
-Neural ODE / PINN / DeepONet / FNO はこの実装には含めていません。今回の目的は少数測定点の温度を固定時間ステップで逐次更新することなので、まずは以下の実装で比較します。
+すべてengineering priorからのlog倍率として保持され、常に非負です。`learnable: false`を
+設定した項はprior値に固定されます。
 
-## linear_rc
+## 固定する量
 
-```text
-ΔT = W [T_cur, u_next] + b
-```
+- heat capacity
+- edge topology
+- source/boundary node weights
+- source threshold
+- boundary temperature intercept/slope
+- sensor-node mapping
 
-最低限の線形baselineです。これに勝てない場合は、データ分割、正規化、学習率、過学習を確認します。
+これらも同時に自由化すると、データだけでは互いを分離できない場合が多いためです。変更する
+場合は、独立した熱容量測定、熱流測定、または十分に励起された実験設計を用意してください。
 
-## mlp
+## 時間離散化
 
-```text
-ΔT = MLP(flatten(T_hist, u_hist), u_next)
-```
+CSVの指令行は既定でleft-continuous zero-order holdです。actuatorは区間内で解析的に変化し、
+温度forcingは中点近似、温度状態は区間内affine系の厳密解を使います。
 
-小規模データで最初に見る深層baselineです。
+TopCell synthetic generatorも区間内actuator midpointを使いますが、temperatureはforward Euler、
+modelはexact integrationなので完全に同じ離散化ではありません。最新の外部評価値は
+[TopCell benchmark](../benchmarks/topcell/README.md)に集約しています。実データでは、command
+timestampが「開始時刻」か「終了時刻」かを必ず確認し、必要な場合だけ
+`control_convention: right`を指定してください。
 
-## gru
+## 初期状態
 
-```text
-h = GRU([T_hist, u_hist])
-ΔT = Head(h_last, u_next)
-```
+sensorとnodeが一対一なら、初期node温度は観測値です。隠れnodeがある場合は観測写像のridge
+逆問題を解き、未観測nodeを観測平均へ弱く寄せます。長いburn-inログがある場合はmonitorを
+先に流し、そのfiltered stateをforecast初期値として使う拡張が適切です。
 
-複数時定数や操作履歴が効く場合の候補です。
+actuator初期値は既定で最初のcommandとし、開始前に定常だったと仮定します。開始直前の実効値
+が既知なら、ライブラリAPIの`initial_actuator`へ渡せます。
 
-## tcn
+## Loss
 
-```text
-z = Conv1D([T_hist, u_hist])
-ΔT = Head(z_last, u_next)
-```
+Huber lossはKelvinで計算します。sensor別標準化をしないため、静かなsensorだけが過大な重みを
+持ちません。`huber_delta`は外れ値を二乗誤差から線形誤差へ切り替える温度幅です。
 
-固定dt、固定履歴長に向いた畳み込み時系列モデルです。
+`prior_weight`は係数をengineering priorへ弱く戻します。これは物理式をlossへ重複実装する
+penaltyではなく、不十分な励起に対する識別性regularizationです。
 
-## thermal_state_space
+学習中のlog倍率は数値安定性のため`±4`に制限します。したがってengineering priorに対する
+探索倍率はおよそ`e^-4`から`e^4`です。データごとの調整項ではなく、すべての学習に共通する
+発散防止の境界なので、設定項目にはしていません。
 
-```text
-T_next = T_eq(u) + a(u) * (T_cur - T_eq(u)) + residual(T_cur, u)
-ΔT = T_next - T_cur
-```
+## 適用外の兆候
 
-平衡温度と安定減衰を分けるため、rollout安定性を見たい本問題の第一候補です。
+次が全caseで同じ符号・温度依存性を持つ場合、微調整よりmodel termの追加を検討します。
 
-## graph_rc
+- 高温域だけ残差が急増する: radiationまたは温度依存物性
+- 加熱／冷却の履歴で同一指令への応答が異なる: hysteresis、phase change
+- command停止後も遅い熱源が残る: actuatorを一階から多段stateへ
+- 空間モードがsensorごとに一貫して残る: node/topology不足
 
-```text
-ΔT_i = s_g * Σ_j G_ij (T_j - T_i) / M_i
-     + s_q * source_prior_i(u) / M_i
-     + source_nn_i(u)
-     + residual_i(T,u)
-```
-
-`configs/cell_nodes.csv` と `configs/cell_edges.csv` から、Cell位置関係・熱抵抗priorを読みます。少数センサー向けに、外部GNNライブラリは使わず、明示的な行列演算だけで実装しています。
-
-学習後は以下を確認します。
-
-```text
-graph/learned_conductance.csv
-graph/graph_diagnostics.csv
-graph/source_weight.csv
-plots/graph_conductance_prior.png
-plots/graph_conductance_learned.png
-```
-
-`learned_over_prior` が極端に大きい/小さいedgeは、熱抵抗表とCAE条件のズレを示す可能性があります。
-
-## optional rollout loss
-
-デフォルトは通常のone-step ΔT lossです。
-
-```yaml
-train:
-  rollout_loss_weight: 0.0
-```
-
-rolloutで誤差が蓄積する場合のみ、軽く有効化します。
-
-```yaml
-train:
-  rollout_loss_weight: 0.2
-  rollout_loss_steps: 3
-```
-
-毎epochの本格rollout評価は重くなるため、学習中は短いfuture列だけを使い、最終評価で実rolloutを確認します。
-
-
-## dynamic controls / monitoring update
-
-この版では、Neural ODE / PINN / DeepONet / FNO を追加せず、既存モデルを実利用側に寄せています。追加した主な実装は以下です。
-
-- `data.header: false/true/auto` によるヘッダーあり/なしCSV読込
-- CAE CSV内の時間変化 `brine/heater/plasma` 列の学習利用
-- `schedule_interpolation: previous/linear`
-- `features.use_effective_controls` と `control_lag_tau` による一次遅れ有効入力
-- `prediction.mode: monitor` による実測ログの一ステップ残差監視
-- monitor logのリサンプリング
-- `model.graph.ignore_unknown_edges` による3点サブグラフ対応
-- `train.graph_prior_loss_weight` によるGraph-RC熱抵抗prior正則化
-
-重要な注意点として、定数条件CAEだけで学習したモデルに時間変化scheduleを入れることは、コード上は可能でも物理的には外挿になりやすいです。時間変化ヒーター・ブラインを実用する場合は、step/ramp/pulse/recipe形状のCAEを学習データへ追加してください。
+単一caseのノイズに合わせて自由度を追加しないでください。運転条件単位のholdoutで再現する
+残差だけを構造不足の根拠とします。

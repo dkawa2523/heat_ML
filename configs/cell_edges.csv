@@ -1,5 +1,0 @@
-src,dst,r_th_K_per_W,contact_type,note
-CP,Center,0.80,vertical,plasma side to center
-Center,middle,0.55,radial,center to middle ring
-middle,edge,0.65,radial,middle ring to edge
-Center,edge,1.60,radial_long,weak long-range path

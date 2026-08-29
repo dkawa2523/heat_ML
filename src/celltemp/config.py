@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import Any
 
@@ -8,8 +7,8 @@ import yaml
 
 
 def project_root_from_config(config_path: str | Path) -> Path:
-    p = Path(config_path).resolve()
-    return p.parent.parent if p.parent.name == "configs" else p.parent
+    """Resolve all relative project paths from the config file's directory."""
+    return Path(config_path).resolve().parent
 
 
 def as_path(value: str | Path, root: Path) -> Path:
@@ -18,7 +17,7 @@ def as_path(value: str | Path, root: Path) -> Path:
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -40,7 +39,7 @@ def _set_by_dot_key(cfg: dict[str, Any], dotted_key: str, value: Any) -> None:
 
 
 def load_config(path: str | Path, overrides: list[str] | None = None) -> dict[str, Any]:
-    cfg = copy.deepcopy(load_yaml(path))
+    cfg = load_yaml(path)
     for item in overrides or []:
         if "=" not in item:
             raise ValueError(f"override must be key=value, got: {item}")

@@ -1,0 +1,38 @@
+[importlinter]
+root_package = celltemp
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = one-way thermal platform layers
+type = layers
+containers =
+    celltemp
+layers =
+    cli
+    workflows
+    artifact | learning | inference
+    engine | io
+    domain
+    config
+exhaustive = true
+
+[importlinter:contract:domain-purity]
+name = domain definitions remain framework independent
+type = forbidden
+source_modules =
+    celltemp.domain
+forbidden_modules =
+    torch
+    pandas
+    yaml
+
+[importlinter:contract:compute-purity]
+name = thermal compute does not perform tabular or yaml IO
+type = forbidden
+source_modules =
+    celltemp.engine
+    celltemp.inference
+    celltemp.learning
+forbidden_modules =
+    pandas
+    yaml

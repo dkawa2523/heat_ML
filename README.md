@@ -1,338 +1,254 @@
 # thermal-cell-practical
 
-導体エッチング装置の上部Cellパーツ温度を、CAE過渡応答CSVから学習し、新しい条件で逐次推論するためのシンプルなPython実装です。
+少数の温度センサーと運転指令から、熱系を同定・予測・監視するための汎用的な
+集中定数熱基盤です。物理単位のまま動く対称RCモデルを一つだけ持ち、学習、
+open-loop forecast、実測monitorが同じ状態方程式を使用します。
 
-設計方針は以下です。
+## 目的
 
-```text
-複雑なMLOps・過剰な契約・大量テストは入れない
-ただし解析目的に必要な処理は一通り入れる
-```
+- 複数のCAEまたは実験過渡データから、熱伝導、熱源、境界熱伝達、アクチュエータ
+  応答遅れを同定する。
+- 未知運転条件・時間変化レシピに対して、安定した温度軌道を予測する。
+- 実測中はKalman observerで内部温度状態とセンサーバイアスを因果的に推定する。
+- センサー数と熱状態数を分離し、欠測、隠れノード、可変時間刻みに対応する。
 
-今回の目的では Neural ODE / PINN / DeepONet / FNO は入れていません。少数の計測点温度を固定時間ステップで逐次更新する問題なので、まずは `thermal_state_space` と `graph_rc` を主力にし、`linear_rc / mlp / gru / tcn` を比較用に使います。
+## モデル
 
-## できること
-
-- `temp_<brine>_<heater>_<plasma>.csv` 形式のCAE CSVを読み込み
-- CSVファイル単位で train / val / test 分割
-- `random / holdout_max / holdout_min / holdout_corner` の簡易split
-- trainデータのみで温度、ΔT、操作量を標準化
-- 学習dtと推論dtの不一致を検出
-- 将来のCAE CSVに時間変化 control 列が追加されても読み込み可能
-- ヘッダーあり/なしCAE CSVに対応
-- ヒーター・ブラインなどの一次遅れ effective control 特徴量に対応
-- 複数モデルを同じデータで比較
-  - `linear_rc`
-  - `mlp`
-  - `gru`
-  - `tcn`
-  - `thermal_state_space`
-  - `graph_rc`
-- optional rollout loss
-- rollout評価
-- 学習曲線、rollout比較、誤差heatmapを出力
-- 評価plotは `evaluation.max_plots_per_split` で上限を設定
-- `graph_rc` で Cell node/edge 表、熱抵抗表を読み込み
-- Graph-RCの表チェック、3点サブグラフ対応、学習後の熱結合CSV/図出力
-- Graph-RC conductance prior正則化オプション
-- 条件テーブルCSVから複数条件を一括推論
-- `schedule_csv` による時間変化する brine/heater/plasma 入力に対応
-- schedule補間を `previous` / `linear` から選択可能
-- 実測ログから一ステップ先予測残差を見る `monitor` モード
-- 実測ログのdtリサンプリング
-- 初期温度、制御値範囲、制御値ステップ、長時間rolloutの警告出力
-- モデル比較CSVを rollout RMSE 優先で並べ替え
-
-## 主要ファイル
+ノード温度 `T` に対して、次の物理構造を使用します。
 
 ```text
-configs/config_train.yaml      学習設定
-configs/config_pred.yml        推論設定
-configs/cell_nodes.csv         Graph-RCの測定点・入熱/冷却重み
-configs/cell_edges.csv         Graph-RCの熱接続・熱抵抗表
-src/celltemp/data.py           CSV読込、条件抽出、分割
-src/celltemp/preprocess.py     標準化、学習範囲保持
-src/celltemp/control.py        schedule補間、実測ログresample、effective control
-src/celltemp/features.py       one-step window作成、optional rollout loss用future列
-src/celltemp/models.py         各モデル実装
-src/celltemp/thermal_graph.py  Graph-RC node/edge表読み込み
-src/celltemp/train.py          学習・評価・保存
-src/celltemp/evaluate.py       rollout評価
-src/celltemp/predict.py        複数条件推論、OOD/安全警告
-src/celltemp/compare.py        run比較leaderboard
-src/celltemp/plots.py          可視化
+C dT/dt = -L(G) T
+          + Σ source_gain · max(actuator - threshold, 0) · source_weights
+          + Σ boundary_h · boundary_weights · (boundary_temperature - T)
+
+tau da/dt = command - actuator
+measurement = H T + sensor_bias + noise
 ```
 
-## インストール
+- 各edgeは一つの正のconductanceを共有するため、熱流は常に相反・対称です。
+- heat capacity、conductance、source gain、boundary conductance、tauは正値制約を保ちます。
+- `exact`積分は行列指数を使い、ゼロ固有値を持つ閉じた熱回路でも逆行列を使いません。
+- 可変`dt`を各区間で直接使用します。固定刻みへのresampleは不要です。
+- 指令値は明示的なactuator stateを通るため、学習と推論で同じ遅れを使います。
 
-```bash
-pip install -e .
+詳細は [product_architecture.md](docs/product_architecture.md) を参照してください。
+
+## 構成
+
+```text
+src/celltemp/
+  domain/       Trajectory、ThermalSystemSpec
+  io/           CSV/DataFrame変換、system YAML読込
+  engine/       対称RC、安定積分、Kalman observer
+  learning/     軌道分割、multiple-shooting全軌道学習
+  workflows/    train、forecast、monitor
+  artifact.py   model.pt + system.yaml + metadata.json
+  inference.py  ライブラリ用forecast / monitor API
+  cli.py        3つの公開コマンド
+examples/topcell_quickstart/
+  config.yaml   学習・予測・監視で共有する設定
+  system.yaml   サンプル熱系
+  data/         自己完結CSV
+benchmarks/topcell/
+  run.py        生成・学習・外部評価を一括実行
+  config.yaml   benchmark唯一の設定
+  work/         再生成可能な入力と出力（Git管理外）
 ```
 
-## 学習
+## 入力規約
 
-```bash
-celltemp train --config configs/config_train.yaml
+温度は時刻点、commandは時間区間に属します。
+
+```text
+temperature[k] : time[k] での観測
+commands[k]    : [time[k], time[k+1]) に適用する指令
 ```
 
-モデルを切り替える場合:
+通常のCSVは時刻ごとに指令を記録するため、既定の`control_convention: left`では
+CSVの行`k`を次区間に適用します。内部の`Trajectory.commands`は必ず`N-1`行となり、
+`commands[k]`を次の時間区間へ一意に対応させます。
 
-```bash
-celltemp train --config configs/config_train.yaml model.name=linear_rc project.run_name=linear_rc
-celltemp train --config configs/config_train.yaml model.name=mlp project.run_name=mlp
-celltemp train --config configs/config_train.yaml model.name=gru project.run_name=gru
-celltemp train --config configs/config_train.yaml model.name=tcn project.run_name=tcn
-celltemp train --config configs/config_train.yaml model.name=thermal_state_space project.run_name=thermal_state_space
-celltemp train --config configs/config_train.yaml model.name=graph_rc project.run_name=graph_rc
+学習対象は`data.directory`と`data.pattern`で自動検出します。追加運用は自己完結CSVを
+フォルダへ置くだけです。ファイル名は`case_id`として使いますが、名前から運転条件を解析
+しません。
+
+```csv
+time,tc_core,tc_shell,heater,coolant
+0.0,25.0,25.0,100.0,20.0
+1.0,25.8,25.1,100.0,20.0
 ```
 
-rollout loss を軽く入れる場合:
+各trajectory CSVは`time + sensors + controls`を持つ自己完結形式です。定数commandも同じ値を
+各行へ記録します。CSV単独で再現でき、別の索引との不整合がありません。3つのworkflowは
+同じ列規約を用途に応じて次のように使います。
 
-```bash
-celltemp train --config configs/config_train.yaml \
-  model.name=thermal_state_space \
-  train.rollout_loss_weight=0.2 \
-  train.rollout_loss_steps=3
-```
+- train: 学習に使うsensor温度を各時刻へ記録する。
+- forecast: 先頭行に初期sensor温度、全行に将来commandを記録する。2行目以降の温度は空欄にする。
+- monitor: 実測sensor温度と適用commandを各時刻へ記録する。個別の欠測は空欄でよい。
 
-## 外挿評価split
+`data.directory`またはruntimeの`input_dir`が処理単位であり、ファイルstemが`case_id`です。
+case一覧、予測条件表、schedule参照、log参照は使用しません。forecastは将来の実測値を入力へ
+混ぜないよう、2行目以降にsensor値があるCSVを拒否し、初期観測とcommand履歴だけで
+open-loop積分します。
 
-通常は random split です。
+通常のrandom splitでは、同一control履歴を持つtrajectoryを自動的に同じsplitへまとめます。
+意図的な外挿評価だけ、任意の`case_id,split`表と`split.method: explicit`を使用します。
+
+`dt: null`にすれば可変刻みを許可します。trainで温度欠測を読む場合は
+`allow_missing_temperatures: true`を設定します。forecastとmonitorは空欄を自動的に欠測maskとして
+扱います。どのworkflowも初期状態を決めるため、先頭行には少なくとも1つのsensor温度が
+必要です。
+
+## system.yaml
+
+熱系の構造は一つのYAMLに集約します。
 
 ```yaml
-split:
-  method: random
+nodes:
+  - {name: shell, heat_capacity: 2.0}
+  - {name: core, heat_capacity: 5.0}
+actuators:
+  - {name: heater, tau: 3.0}
+edges:
+  - {nodes: [shell, core], conductance: 0.4}
+sources:
+  - name: heater_power
+    actuator: heater
+    node_weights: {core: 1.0}
+    gain: 0.2
+boundaries:
+  - name: ambient
+    temperature_intercept: 25.0
+    node_weights: {shell: 1.0}
+    conductance: 0.05
+sensors:
+  - {name: tc_core, node: core}
 ```
 
-高プラズマ条件をtestに回す場合:
+`node_weights`はnode名で指定でき、記載しないnodeは0です。sensor名とnode名は異なって
+よく、測定されないnodeも状態として保持できます。CSVのsensor列とcontrol列の名前・順序も
+この定義から取得するため、`config.yaml`へ重複記載しません。
 
-```yaml
-split:
-  method: holdout_max
-  holdout_control: plasma
+## 実行
+
+依存関係をインストールします。
+
+```powershell
+py -3.13 -m pip install -e ".[dev]"
 ```
 
-条件空間の高値側cornerをtestに回す場合:
+quickstartは1つの設定を3 workflowで共有します。相対パスは常にその設定ファイルのある
+ディレクトリから解決され、実行時のカレントディレクトリには依存しません。
 
-```yaml
-split:
-  method: holdout_corner
-  corner_controls: [brine, heater, plasma]
-  corner_direction: max
+学習:
+
+```powershell
+py -3.13 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml
 ```
 
+予測:
 
-## 時間変化するヒーター・ブラインを使う場合
-
-推論では `schedule_csv` を読みます。設定値がステップ状に変わるレシピでは、線形補間ではなく前値保持が自然です。
-
-```yaml
-prediction:
-  schedule_interpolation: previous   # previous or linear
+```powershell
+py -3.13 -m celltemp.cli forecast --config examples/topcell_quickstart/config.yaml
 ```
 
-CAE学習データ側にも時間変化するcontrol列を含められます。ヘッダーありCSVなら例えば以下です。
+監視:
+
+```powershell
+py -3.13 -m celltemp.cli monitor --config examples/topcell_quickstart/config.yaml
+```
+
+すべての設定は`key=value`で上書きできます。
+
+```powershell
+py -3.13 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
+```
+
+forecast/monitorが読むartifactは、既定では
+`project.output_dir/project.run_name/artifact`です。学習runと異なるartifactを使う場合だけ、
+top-levelの`artifact`で明示します。
+
+## Python API
+
+CLIとworkflowは同じ公開APIを呼びます。既存のDataFrameから予測する最小構成は次の通りです。
+
+```python
+import pandas as pd
+
+from celltemp.artifact import load_artifact
+from celltemp.inference import forecast
+from celltemp.io import trajectory_from_frame
+
+artifact = load_artifact(
+    "examples/topcell_quickstart/work/outputs/runs/thermal_rc_demo/artifact"
+)
+frame = pd.read_csv("request.csv")
+request = trajectory_from_frame(
+    case_id="request",
+    frame=frame,
+    time_col="time",
+    sensor_cols=artifact.sensor_names,
+    control_cols=artifact.control_names,
+)
+prediction = forecast(artifact.model, request)
+```
+
+入力変換は`celltemp.io`、物理計算は`celltemp.engine`、同定は`celltemp.learning`、学習済み
+モデルによる予測・監視は`celltemp.inference`が担当します。
+
+## 学習出力
+
+設定した`project.output_dir/<run_name>/`に次を保存します。quickstartでは
+`examples/topcell_quickstart/work/outputs/runs/<run_name>/`です。
 
 ```text
-time,CP,Center,middle,edge,brine,heater,plasma
-0,50,52,51,54,20,80,0
-1,50.2,52.5,51.8,54.1,20,120,50
+artifact/
+  model.pt              state_dictのみ。任意コードをpickleしない
+  system.yaml           topologyとengineering prior
+  metadata.json         fitted physical parameters、範囲、評価値
+metrics_by_case.csv     case-balanced train/val/test評価
+metrics_by_sensor.csv   センサー別評価
+metrics_summary.json    平均・中央値・worst-case
+training_history.csv
+split.csv
+test_predictions/
+config.yaml
 ```
 
-学習・評価・推論で同じ一次遅れ有効入力を使いたい場合は、以下を有効化します。
+splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温度だけ異なる軌道は分離しません。
+学習は短い区間を多数開始点から連続伝播
+するmultiple shooting、選択は完全なvalidation軌道RMSEで行います。
 
-```yaml
-features:
-  use_effective_controls: true
-  control_lag_tau:
-    brine: 3.0
-    heater: 5.0
-    plasma: 0.0
+## TopCell外部benchmark
+
+学習用228軌道と、学習探索先に含まれない外部forecast 11ケース・monitor 5ケースを分離して
+います。ケースの目的、合否条件、最新の基準結果は
+[TopCell benchmark](benchmarks/topcell/README.md)に集約しています。
+
+全benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、独立評価まで実行します。
+
+```powershell
+py -3.13 benchmarks/topcell/run.py
 ```
 
-これはヒーター設定値やブライン設定値が変わっても、実効入熱・実効冷却が即座には変わらないケースの簡易表現です。
+## 検証
 
-## 実測モニタリングモード
-
-通常の `forecast` は初期温度からopen-loopで温度時系列を予測します。実測温度ログを監視する場合は `monitor` を使います。
-
-```bash
-celltemp predict --config configs/config_pred.yml \
-  model_package.path=outputs/runs/graph_rc_demo/model_package \
-  prediction.mode=monitor \
-  prediction.input_table=data/pred/monitor_cases.csv \
-  prediction.output_dir=outputs/predictions_monitor
+```powershell
+py -3.13 -m pytest -q
+py -3.13 quality.py fast
+py -3.13 quality.py pr
 ```
 
-`monitor_cases.csv` の例です。
+単体試験はエネルギー保存、受動系の上下限、可変刻みsemigroup、actuator解析解、
+勾配、欠測observer、artifact round-tripを検証します。integration試験は
+`train -> forecast -> monitor`を公開APIで通し、別名sensorから未観測nodeを持つartifactの
+forecastと、将来実測を誤って混入した入力を既存出力を壊さず拒否できることも確認します。
 
-```text
-case_id,dt,log_csv
-monitor_case,1.0,data/pred/monitor_logs/monitor_case.csv
-```
+## 現時点の境界
 
-`log_csv` は以下の列を持ちます。
-
-```text
-time,CP,Center,middle,edge,brine,heater,plasma
-```
-
-monitorでは、各時刻の実測温度 `T[t]` を状態として使い、`T[t+1]` を一ステップ予測し、実測 `T[t+1]` との差分を出します。open-loopの誤差蓄積を避け、装置状態の残差監視に使えます。
-
-## 3点など少数計測点の場合
-
-3点だけで学習・推論する場合は、`sensor_cols` を変更します。
-
-```bash
-celltemp train --config configs/config_train.yaml \
-  data.sensor_cols='[Center,middle,edge]' \
-  model.graph.ignore_unknown_edges=true \
-  model.hidden_dim=16 \
-  model.residual_scale=0.02
-```
-
-`ignore_unknown_edges=true` にすると、4点用の `cell_edges.csv` に `CP` が含まれていても、3点サブグラフだけでGraph-RCを構築します。少数点では自由度を抑えるため、まずは小さい `hidden_dim` と小さい `residual_scale` を推奨します。
-
-## 推論
-
-```bash
-celltemp predict --config configs/config_pred.yml
-```
-
-学習済みrunを指定する場合:
-
-```bash
-celltemp predict --config configs/config_pred.yml \
-  model_package.path=outputs/runs/graph_rc/model_package \
-  prediction.output_dir=outputs/predictions_graph_rc
-```
-
-推論時の `dt` は、デフォルトで学習時の `dt` と一致している必要があります。異なる `dt` を使うと、1秒分のΔTを0.5秒ごとに足すような誤用が起きるためです。
-
-## モデル比較
-
-```bash
-celltemp compare --config configs/config_train.yaml
-```
-
-出力:
-
-```text
-outputs/model_leaderboard.csv
-```
-
-`test_rollout_rmse`、なければ `val_rollout_rmse` を優先して並べ替えます。
-
-## 学習結果の出力
-
-```text
-outputs/runs/<run_name>/
-  resolved_config.yaml
-  data_summary.csv
-  split.csv
-  train_history.csv
-  plots/
-    loss_curve.png
-    val/rollout_*.png
-    val/error_*.png
-    graph_conductance_prior.png
-    graph_conductance_learned.png
-  metrics/
-    rollout_by_case_val.csv
-    rollout_by_sensor_val.csv
-    horizon_error_val.csv
-    rollout_summary_val.csv
-    rollout_by_case_test.csv
-    rollout_summary_test.csv
-  graph/
-    learned_conductance.csv
-    graph_diagnostics.csv
-    source_weight.csv
-  eval_predictions/
-    val/*.csv
-    test/*.csv
-  model_package/
-    model.pt
-    preprocessor.pkl
-    config.yaml
-    metadata.json
-    graph/cell_nodes.csv
-    graph/cell_edges.csv
-```
-
-## Graph-RCの表
-
-### `configs/cell_nodes.csv`
-
-```text
-sensor,x_mm,y_mm,z_mm,thermal_mass,plasma_weight,heater_weight,brine_weight
-CP,0,0,0,1.00,0.70,0.25,0.20
-Center,0,0,10,1.20,0.60,0.70,0.25
-middle,35,0,10,1.35,0.45,0.60,0.45
-edge,70,0,10,1.50,0.30,0.45,0.75
-```
-
-### `configs/cell_edges.csv`
-
-```text
-src,dst,r_th_K_per_W,contact_type,note
-CP,Center,0.80,vertical,plasma side to center
-Center,middle,0.55,radial,center to middle ring
-middle,edge,0.65,radial,middle ring to edge
-Center,edge,1.60,radial_long,weak long-range path
-```
-
-内部では、熱抵抗から `G = 1 / R_th` を作り、相対コンダクタンスpriorとして使います。表の `thermal_mass` と `r_th_K_per_W` は正の有限値である必要があります。孤立ノード、重複edge、sensor名不一致は学習前に検出します。
-
-## 推論条件CSV
-
-```text
-case_id,t_end,dt,init_CP,init_Center,init_middle,init_edge,brine,heater,plasma,schedule_csv
-const_case,15,1,50,52,51,54,20,120,70,
-schedule_case,15,1,50,52,51,54,20,100,50,data/pred/schedules/schedule_case.csv
-```
-
-`schedule_csv` が空なら定数条件です。指定した場合は、以下のような時系列操作量を読みます。
-
-```text
-time,brine,heater,plasma
-0,20,80,0
-5,20,120,50
-10,25,160,90
-15,25,120,40
-```
-
-推論結果には `prediction_summary.csv` が出力され、範囲外条件や長時間rolloutなどは `warnings/<case_id>.txt` にも保存されます。
-
-## 実装上の最小ルール
-
-1. train/val/testはCSVファイル単位で分割する
-2. 全モデルは標準化済み `ΔT` を返す
-3. 推論に必要なものは `model_package/` にまとめる
-
-これ以上の厳密な契約や深いディレクトリ階層は入れていません。
-
-## Productized structure note
-
-This package intentionally stays lightweight.  The current product boundary is:
-
-- sequence baselines: `models_sequence.py`
-- physics-oriented surrogate models: `models_physics.py`
-- model registry: `models.py`
-- weak measured-machine correction and residual analysis: `correction.py`, `residuals.py`
-
-The main product workflow is:
-
-```bash
-celltemp train --config configs/config_train.yaml model.name=graph_rc
-celltemp predict --config configs/config_pred.yml prediction.mode=monitor
-celltemp residuals --config configs/config_pred.yml
-celltemp predict --config configs/config_pred.yml prediction.correction.enabled=true prediction.correction.mode=offset_ema
-```
-
-Residual correction is deliberately weak.  It should explain small machine-to-machine bias, sensor offset, slow drift, and noise.  It must not replace the CAE surrogate.  Always inspect both base and corrected predictions.
-
-See:
-
-- `docs/product_architecture.md`
-- `docs/developer_extension_guide.md`
+- 状態方程式は温度について線形、入力についてthreshold付きaffineです。相変化、放射の
+  `T^4`、温度依存物性が主要な系では、物理項を追加する必要があります。
+- heat capacityを含む全係数を同時に自由化すると尺度不定になるため、現在はcapacityを
+  engineering priorとして固定しています。
+- monitorは観測更新に必要なfilter共分散を持ちます。forecastの予測区間は、係数同定の
+  uncertaintyを含めて検証できるまでは出力しません。

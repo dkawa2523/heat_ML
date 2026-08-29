@@ -1,111 +1,211 @@
-# 製品化レビュー: 上部Cell温度予測基盤
+# Product architecture
 
-この基盤は、CAEで作成した上部Cell温度時系列を学習し、ヒーター・ブライン・プラズマ条件から少数計測点の温度時系列を予測するための軽量な製品候補です。
+## 1. 目標状態
 
-## 設計原則
+この基盤は「CAE過渡履歴を近似するモデル集」ではなく、次の一つの熱状態を中心にします。
 
-1. **CAE surrogateを主モデルにする**  
-   実測補正は主モデルを置き換えず、機差・センサー差・ゆっくりしたbiasを小さく補正するだけにする。
-
-2. **分割しすぎないが、責務は混ぜない**  
-   深いディレクトリ階層は避けつつ、時系列モデル・物理寄りモデル・実測補正は別ファイルに分ける。
-
-3. **モデル比較は共通I/Oで行う**  
-   すべての学習モデルは `batch -> standardized ΔT [B, N]` を返す。train/evaluate/predictはモデル種別を意識しない。
-
-4. **少数計測点を前提に過剰な自由度を避ける**  
-   3点/4点では `thermal_state_space` と `graph_rc` を主力、TCN/GRU/LSTM/CNNは比較モデルとして扱う。
-
-## コード責務
-
-| ファイル | 役割 |
-|---|---|
-| `data.py` | CSV読込、条件抽出、ファイル単位split |
-| `preprocess.py` | trainのみで標準化fit、範囲情報保存 |
-| `control.py` | schedule補間、resampling、effective control |
-| `features.py` | 学習windowとbatch作成 |
-| `models_sequence.py` | linear/MLP/CNN1D/GRU/LSTM/TCN |
-| `models_physics.py` | thermal_state_space / graph_rc |
-| `models.py` | モデルregistryとbuild_model |
-| `thermal_graph.py` | Cell node/edge表からGraph-RC prior作成 |
-| `train.py` | 学習、rollout評価、model_package保存 |
-| `predict.py` | forecast / monitor 推論 |
-| `correction.py` | 弱い実測補正、residual整理 |
-| `residuals.py` | monitor出力から残差解析とoffset artifact作成 |
-| `compare.py` | run比較leaderboard |
-
-## モデルファミリー
-
-### A. データ駆動時系列モデル
-
-- `linear_rc`
-- `mlp`
-- `cnn1d`
-- `gru`
-- `lstm`
-- `tcn`
-
-用途は主に比較・履歴依存の確認です。主力にする場合は、rollout評価とmonitor residualで物理寄りモデルを明確に上回ることを確認してください。
-
-### B. 物理寄りモデル
-
-- `thermal_state_space`: 平衡温度・減衰・残差を分ける安定モデル
-- `graph_rc`: Cell位置関係と熱抵抗表をconductance priorとして利用するモデル
-
-少数点・解釈性・CAE surrogateとしての安定性を重視する場合の主力です。
-
-### C. 状態推定・残差補正
-
-- monitor mode: 実測 `T[t]` を使って `T[t+1]` をone-step予測し、残差を監視
-- offset補正: センサー別の小さい定常bias
-- EMA slow bias: 実測monitor中にゆっくりしたbiasを追従
-
-補正は小さく、補正前後を必ず出力します。補正量が大きい場合はCAE条件、Graph-RC prior、計測点定義を見直してください。
-
-## 推奨ワークフロー
-
-```bash
-# 1. base model学習
-celltemp train --config configs/config_train.yaml model.name=graph_rc project.run_name=graph_rc
-
-# 2. 実測monitor出力
-celltemp predict --config configs/config_pred.yml \
-  model_package.path=outputs/runs/graph_rc/model_package \
-  prediction.mode=monitor \
-  prediction.input_table=data/pred/monitor_cases.csv \
-  prediction.output_dir=outputs/monitor_graph_rc
-
-# 3. 残差解析とoffset artifact作成
-celltemp residuals --config configs/config_pred.yml \
-  residuals.input_dir=outputs/monitor_graph_rc \
-  residuals.output_dir=outputs/residual_graph_rc
-
-# 4. 弱補正を使ったmonitor確認
-celltemp predict --config configs/config_pred.yml \
-  model_package.path=outputs/runs/graph_rc/model_package \
-  prediction.mode=monitor \
-  prediction.input_table=data/pred/monitor_cases.csv \
-  prediction.output_dir=outputs/monitor_graph_rc_corrected \
-  prediction.correction.enabled=true \
-  prediction.correction.mode=offset_ema \
-  prediction.correction.artifact=outputs/residual_graph_rc/offset_correction.json
+```text
+CSV / DataFrame
+      ↓
+        Trajectory ──────────── ThermalSystemSpec
+      ↓                              ↓
+      └──────── ThermalRCModel ──┘
+                 ↓          ↓
+           full rollout   Kalman observer
+                 ↓          ↓
+              forecast    monitor
 ```
 
-## 採用判定
+学習、予測、監視で別々の遅れ処理、rollout、補正器を持たないことが重要です。
 
-製品利用候補として採用するモデルは、以下を満たすものに限定します。
+## 2. Domain
 
-- test/valのrollout RMSEが安定している
-- endpoint error / max errorが許容内
-- monitor residualがセンサーごとに説明可能
-- Graph-RCの場合、learned/prior conductance比が極端でない
-- 補正後だけでなく補正前のbase性能も許容できる
-- correction-to-signal ratioが大きすぎない
+### CSV discovery and split
 
-## 追加開発時のルール
+学習入力は一つのdirectoryからpattern一致するCSVを自動検出します。各CSVがtime、sensor、
+controlを持つため、別索引、ファイル名regex、暗黙の定数control抽出はありません。
+ファイルを追加・改名しても同期作業は不要です。
 
-- 新モデルは `models_sequence.py` または `models_physics.py` に追加する。
-- すべてのモデルは標準化済み `ΔT [B, N]` を返す。
-- 学習・推論のデータ形式をモデルごとに変えない。
-- 実測補正は `correction.py` に限定し、主モデルを実測で直接上書き学習しない。
-- Neural ODE / PINN / DeepONet / FNO はこの製品範囲では対象外。
+分割は次の2方式だけです。
+
+- `random`: time gridとcontrol履歴が同じtrajectoryを自動的に同じgroupへ入れる。
+- `explicit`: 必要な評価だけ、任意の`case_id,split`表を使用する。
+
+### Trajectory
+
+- `time: [N]`
+- `temperature: [N, n_sensor]`
+- `commands: [N-1, n_control]`
+- `observation_mask: [N, n_sensor]`
+
+`commands[k]`は`[time[k], time[k+1])`にのみ対応します。可変時間刻みは
+`dt = diff(time)`として保持し、再サンプリングで情報を落としません。
+学習、forecast、monitorはいずれもこの同じ型を受け取り、schedule専用の並行表現は持ちません。
+
+### ThermalSystemSpec
+
+- thermal nodeと正のheat capacity
+- 方向を持たないconductive edge
+- commandと一次遅れtauを持つactuator
+- threshold、gain、node分布を持つheat source
+- affine温度とnode別熱伝達を持つboundary
+- sensorからnodeへの観測写像
+
+sensorはstate nodeの部分集合または別名です。これにより、3本のTCしかなくても4点以上の
+内部状態を表現できます。
+
+## 3. Engine
+
+### 熱方程式
+
+各edge `(i,j)`は単一の`G_ij > 0`を共有し、Laplacianを構成します。
+
+```text
+q_ij = G_ij (T_j - T_i)
+C_i dT_i/dt = Σ_j q_ij + q_source,i + q_boundary,i
+```
+
+閉じた伝導系では`Σ C_i T_i`を保存します。境界と熱源を除いた受動系は、任意の正の
+`dt`で初期温度の最小値・最大値を越えません。
+
+source:
+
+```text
+q_source = gain · max(a - threshold, 0) · weights
+```
+
+boundary:
+
+```text
+T_boundary = intercept + slope · actuator
+q_boundary = h · weights · (T_boundary - T)
+```
+
+### Actuator state
+
+commandをそのまま熱源へ入れず、各actuatorを解析解で更新します。
+
+```text
+a_next = u + (a - u) exp(-dt/tau)
+```
+
+`tau=0`は遅れなしです。熱区間内のforcingにはactuatorの中点値を使用します。
+
+### Integrator
+
+温度について`dT/dt = A T + b`となるため、既定はaugmented matrix exponentialです。
+
+```text
+T_next = Phi(dt) T + Gamma(dt) b
+```
+
+`A`を逆行列化しないため、閉じた熱回路でも安定です。同一trajectory内の同一`dt`は
+`Phi/Gamma`を再利用します。大規模系向けにはA-stable implicit Eulerも選べます。
+単一軌道もbatch次元を1として`forward_batch`を通すため、学習用と推論用に別rolloutはありません。
+
+## 4. Identification
+
+正の物理係数は`prior * exp(log_multiplier)`で学習します。edgeごとに一つの係数しか
+持たないため、学習で非対称熱流にはなりません。
+
+学習単位は1ステップΔTではなくmultiple-shooting区間です。
+
+1. caseを選ぶ。
+2. `horizon`全体を確保できる観測時刻をshooting pointとして選ぶ。軌道自体が短い場合は、
+   先頭観測から利用可能な最大区間を使う。
+3. actuator stateを先頭からその時刻まで再生する。
+4. 観測写像の逆問題からnode初期温度を得る。
+5. `horizon`区間を自己回帰せず状態方程式で連続積分する。
+6. 観測mask上のHuber lossをKelvin単位で計算する。
+
+validationは完全な軌道で計算し、caseごとのRMSE平均でmodel stateを選択します。短いcaseや
+観測点の多いcaseだけが過大な重みを持たない設計です。
+
+capacityは既定で固定します。`C`とすべての`G/q`を同じ倍率で変える尺度不定性を避け、
+同定されたconductanceとsource gainを解釈可能に保つためです。
+
+## 5. Forecast
+
+forecastは初期sensor観測をnode状態へ写像し、以降はcommand scheduleだけでopen-loop積分
+します。安定性はclipではなく、正のcapacity/conductanceと安定積分で確保します。
+
+入力はtrain、monitorと同じtrajectory CSVです。先頭行だけに初期温度を置き、以降の温度を
+空欄にします。その1ファイルが初期状態、時間軸、将来commandをすべて表し、将来のsensor値が
+混在した入力は拒否します。条件一覧からscheduleファイルを参照する二段構成は持ちません。
+
+出力はsensor温度に加え、未観測node温度とeffective actuatorを持ちます。parameter uncertainty
+を含まない状態分散だけを予測区間として見せることは避け、forecastは検証可能な物理軌道へ
+限定します。
+
+## 6. Monitor
+
+monitorは後付け補正ではなく、拡張状態`[T, sensor_bias]`を持つKalman observerです。
+入力は実測温度と適用commandを同じ行に持つtrajectory CSVであり、log一覧表は持ちません。
+
+- `T`: RC方程式で予測
+- `sensor_bias`: slow random walk
+- measurement: `H T + bias`
+
+出力は一ステップprior、filtered physical temperature、bias、innovation residual、予測標準
+偏差です。欠測sensorはupdateから外し、他のsensorと熱結合を使って状態を継続します。
+
+## 7. Artifact
+
+artifactは次の3ファイルのみです。
+
+- `model.pt`: `state_dict`。読込時は`weights_only=True`。
+- `system.yaml`: topology、capacity、prior、観測写像。
+- `metadata.json`: schema、integrator、同定後物理係数、データ範囲、評価結果。
+
+前処理object、外部graph CSV、元configへの相対参照を持ちません。directory単独で移送できます。
+
+## 8. Config and output boundary
+
+用途ごとに1つの`config.yaml`だけを持ち、学習・forecast・monitorが共有します。すべての相対パスは
+configの親ディレクトリ基準、乱数seedはtop-levelの1箇所です。出力は隣接する一時directoryへ
+全ファイルを書き終えてから置換するため、入力不正や処理失敗で直前の正常出力を壊しません。
+
+sensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。artifactも既定では
+`project.output_dir/project.run_name/artifact`から導出し、別runを読む場合だけ明示します。
+
+## 9. Dependency direction
+
+```text
+cli
+  → workflows
+    → artifact / learning / inference
+      → engine / io
+        → domain
+          → config
+```
+
+domainはnumpy以外のframeworkに依存しません。engine/learning/inferenceはpandas/YAMLを読みません。
+CSV・YAMLと数値計算の境界を明確にしています。
+
+## 10. Benchmark boundary
+
+学習run内のrandom testだけを汎化性能とはみなしません。同一generator、同一level、同一recipeが
+学習側にあれば、低RMSEでも未知運転への有用性を示せないためです。標準benchmarkは
+`benchmarks/topcell/work/data/`内で学習directoryと外部評価directoryを物理的に分け、次を
+個別に評価します。
+
+- 未学習levelの内挿・外挿
+- 学習にないpulse、複合recipe、smooth ramp
+- 初期温度外挿、初期sensor欠測、可変`dt`
+- noise、drift、sensor fault、欠測、未command熱負荷
+- 現modelでは表現不能な温度依存熱損失のnegative control
+
+monitorの`bias`は絶対校正値ではありません。開始時から存在する一定offsetは外部基準なしに
+physical temperatureと一意分離できないため、benchmarkは初期基準後のdriftを評価します。
+未モデル化熱負荷ではfiltered stateのtruth一致ではなくinnovationによる検出を評価します。
+合成truthの数値定義は`scripts/definition.py`に集約し、generatorとevaluatorが共有します。
+
+## 11. 今後追加する場合の優先順位
+
+1. 複数seedまたはLaplace近似によるforecast parameter uncertainty。
+2. 温度依存物性、放射、相変化を必要な系だけへ追加できるphysical term interface。
+3. 長大trajectory／多数node向けのsparse matrix exponential。
+4. 複数装置を扱う場合のhierarchical parameter sharing。
+
+新しいNNモデルや別rolloutを横に増やすことは優先しません。現RC構造で系統的な残差が
+説明できず、データ量と外挿評価が追加自由度を正当化した場合だけ検討します。
