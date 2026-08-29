@@ -2,14 +2,16 @@
 
 ## 実行
 
+以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
+
 ```powershell
-py -3.13 quality.py fast
-py -3.13 quality.py pr
+py -3 quality.py fast
+py -3 quality.py pr
 ```
 
 `fast`はformat、lint、type、unit/property試験を実行します。`pr`は全試験、branch coverage、
-architectureを検証します。依存パッケージの脆弱性監査はCIで`pip-audit .`を直接実行し、
-共有Python環境ではなく、このprojectから解決されるruntime依存だけを対象にします。
+architectureを検証します。CIはこれに加えてTopCell product benchmarkと`pip-audit .`を実行し、
+共有Python環境ではなく、このprojectから解決されるruntime依存だけを監査します。
 
 ## 数値検証
 
@@ -31,11 +33,12 @@ architectureを検証します。依存パッケージの脆弱性監査はCIで
 `.importlinter`は一方向依存を検証します。
 
 ```text
-cli → workflows → artifact/learning/inference → engine/io → domain → config
+cli → workflows → artifact/learning/inference → engine/io → domain/config
 ```
 
-domainはtorch/pandas/YAMLに依存せず、compute層はpandas/YAMLを読みません。新moduleはexhaustive
-layersへ追加しない限りarchitecture検査を通りません。
+domainとconfigは独立したleafです。domainはtorch/pandas/YAMLに依存せず、compute層は
+pandas/YAMLを読みません。新moduleはexhaustive layersへ追加しない限りarchitecture検査を
+通りません。
 
 ## Coverage
 

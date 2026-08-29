@@ -87,9 +87,8 @@ time,tc_core,tc_shell,heater,coolant
 - monitor: 実測sensor温度と適用commandを各時刻へ記録する。個別の欠測は空欄でよい。
 
 `data.directory`またはruntimeの`input_dir`が処理単位であり、ファイルstemが`case_id`です。
-case一覧、予測条件表、schedule参照、log参照は使用しません。forecastは将来の実測値を入力へ
-混ぜないよう、2行目以降にsensor値があるCSVを拒否し、初期観測とcommand履歴だけで
-open-loop積分します。
+forecastは将来の実測値を入力へ混ぜないよう、2行目以降にsensor値があるCSVを拒否し、
+初期観測とcommand履歴だけでopen-loop積分します。
 
 通常のrandom splitでは、同一control履歴を持つtrajectoryを自動的に同じsplitへまとめます。
 意図的な外挿評価だけ、任意の`case_id,split`表と`split.method: explicit`を使用します。
@@ -97,7 +96,7 @@ open-loop積分します。
 `dt: null`にすれば可変刻みを許可します。trainで温度欠測を読む場合は
 `allow_missing_temperatures: true`を設定します。forecastとmonitorは空欄を自動的に欠測maskとして
 扱います。どのworkflowも初期状態を決めるため、先頭行には少なくとも1つのsensor温度が
-必要です。
+必要です。学習trajectoryには、先頭より後にも少なくとも1つの観測が必要です。
 
 ## system.yaml
 
@@ -131,39 +130,43 @@ sensors:
 
 ## 実行
 
-依存関係をインストールします。
+以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
+Python 3.10以上の環境へ依存関係をインストールします。
 
 ```powershell
-py -3.13 -m pip install -e ".[dev]"
+py -3 -m pip install -e ".[dev]"
 ```
 
 quickstartは1つの設定を3 workflowで共有します。相対パスは常にその設定ファイルのある
-ディレクトリから解決され、実行時のカレントディレクトリには依存しません。安全なdirectory
-置換のため、各`output_dir`は設定ファイルのあるディレクトリ配下に置きます。
+ディレクトリから解決され、実行時のカレントディレクトリには依存しません。相対`output_dir`は
+そのproject内に置き、外部storageへ出す場合だけ絶対パスで明示します。完了した結果は既存結果を
+backupしてから置換され、処理失敗時は直前の結果を保持します。
 
 学習:
 
 ```powershell
-py -3.13 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml
+py -3 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml
 ```
 
 予測:
 
 ```powershell
-py -3.13 -m celltemp.cli forecast --config examples/topcell_quickstart/config.yaml
+py -3 -m celltemp.cli forecast --config examples/topcell_quickstart/config.yaml
 ```
 
 監視:
 
 ```powershell
-py -3.13 -m celltemp.cli monitor --config examples/topcell_quickstart/config.yaml
+py -3 -m celltemp.cli monitor --config examples/topcell_quickstart/config.yaml
 ```
 
 すべての設定は`key=value`で上書きできます。
 
 ```powershell
-py -3.13 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
+py -3 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
 ```
+
+未知の設定名はtypoとして拒否されます。
 
 forecast/monitorが読むartifactは、既定では
 `project.output_dir/project.run_name/artifact`です。学習runと異なるartifactを使う場合だけ、
@@ -229,15 +232,15 @@ splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温�
 全benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、独立評価まで実行します。
 
 ```powershell
-py -3.13 benchmarks/topcell/run.py
+py -3 benchmarks/topcell/run.py
 ```
 
 ## 検証
 
 ```powershell
-py -3.13 -m pytest -q
-py -3.13 quality.py fast
-py -3.13 quality.py pr
+py -3 -m pytest -q
+py -3 quality.py fast
+py -3 quality.py pr
 ```
 
 単体試験はエネルギー保存、受動系の上下限、可変刻みsemigroup、actuator解析解、

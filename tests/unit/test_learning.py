@@ -72,6 +72,18 @@ def test_shooting_starts_preserve_the_requested_horizon() -> None:
     assert np.array_equal(_valid_starts(trajectory, 12), np.arange(9))
     assert np.array_equal(_valid_starts(trajectory, 100), np.array([0]))
 
+    sparse_temperature = np.full_like(trajectory.temperature, np.nan)
+    sparse_temperature[[0, 3, 6]] = trajectory.temperature[[0, 3, 6]]
+    sparse = Trajectory(
+        case_id="sparse",
+        time=trajectory.time,
+        temperature=sparse_temperature,
+        commands=trajectory.commands,
+        sensor_names=trajectory.sensor_names,
+        control_names=trajectory.control_names,
+    )
+    assert np.array_equal(_valid_starts(sparse, 4), np.array([0, 3]))
+
 
 @pytest.mark.parametrize(
     "options",
@@ -116,6 +128,19 @@ def test_learning_rejects_missing_cases_and_wrong_control_names() -> None:
     )
     with pytest.raises(ValueError, match="initial observation"):
         fit_thermal_model(model, [delayed])
+
+    only_initial = trajectory.temperature.copy()
+    only_initial[1:] = np.nan
+    no_targets = Trajectory(
+        case_id="no-targets",
+        time=trajectory.time,
+        temperature=only_initial,
+        commands=trajectory.commands,
+        sensor_names=trajectory.sensor_names,
+        control_names=trajectory.control_names,
+    )
+    with pytest.raises(ValueError, match="observation after the initial row"):
+        fit_thermal_model(model, [no_targets])
 
 
 def test_trajectory_loss_rejects_empty_interval_selection() -> None:

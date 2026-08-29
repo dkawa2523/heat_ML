@@ -129,3 +129,16 @@ def test_cli_exposes_only_product_workflows(command: str, monkeypatch: pytest.Mo
     with pytest.raises(SystemExit) as exit_info:
         main()
     assert exit_info.value.code == 0
+
+
+def test_workflow_rejects_a_misspelled_section_option(
+    cae_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match=r"unknown engine options.*integrtor"):
+        _run_cli(
+            monkeypatch,
+            "train",
+            "--config",
+            str(cae_project / "config.yaml"),
+            "engine.integrtor=exact",
+        )

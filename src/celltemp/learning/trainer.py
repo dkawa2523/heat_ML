@@ -79,7 +79,14 @@ def _valid_starts(trajectory: Trajectory, horizon: int) -> np.ndarray:
     window = min(horizon, interval_count)
     latest = interval_count - window
     candidates = np.flatnonzero(trajectory.mask[:-1].any(axis=1))
-    return candidates[candidates <= latest]
+    return np.asarray(
+        [
+            start
+            for start in candidates
+            if start <= latest and trajectory.mask[start + 1 : start + window + 1].any()
+        ],
+        dtype=np.int64,
+    )
 
 
 def _sample_batch(
@@ -89,17 +96,17 @@ def _sample_batch(
     rng: np.random.Generator,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     choices = rng.integers(0, len(trajectories), size=config.batch_size)
+    chosen = [trajectories[int(choice)] for choice in choices]
+    horizon = min(config.horizon, *(len(trajectory.time) - 1 for trajectory in chosen))
     selected: list[tuple[Trajectory, int]] = []
-    horizons: list[int] = []
-    for choice in choices:
-        trajectory = trajectories[int(choice)]
-        starts = _valid_starts(trajectory, config.horizon)
+    for trajectory in chosen:
+        starts = _valid_starts(trajectory, horizon)
         if not len(starts):
-            raise ValueError(f"trajectory {trajectory.case_id} has no valid shooting point")
+            raise ValueError(
+                f"trajectory {trajectory.case_id} has no observed target in a shooting window"
+            )
         start = int(rng.choice(starts))
         selected.append((trajectory, start))
-        horizons.append(min(config.horizon, len(trajectory.time) - 1 - start))
-    horizon = min(horizons)
 
     initial_temperatures: list[torch.Tensor] = []
     initial_actuators: list[torch.Tensor] = []
@@ -130,6 +137,21 @@ def _validation_rmse(model: ThermalRCModel, trajectories: list[Trajectory]) -> f
     return float(np.mean(values))
 
 
+def _validate_observations(trajectories: list[Trajectory]) -> None:
+    missing_initial = sorted(
+        {trajectory.case_id for trajectory in trajectories if not trajectory.mask[0].any()}
+    )
+    if missing_initial:
+        raise ValueError(f"training trajectories need an initial observation: {missing_initial}")
+    missing_targets = sorted(
+        {trajectory.case_id for trajectory in trajectories if not trajectory.mask[1:].any()}
+    )
+    if missing_targets:
+        raise ValueError(
+            f"training trajectories need an observation after the initial row: {missing_targets}"
+        )
+
+
 def fit_thermal_model(
     model: ThermalRCModel,
     train_trajectories: list[Trajectory],
@@ -142,15 +164,7 @@ def fit_thermal_model(
         raise ValueError("at least one training trajectory is required")
     config = config or TrainingConfig()
     validation = validation_trajectories or train_trajectories
-    missing_initial = sorted(
-        {
-            trajectory.case_id
-            for trajectory in [*train_trajectories, *validation]
-            if not trajectory.mask[0].any()
-        }
-    )
-    if missing_initial:
-        raise ValueError(f"training trajectories need an initial observation: {missing_initial}")
+    _validate_observations([*train_trajectories, *validation])
     rng = np.random.default_rng(config.seed)
     torch.manual_seed(config.seed)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)

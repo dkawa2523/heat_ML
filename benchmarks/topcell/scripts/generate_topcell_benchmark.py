@@ -426,7 +426,7 @@ def _write_monitor_case(
     frame.to_csv(MONITOR_DIR / f"{case_id}.csv", index=False, float_format="%.6f")
 
 
-def generate_monitor_evaluation(seed: int = 123) -> None:
+def generate_monitor_evaluation(seed: int) -> None:
     """Create nominal, estimation, data-loss, and detection scenarios."""
     _clean_csv_directory(MONITOR_DIR)
     rng = np.random.default_rng(seed)
@@ -495,10 +495,10 @@ def generate_monitor_evaluation(seed: int = 123) -> None:
     )
 
 
-def main() -> None:
+def main(*, seed: int = 42) -> None:
     generate_identification_data()
     generate_forecast_evaluation()
-    generate_monitor_evaluation()
+    generate_monitor_evaluation(seed)
     print("generated identification, forecast, and monitor benchmark cases")
 
 

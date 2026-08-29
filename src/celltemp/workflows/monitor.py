@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from celltemp.artifact import load_artifact
-from celltemp.config import project_root_from_config
+from celltemp.config import project_root_from_config, reject_unknown_keys, validate_config_root
 from celltemp.inference import monitor
 
 from .common import (
@@ -16,12 +16,15 @@ from .common import (
     output_target,
     resolve_artifact_path,
     staged_output_directory,
+    validate_runtime_options,
 )
 
 
 def run_monitor(cfg: dict, config_path: str | Path) -> Path:
+    validate_config_root(cfg)
     root = project_root_from_config(config_path)
     values = cfg["monitor"]
+    validate_runtime_options(values, "monitor", observer=True)
     artifact = load_artifact(resolve_artifact_path(cfg, root), device=values.get("device", "cpu"))
     trajectories = load_runtime_trajectories(
         values,
@@ -31,6 +34,11 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
     )
     target, overwrite = output_target(cfg, root, section="monitor")
     observer_cfg = values.get("observer", {})
+    reject_unknown_keys(
+        observer_cfg,
+        {"bias_process_std", "sensor_std", "temperature_process_std"},
+        "monitor.observer",
+    )
     summaries: list[dict[str, object]] = []
     with staged_output_directory(target, overwrite=overwrite) as out_dir:
         for trajectory in trajectories:
@@ -64,7 +72,7 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
                         if residual_values.size
                         else float("nan")
                     ),
-                    "output": str(target / output_file.name),
+                    "output": output_file.name,
                 }
             )
         pd.DataFrame(summaries).to_csv(out_dir / "monitor_summary.csv", index=False)

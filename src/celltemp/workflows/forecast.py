@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from celltemp.artifact import load_artifact
-from celltemp.config import project_root_from_config
+from celltemp.config import project_root_from_config, validate_config_root
 from celltemp.inference import forecast
 
 from .common import (
@@ -15,12 +15,15 @@ from .common import (
     output_target,
     resolve_artifact_path,
     staged_output_directory,
+    validate_runtime_options,
 )
 
 
 def run_forecast(cfg: dict, config_path: str | Path) -> Path:
+    validate_config_root(cfg)
     root = project_root_from_config(config_path)
     values = cfg["forecast"]
+    validate_runtime_options(values, "forecast")
     artifact = load_artifact(resolve_artifact_path(cfg, root), device=values.get("device", "cpu"))
     requests = load_runtime_trajectories(
         values,
@@ -53,7 +56,7 @@ def run_forecast(cfg: dict, config_path: str | Path) -> Path:
                     "case_id": request.case_id,
                     "rows": len(frame),
                     "time_end": float(result.time[-1]),
-                    "output": str(target / output_file.name),
+                    "output": output_file.name,
                 }
             )
         pd.DataFrame(summaries).to_csv(out_dir / "forecast_summary.csv", index=False)

@@ -115,5 +115,7 @@ def trajectory_rmse(model: ThermalRCModel, trajectory: Trajectory) -> float:
     predicted = predict_trajectory(model, trajectory)
     evaluation_mask = mask.clone()
     evaluation_mask[0] = False
+    if not torch.any(evaluation_mask):
+        raise ValueError("trajectory has no observations after the initial row")
     error = predicted[evaluation_mask] - observed[evaluation_mask]
     return float(torch.sqrt(torch.mean(error.square())).cpu())

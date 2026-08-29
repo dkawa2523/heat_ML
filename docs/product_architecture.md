@@ -168,7 +168,9 @@ artifactは次の3ファイルのみです。
 用途ごとに1つの`config.yaml`だけを持ち、学習・forecast・monitorが共有します。すべての相対パスは
 configの親ディレクトリ基準、乱数seedはtop-levelの1箇所です。出力は隣接する一時directoryへ
 全ファイルを書き終えてから置換するため、入力不正や処理失敗で直前の正常出力を壊しません。
-置換対象を限定するため、`output_dir`はconfigの親directory配下に置きます。
+相対`output_dir`はconfigの親directory配下に限定し、外部storageは絶対パスで明示します。
+project root、そのancestor、filesystem rootそのものは置換対象にできません。既存結果はbackupへ
+移してから新結果へ切り替えるため、置換失敗時にもrollbackできます。
 
 sensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。artifactも既定では
 `project.output_dir/project.run_name/artifact`から導出し、別runを読む場合だけ明示します。

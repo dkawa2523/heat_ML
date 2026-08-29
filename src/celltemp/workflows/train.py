@@ -11,7 +11,13 @@ import pandas as pd
 import torch
 
 from celltemp.artifact import save_artifact
-from celltemp.config import as_path, project_root_from_config, save_yaml
+from celltemp.config import (
+    as_path,
+    project_root_from_config,
+    reject_unknown_keys,
+    save_yaml,
+    validate_config_root,
+)
 from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 from celltemp.io import load_split_assignments, load_system_spec, load_trajectories
@@ -22,7 +28,20 @@ from celltemp.learning import (
     split_trajectories,
 )
 
-from .common import output_target, staged_output_directory
+from .common import output_target, project_options, staged_output_directory
+
+_DATA_OPTIONS = {
+    "allow_missing_temperatures",
+    "control_convention",
+    "directory",
+    "dt",
+    "pattern",
+    "sep",
+    "temp_max",
+    "temp_min",
+    "time_col",
+}
+_SPLIT_OPTIONS = {"group_by_controls", "method", "table", "train_ratio", "val_ratio"}
 
 
 def _rollout_errors(
@@ -135,16 +154,17 @@ def _write_data_summary(trajectories: list[Trajectory], target: Path) -> None:
 
 def _configured_training(values: dict) -> TrainingConfig:
     fields = TrainingConfig.__dataclass_fields__
-    unknown = set(values) - set(fields)
-    if unknown:
-        raise ValueError(f"unknown training options: {sorted(unknown)}")
+    reject_unknown_keys(values, fields, "training")
     return TrainingConfig(**values)
 
 
 def run_train(cfg: dict, config_path: str | Path) -> Path:
     """Fit one shared physical model and save held-out evidence plus an artifact."""
+    validate_config_root(cfg)
     root = project_root_from_config(config_path)
-    project_cfg = cfg.get("project", {})
+    project_cfg = project_options(cfg)
+    reject_unknown_keys(cfg["data"], _DATA_OPTIONS, "data")
+    reject_unknown_keys(cfg.get("engine", {}), {"integrator"}, "engine")
     run_name = str(project_cfg.get("run_name", "thermal_rc"))
     base = as_path(project_cfg.get("output_dir", "outputs/runs"), root)
     seed = int(cfg.get("seed", 42))
@@ -159,7 +179,13 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
         "control_cols": model.spec.control_names,
     }
     all_trajectories = load_trajectories(data_cfg, root)
+    unevaluable = sorted(
+        trajectory.case_id for trajectory in all_trajectories if not trajectory.mask[1:].any()
+    )
+    if unevaluable:
+        raise ValueError(f"training data needs an observation after the initial row: {unevaluable}")
     split_cfg = cfg.get("split", {})
+    reject_unknown_keys(split_cfg, _SPLIT_OPTIONS, "split")
     assignments = None
     if str(split_cfg.get("method", "random")) == "explicit":
         table = split_cfg.get("table")

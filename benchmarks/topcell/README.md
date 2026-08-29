@@ -22,8 +22,7 @@
 - `scripts/definition.py`: generatorとevaluatorが共有する合成truthの唯一の数値定義。
 
 すべて自己完結CSVです。forecastでは通常入力列の将来温度を空欄とし、評価専用の`truth_*`
-列を別名で保持します。workflowは`truth_*`を読みません。case一覧manifestやファイル名解析も
-使用しません。
+列を別名で保持します。workflowは`truth_*`を読みません。
 
 学習run内のrandom train/validation/testはoptimizer選択と回帰確認用です。benchmarkの主結果は、
 学習directoryから物理的に分離した`work/data/eval/`に対する評価です。`work/`は生成物なので
@@ -31,8 +30,10 @@ Git管理せず、毎回generatorから再構築します。
 
 ## 実行
 
+以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
+
 ```powershell
-py -3.13 benchmarks/topcell/run.py
+py -3 benchmarks/topcell/run.py
 ```
 
 ## 基準実行結果
@@ -62,11 +63,11 @@ engineering priorは`7.202 K`でした。
 
 | case | 主評価 | 結果 |
 |---|---|---:|
-| M01 noise only | residual RMSE / filtered truth RMSE | 0.159 / 0.044 K |
-| M02 slow drift | raw measurement / filtered truth RMSE | 0.267 / 0.072 K |
-| M03 sensor step fault | 最大normalized residual / 検出遅れ | 17.60 / 0 s |
-| M04 sensor outages | 欠測率 / filtered truth RMSE | 14.5% / 0.091 K |
-| M05 unmodeled heat load | 最大normalized residual / 検出遅れ | 22.62 / 1 s |
+| M01 noise only | residual RMSE / filtered truth RMSE | 0.153 / 0.057 K |
+| M02 slow drift | raw measurement / filtered truth RMSE | 0.273 / 0.059 K |
+| M03 sensor step fault | 最大normalized residual / 検出遅れ | 18.98 / 0 s |
+| M04 sensor outages | 欠測率 / filtered truth RMSE | 14.5% / 0.050 K |
+| M05 unmodeled heat load | 最大normalized residual / 検出遅れ | 24.33 / 1 s |
 
 M05ではobserverが未知熱源を既知物理として再構成することは期待せず、innovationで速やかに
 検出できることを合格条件にしています。絶対sensor offsetは基準温度なしに物理温度と一意分離

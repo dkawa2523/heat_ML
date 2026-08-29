@@ -1,10 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_TOP_LEVEL_OPTIONS = {
+    "artifact",
+    "data",
+    "engine",
+    "forecast",
+    "monitor",
+    "project",
+    "seed",
+    "split",
+    "system",
+    "training",
+}
 
 
 def project_root_from_config(config_path: str | Path) -> Path:
@@ -34,6 +47,19 @@ def save_yaml(obj: dict[str, Any], path: str | Path) -> None:
         yaml.safe_dump(obj, f, sort_keys=False, allow_unicode=True)
 
 
+def reject_unknown_keys(values: object, allowed: Collection[str], section: str) -> None:
+    """Reject misspelled options without introducing a separate schema system."""
+    if not isinstance(values, Mapping):
+        raise ValueError(f"{section} must be a mapping")
+    unknown = set(values) - set(allowed)
+    if unknown:
+        raise ValueError(f"unknown {section} options: {sorted(unknown)}")
+
+
+def validate_config_root(cfg: object) -> None:
+    reject_unknown_keys(cfg, _TOP_LEVEL_OPTIONS, "config")
+
+
 def _set_by_dot_key(cfg: dict[str, Any], dotted_key: str, value: Any) -> None:
     cur = cfg
     parts = dotted_key.split(".")
@@ -55,4 +81,5 @@ def load_config(path: str | Path, overrides: list[str] | None = None) -> dict[st
         except yaml.YAMLError as error:
             raise ValueError(f"invalid YAML value for override {key}: {raw}") from error
         _set_by_dot_key(cfg, key, value)
+    validate_config_root(cfg)
     return cfg

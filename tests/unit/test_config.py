@@ -88,8 +88,8 @@ def test_override_creates_missing_intermediate_keys(tmp_path: Path) -> None:
 
 def test_override_value_may_contain_equals_signs(tmp_path: Path) -> None:
     path = write_cfg(tmp_path, {})
-    cfg = load_config(path, ["project.note=a=b=c"])
-    assert cfg["project"]["note"] == "a=b=c"
+    cfg = load_config(path, ["artifact=a=b=c"])
+    assert cfg["artifact"] == "a=b=c"
 
 
 def test_malformed_override_raises(tmp_path: Path) -> None:
@@ -98,3 +98,9 @@ def test_malformed_override_raises(tmp_path: Path) -> None:
         load_config(path, ["model.name"])
     with pytest.raises(ValueError, match="invalid YAML value"):
         load_config(path, ["training.epochs=["])
+
+
+def test_config_rejects_an_unknown_top_level_option(tmp_path: Path) -> None:
+    path = write_cfg(tmp_path, {"engin": {"integrator": "exact"}})
+    with pytest.raises(ValueError, match=r"unknown config options.*engin"):
+        load_config(path)
