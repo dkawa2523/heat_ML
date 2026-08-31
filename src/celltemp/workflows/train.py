@@ -165,7 +165,7 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
     project_cfg = project_options(cfg)
     reject_unknown_keys(cfg["data"], _DATA_OPTIONS, "data")
     reject_unknown_keys(cfg.get("engine", {}), {"integrator"}, "engine")
-    run_name = str(project_cfg.get("run_name", "thermal_rc"))
+    run_name = str(project_cfg.get("run_name", "thermal_network"))
     base = as_path(project_cfg.get("output_dir", "outputs/runs"), root)
     seed = int(cfg.get("seed", 42))
     system_path = str(cfg["system"])
@@ -235,6 +235,8 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
         "training": {
             "best_epoch": result.best_epoch,
             "best_validation_rmse": result.best_validation_rmse,
+            "rollout": "full_trajectory" if training.horizon is None else "window",
+            "horizon": training.horizon,
         },
         "evaluation": summary,
         "train_temperature_ranges": _ranges(

@@ -1,0 +1,3 @@
+layer,case_id,role,problem,evaluation_target,result,source_path
+高忠実度過渡,HV01_composite_conjugate,外部予測,"P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",局所mesh上で発熱→流速低下→入口昇温の複合非線形予測,RMSE 0.048 K; 最大誤差 0.112 K; mesh差内 100%,data/nonlinear_high_fidelity/dynamic/eval/forecast/HV01_composite_conjugate.csv
+高忠実度過渡,HV02_composite_radiation,モデル差,"P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",HV01と同一入力で放射だけを追加しmodel-form差を分離,RMSE 0.144 K; 最大誤差 0.344 K; mesh差内 100%,data/nonlinear_high_fidelity/dynamic/eval/model_gap/HV02_composite_radiation.csv

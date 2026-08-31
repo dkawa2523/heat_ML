@@ -1,0 +1,2 @@
+mesh_profile,background_level,elements,tetrahedra,pyramids,prisms,minimum_skewness_quality,mean_skewness_quality,air_hmax_mm,solid_hmax_mm,chip_hmax_mm,sink_wall_hmax_mm,contact_hmax_mm,channel_wall_hmax_mm,sink_boundary_layers,sink_boundary_layer_thickness_mm,channel_boundary_layers,channel_boundary_layer_thickness_mm,mesh_build_seconds,boundary_layer_stretch,sink_first_layer_thickness_mm,channel_first_layer_thickness_mm
+local-coarse,8,837644,698120,15653,123871,0.04751,0.6577,10,2,1.2,1.8,0.8,8,5,1.5,4,2.5,27.6598112,1.2,0.2015695549,0.4657228018

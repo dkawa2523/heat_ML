@@ -31,11 +31,6 @@ def run_forecast(cfg: dict, config_path: str | Path) -> Path:
         sensor_names=artifact.sensor_names,
         control_names=artifact.control_names,
     )
-    for request in requests:
-        if request.mask[1:].any():
-            raise ValueError(
-                f"{request.case_id}: forecast temperatures are only allowed on the initial row"
-            )
 
     target, overwrite = output_target(cfg, root, section="forecast")
     summaries: list[dict[str, object]] = []
@@ -54,6 +49,8 @@ def run_forecast(cfg: dict, config_path: str | Path) -> Path:
             summaries.append(
                 {
                     "case_id": request.case_id,
+                    "history_rows": result.forecast_origin_index + 1,
+                    "forecast_start_time": float(result.time[0]),
                     "rows": len(frame),
                     "time_end": float(result.time[-1]),
                     "output": output_file.name,

@@ -22,7 +22,9 @@ architectureを検証します。CIはこれに加えてTopCell product benchmar
 | 対称熱流・energy conservation | `test_engine.py`, `test_physical_properties.py` |
 | 受動系の上下限 | `test_engine.py`, `test_physical_properties.py` |
 | actuator解析解・overshootなし | `test_engine.py`, `test_physical_properties.py` |
-| 欠測・隠れnode observer | `test_engine.py`, `test_inference.py` |
+| 欠測・隠れnode・履歴posterior handoff | `test_engine.py`, `test_inference.py` |
+| zero-mean / reference sensor bias gauge | `test_inference.py`, `test_workflows.py` |
+| forecast境界後の観測拒否 | `test_inference.py`, `test_workflows.py` |
 | gradientとrollout学習 | `test_learning.py` |
 | artifact round-trip | `test_inference.py` |
 | train → forecast → monitor | `test_workflows.py` |

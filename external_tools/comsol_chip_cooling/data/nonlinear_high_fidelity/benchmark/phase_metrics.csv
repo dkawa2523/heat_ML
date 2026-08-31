@@ -1,0 +1,9 @@
+case_id,phase,response_time_start_exclusive_s,response_time_end_inclusive_s,n_timepoints,rmse_k,mae_k,max_abs_error_k
+HV01_composite_conjugate,initialization,0,60,3,1.332272498e-06,1.23580099e-06,1.902308547e-06
+HV01_composite_conjugate,power_excitation,60,120,3,0.03719646072,0.03125783782,0.06707861922
+HV01_composite_conjugate,airflow_excitation,120,160,2,0.04040390794,0.03261956597,0.07520099696
+HV01_composite_conjugate,coupled_hot_low_flow,160,220,3,0.07646671823,0.07109298976,0.1120949259
+HV02_composite_radiation,initialization,0,60,3,0.0001643727714,0.0001528319656,0.0002279056339
+HV02_composite_radiation,power_excitation,60,120,3,0.05331197862,0.04556742543,0.09018046375
+HV02_composite_radiation,airflow_excitation,120,160,2,0.1136370699,0.1071913187,0.1723767613
+HV02_composite_radiation,coupled_hot_low_flow,160,220,3,0.2532904658,0.2468033507,0.3439330487

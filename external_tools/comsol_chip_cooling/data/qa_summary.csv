@@ -1,0 +1,30 @@
+case_id,role,rows,time_end_s,temperature_min_c,temperature_max_c,missing_measurements,path,group,purpose
+T01_power_step_4w,train,301,600.0,24.999999999999943,40.41418691821258,0,data/train/T01_power_step_4w.csv,power_steps,Identify source-to-chip gain and thermal time constants at 4 W.
+T02_power_step_6w,train,301,600.0,24.999999999999943,48.12053108966899,0,data/train/T02_power_step_6w.csv,power_steps,Identify source-to-chip gain and thermal time constants at 6 W.
+T03_power_step_8w,train,301,600.0,24.999999999999943,55.82991671572864,0,data/train/T03_power_step_8w.csv,power_steps,Identify source-to-chip gain and thermal time constants at 8 W.
+T04_power_step_10w,train,301,600.0,24.999999999999943,63.537395894660506,0,data/train/T04_power_step_10w.csv,power_steps,Identify source-to-chip gain and thermal time constants at 10 W.
+T05_power_step_12w,train,301,600.0,24.999999999999943,71.2448750735922,0,data/train/T05_power_step_12w.csv,power_steps,Identify source-to-chip gain and thermal time constants at 12 W.
+T06_coolant_step_20c,train,361,720.0,24.999999999999943,56.48348740897103,0,data/train/T06_coolant_step_20c.csv,coolant_steps,Separate the coolant boundary response using a 20 degC level.
+T07_coolant_step_15c,train,361,720.0,24.999999999999943,53.372428697879,0,data/train/T07_coolant_step_15c.csv,coolant_steps,Separate the coolant boundary response using a 15 degC level.
+T08_coolant_step_30c,train,361,720.0,24.999999999999943,62.70562542767368,0,data/train/T08_coolant_step_30c.csv,coolant_steps,Separate the coolant boundary response using a 30 degC level.
+T09_coolant_step_35c,train,361,720.0,24.999999999999943,65.81653675741137,0,data/train/T09_coolant_step_35c.csv,coolant_steps,Separate the coolant boundary response using a 35 degC level.
+T10_power_ramp,train,301,600.0,24.999999999999943,48.518615247024115,0,data/train/T10_power_ramp.csv,ramps,Identify distributed thermal lag without relying only on steps.
+T11_coolant_ramp,train,301,600.0,24.999999999999943,57.21977490465372,0,data/train/T11_coolant_ramp.csv,ramps,Identify the boundary path under a continuous coolant-temperature sweep.
+T12_power_multilevel,train,301,600.0,24.999999999999943,53.12451521882463,0,data/train/T12_power_multilevel.csv,multilevel,Excite chip storage and both conductive links at several power levels.
+T13_coolant_multilevel,train,301,600.0,24.999999999999943,56.3773289460637,0,data/train/T13_coolant_multilevel.csv,multilevel,Excite both convective paths while chip power remains independently fixed.
+T14_combined_recipe,train,301,600.0,24.999999999999943,54.49623578033396,0,data/train/T14_combined_recipe.csv,combined,Disambiguate source and boundary effects under asynchronous changes.
+T15_combined_ramps,train,301,600.0,24.999999999999943,53.75917230544303,0,data/train/T15_combined_ramps.csv,combined,"Check superposition across simultaneous, continuously changing inputs."
+T16_warm_start,train,301,600.0,37.47345941452801,52.074774839075815,0,data/train/T16_warm_start.csv,initialization,Prevent identification from depending on a single initial temperature.
+F01_power_interpolation,forecast,301,600.0,24.999999999999943,51.72621351482138,900,data/eval/forecast/F01_power_interpolation.csv,interpolation,Interpolate a power level absent from the training steps.
+F02_joint_interpolation,forecast,301,600.0,24.999999999999943,50.50327570682123,900,data/eval/forecast/F02_joint_interpolation.csv,interpolation,Test superposition at unseen in-range power and coolant levels.
+F03_power_extrapolation,forecast,301,600.0,24.999999999999943,86.6607550258077,900,data/eval/forecast/F03_power_extrapolation.csv,extrapolation,Test stable hot-side extrapolation beyond the 12 W training maximum.
+F04_coolant_extrapolation,forecast,301,600.0,24.999999999999943,52.73494608277883,900,data/eval/forecast/F04_coolant_extrapolation.csv,extrapolation,Test cold-side extrapolation below the 15 degC training minimum.
+F05_short_pulses,forecast,301,600.0,24.999999999999943,32.62487629421946,900,data/eval/forecast/F05_short_pulses.csv,dynamics,Expose missing fast modes using repeated short power pulses.
+F06_unseen_recipe,forecast,301,600.0,24.999999999999943,54.537327016259326,900,data/eval/forecast/F06_unseen_recipe.csv,dynamics,Test an unseen ordering and overlap of both commands.
+F07_hot_initial_state,forecast,301,600.0,37.21986235257884,50.00000033412692,900,data/eval/forecast/F07_hot_initial_state.csv,initialization,Test cooling and reheating from a uniform state outside training starts.
+F08_variable_sampling,forecast,361,600.0,24.999999999999943,51.87248129049124,1080,data/eval/forecast/F08_variable_sampling.csv,sampling,Verify direct variable-dt integration without resampling the CAE truth.
+M01_noise_baseline,monitor,301,600.0,24.999999999999943,54.47850778526379,0,data/eval/monitor/M01_noise_baseline.csv,monitoring,Normal innovation width under 0.15 K sensor noise.
+M02_sensor_drift,monitor,301,600.0,24.999999999999943,54.47850778526379,0,data/eval/monitor/M02_sensor_drift.csv,monitoring,Separation of slow bias drift from physical temperature.
+M03_sensor_offset,monitor,301,600.0,24.999999999999943,54.47850778526379,0,data/eval/monitor/M03_sensor_offset.csv,monitoring,Detection delay for a sudden +3 K chip-sensor fault.
+M04_missing_measurements,monitor,301,600.0,24.999999999999943,54.47850778526379,132,data/eval/monitor/M04_missing_measurements.csv,monitoring,State continuity through overlapping sensor gaps.
+M05_uncommanded_heat,monitor,301,600.0,24.999999999999943,56.47982956788434,0,data/eval/monitor/M05_uncommanded_heat.csv,monitoring,Innovation response to a real uncommanded heat load.

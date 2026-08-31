@@ -1,0 +1,5 @@
+mesh_profile,comparison_cases,all_cases_pass,all_cases_pass_benchmark,status
+global-8,2,False,False,not_accepted_or_not_yet_compared
+local-coarse,2,False,False,not_accepted_or_not_yet_compared
+local-medium,2,False,True,benchmark_only
+local-fine,0,False,False,not_accepted_or_not_yet_compared

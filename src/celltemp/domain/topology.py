@@ -1,4 +1,4 @@
-"""Serializable definitions of a lumped thermal system."""
+"""Framework-independent definitions of a lumped thermal network."""
 
 from __future__ import annotations
 
@@ -12,24 +12,105 @@ def _tuple_floats(values: tuple[float, ...] | list[float] | np.ndarray) -> tuple
 
 
 @dataclass(frozen=True)
+class ConstantLawSpec:
+    """A positive scalar that is independent of the system inputs."""
+
+    value: float
+    learnable: bool = True
+
+    def __post_init__(self) -> None:
+        if not np.isfinite(self.value) or self.value <= 0.0:
+            raise ValueError("constant law value must be positive and finite")
+
+
+@dataclass(frozen=True)
+class PositivePartLawSpec:
+    """A non-negative linear response above a physical input threshold.
+
+    ``value(u) = gain * max(u - threshold, 0)``.
+    """
+
+    control: str
+    gain: float
+    threshold: float = 0.0
+    learnable: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.control:
+            raise ValueError("positive-part law control must not be empty")
+        if not np.isfinite(self.gain) or self.gain <= 0.0:
+            raise ValueError("positive-part law gain must be positive and finite")
+        if not np.isfinite(self.threshold):
+            raise ValueError("positive-part law threshold must be finite")
+
+
+@dataclass(frozen=True)
+class PowerLawSpec:
+    """A positive offset plus a monotone response to a physical input.
+
+    ``value(u) = offset + scale * (max(u, 0) / reference) ** exponent``.
+    The value may represent conductance or heat rate depending on the thermal path
+    that owns the law. Individual learnability flags keep weakly identifiable
+    shape parameters fixed unless the available experiments can support them.
+    """
+
+    control: str
+    reference: float
+    offset: float
+    scale: float
+    exponent: float
+    offset_learnable: bool = False
+    scale_learnable: bool = True
+    exponent_learnable: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.control:
+            raise ValueError("power-law control must not be empty")
+        if not np.isfinite(self.reference) or self.reference <= 0.0:
+            raise ValueError("power-law reference must be positive and finite")
+        if not np.isfinite(self.offset) or self.offset < 0.0:
+            raise ValueError("power-law offset must be finite and non-negative")
+        if not np.isfinite(self.scale) or self.scale < 0.0:
+            raise ValueError("power-law scale must be finite and non-negative")
+        if self.offset == 0.0 and self.scale == 0.0:
+            raise ValueError("power-law offset or scale must be positive")
+        if not np.isfinite(self.exponent) or self.exponent <= 0.0:
+            raise ValueError("power-law exponent must be positive and finite")
+        if self.offset_learnable and self.offset == 0.0:
+            raise ValueError("a learnable power-law offset must have a positive prior")
+        if self.scale_learnable and self.scale == 0.0:
+            raise ValueError("a learnable power-law scale must have a positive prior")
+
+
+ScalarLawSpec = ConstantLawSpec | PositivePartLawSpec | PowerLawSpec
+
+
+def _law_control(law: ScalarLawSpec) -> str | None:
+    return None if isinstance(law, ConstantLawSpec) else law.control
+
+
+def _check_law(law: object, owner: str) -> None:
+    if not isinstance(law, (ConstantLawSpec, PositivePartLawSpec, PowerLawSpec)):
+        raise TypeError(f"{owner} must use a scalar law specification")
+
+
+@dataclass(frozen=True)
 class EdgeSpec:
-    """One undirected conductive path between two thermal nodes."""
+    """One undirected heat-transfer path between two thermal nodes."""
 
     node_a: str
     node_b: str
-    conductance: float
-    learnable: bool = True
+    conductance: ScalarLawSpec
 
     def __post_init__(self) -> None:
         if self.node_a == self.node_b:
             raise ValueError("a conductive edge must connect two different nodes")
-        if not np.isfinite(self.conductance) or self.conductance <= 0.0:
-            raise ValueError("edge conductance must be positive and finite")
+        _check_law(self.conductance, "edge conductance")
 
 
 @dataclass(frozen=True)
 class ActuatorSpec:
-    """A commanded input with an optional first-order response delay."""
+    """A measured or commanded input with an optional first-order delay."""
 
     name: str
     tau: float = 0.0
@@ -44,69 +125,65 @@ class ActuatorSpec:
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """A non-negative heat source driven by one actuator.
-
-    ``node_weights`` describes how the heat is distributed. ``gain`` converts the
-    positive part of ``actuator - threshold`` into heat rate.
-    """
+    """A non-negative heat-rate law distributed over thermal nodes."""
 
     name: str
-    actuator: str
     node_weights: tuple[float, ...]
-    gain: float
-    threshold: float = 0.0
-    learnable: bool = True
+    heat_rate: ScalarLawSpec
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "node_weights", _tuple_floats(self.node_weights))
         if not self.name:
             raise ValueError("source name must not be empty")
-        if not np.isfinite(self.gain) or self.gain < 0.0:
-            raise ValueError("source gain must be finite and non-negative")
-        if self.learnable and self.gain == 0.0:
-            raise ValueError("a learnable source gain must have a positive prior")
-        if not np.isfinite(self.threshold):
-            raise ValueError("source threshold must be finite")
+        _check_law(self.heat_rate, "source heat_rate")
         weights = np.asarray(self.node_weights)
         if not np.isfinite(weights).all() or np.any(weights < 0.0):
             raise ValueError("source node weights must be finite and non-negative")
 
 
 @dataclass(frozen=True)
-class BoundarySpec:
-    """A convective boundary with an affine boundary temperature.
+class ReservoirTemperatureSpec:
+    """Affine reservoir temperature in physical input units.
 
-    ``temperature = intercept + slope * actuator``.  Set ``actuator=None`` for a
-    constant ambient boundary.  Conductance and node weights are non-negative, so
-    the boundary always pulls a node toward its temperature rather than acting as
-    an unbounded signed source.
+    ``temperature = intercept + slope * control``. A missing control represents a
+    constant reservoir and therefore requires a zero slope.
     """
+
+    intercept: float
+    control: str | None = None
+    slope: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not np.isfinite(self.intercept) or not np.isfinite(self.slope):
+            raise ValueError("reservoir temperature parameters must be finite")
+        if self.control is None and self.slope != 0.0:
+            raise ValueError("a constant reservoir must have zero slope")
+        if self.control == "":
+            raise ValueError("reservoir control must not be empty")
+
+
+@dataclass(frozen=True)
+class BoundarySpec:
+    """Heat exchange between weighted nodes and one thermal reservoir."""
 
     name: str
     node_weights: tuple[float, ...]
-    conductance: float
-    temperature_intercept: float
-    actuator: str | None = None
-    temperature_slope: float = 0.0
-    learnable: bool = True
+    reservoir_temperature: ReservoirTemperatureSpec
+    conductance: ScalarLawSpec
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "node_weights", _tuple_floats(self.node_weights))
         if not self.name:
             raise ValueError("boundary name must not be empty")
-        if not np.isfinite(self.conductance) or self.conductance < 0.0:
-            raise ValueError("boundary conductance must be finite and non-negative")
-        if self.learnable and self.conductance == 0.0:
-            raise ValueError("a learnable boundary conductance must have a positive prior")
-        if not np.isfinite(self.node_weights).all() or np.any(np.asarray(self.node_weights) < 0.0):
+        _check_law(self.conductance, "boundary conductance")
+        weights = np.asarray(self.node_weights)
+        if not np.isfinite(weights).all() or np.any(weights < 0.0):
             raise ValueError("boundary node weights must be finite and non-negative")
-        if not np.isfinite(self.temperature_intercept) or not np.isfinite(self.temperature_slope):
-            raise ValueError("boundary temperature parameters must be finite")
 
 
 @dataclass(frozen=True)
 class ThermalSystemSpec:
-    """Topology, inputs, and observations for a lumped thermal system."""
+    """Topology, inputs, heat paths, and observations for a thermal system."""
 
     node_names: tuple[str, ...]
     heat_capacity: tuple[float, ...]
@@ -131,8 +208,8 @@ class ThermalSystemSpec:
 
         self._validate_dimensions()
         nodes = set(self.node_names)
-        actuators = {actuator.name for actuator in self.actuators}
-        self._validate_edges(nodes)
+        actuators = {actuator.name: actuator for actuator in self.actuators}
+        self._validate_edges(nodes, actuators)
         self._validate_inputs(actuators)
         self._validate_sensors(nodes)
 
@@ -155,7 +232,19 @@ class ThermalSystemSpec:
         if len(set(self.sensor_names)) != len(self.sensor_names):
             raise ValueError("sensor_names must be unique")
 
-    def _validate_edges(self, nodes: set[str]) -> None:
+    @staticmethod
+    def _validate_law_control(
+        law: ScalarLawSpec,
+        actuators: dict[str, ActuatorSpec],
+        owner: str,
+    ) -> None:
+        control = _law_control(law)
+        if control is None:
+            return
+        if control not in actuators:
+            raise ValueError(f"{owner} refers to unknown actuator {control}")
+
+    def _validate_edges(self, nodes: set[str], actuators: dict[str, ActuatorSpec]) -> None:
         edge_keys: set[frozenset[str]] = set()
         for edge in self.edges:
             if edge.node_a not in nodes or edge.node_b not in nodes:
@@ -164,20 +253,32 @@ class ThermalSystemSpec:
             if key in edge_keys:
                 raise ValueError(f"duplicate undirected edge {edge.node_a}-{edge.node_b}")
             edge_keys.add(key)
+            self._validate_law_control(
+                edge.conductance,
+                actuators,
+                f"edge {edge.node_a}-{edge.node_b}",
+            )
 
-    def _validate_inputs(self, actuators: set[str]) -> None:
+    def _validate_inputs(self, actuators: dict[str, ActuatorSpec]) -> None:
         for source in self.sources:
-            if source.actuator not in actuators:
-                raise ValueError(
-                    f"source {source.name} refers to unknown actuator {source.actuator}"
-                )
+            self._validate_law_control(
+                source.heat_rate,
+                actuators,
+                f"source {source.name}",
+            )
             if len(source.node_weights) != len(self.node_names):
                 raise ValueError(f"source {source.name} must have one weight per node")
         for boundary in self.boundaries:
-            if boundary.actuator is not None and boundary.actuator not in actuators:
+            reservoir_control = boundary.reservoir_temperature.control
+            if reservoir_control is not None and reservoir_control not in actuators:
                 raise ValueError(
-                    f"boundary {boundary.name} refers to unknown actuator {boundary.actuator}"
+                    f"boundary {boundary.name} refers to unknown actuator {reservoir_control}"
                 )
+            self._validate_law_control(
+                boundary.conductance,
+                actuators,
+                f"boundary {boundary.name}",
+            )
             if len(boundary.node_weights) != len(self.node_names):
                 raise ValueError(f"boundary {boundary.name} must have one weight per node")
 

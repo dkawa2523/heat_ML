@@ -1,4 +1,4 @@
-"""Self-contained deployment artifact for the thermal RC engine."""
+"""Self-contained deployment artifact for the thermal network engine."""
 
 from __future__ import annotations
 
@@ -30,30 +30,31 @@ class ThermalArtifact:
 
 def fitted_parameters(model: ThermalRCModel) -> dict[str, list[dict[str, Any]]]:
     """Return physical fitted values with their engineering names."""
-    conductance = model.conductance().detach().cpu().tolist()
     tau = model.actuator_tau().detach().cpu().tolist()
-    source_gain = model.source_gain().detach().cpu().tolist()
-    boundary_h = model.boundary_conductance().detach().cpu().tolist()
     return {
         "edges": [
             {
                 "node_a": item.node_a,
                 "node_b": item.node_b,
-                "conductance": float(value),
+                "conductance": law,
             }
-            for item, value in zip(model.spec.edges, conductance)
+            for item, law in zip(model.spec.edges, model.edge_laws.fitted(), strict=True)
         ],
         "actuators": [
             {"name": item.name, "tau": float(value)}
             for item, value in zip(model.spec.actuators, tau)
         ],
         "sources": [
-            {"name": item.name, "gain": float(value)}
-            for item, value in zip(model.spec.sources, source_gain)
+            {"name": item.name, "heat_rate": law}
+            for item, law in zip(model.spec.sources, model.source_laws.fitted(), strict=True)
         ],
         "boundaries": [
-            {"name": item.name, "conductance": float(value)}
-            for item, value in zip(model.spec.boundaries, boundary_h)
+            {"name": item.name, "conductance": law}
+            for item, law in zip(
+                model.spec.boundaries,
+                model.boundary_laws.fitted(),
+                strict=True,
+            )
         ],
     }
 
@@ -71,8 +72,8 @@ def save_artifact(
     save_system_spec(model.spec, target / "system.yaml")
     document = {
         **(metadata or {}),
-        "schema_version": 2,
-        "model_type": "thermal_rc",
+        "schema_version": 4,
+        "model_type": "thermal_network",
         "integrator": model.integrator,
         "dtype": str(model.capacity.dtype).removeprefix("torch."),
         "fitted_parameters": fitted_parameters(model),
@@ -86,9 +87,9 @@ def save_artifact(
 def load_artifact(path: str | Path, *, device: str | torch.device = "cpu") -> ThermalArtifact:
     target = Path(path)
     metadata = json.loads((target / "metadata.json").read_text(encoding="utf-8"))
-    if metadata.get("schema_version") != 2:
+    if metadata.get("schema_version") != 4:
         raise ValueError(f"unsupported artifact schema {metadata.get('schema_version')}")
-    if metadata.get("model_type") != "thermal_rc":
+    if metadata.get("model_type") != "thermal_network":
         raise ValueError(f"unsupported model type {metadata.get('model_type')}")
     dtypes = {"float32": torch.float32, "float64": torch.float64}
     dtype_name = str(metadata.get("dtype"))

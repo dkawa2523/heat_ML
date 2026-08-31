@@ -1,4 +1,4 @@
-version: 1
+version: 3
 nodes:
   - {name: CP, heat_capacity: 1.00}
   - {name: Center, heat_capacity: 1.20}
@@ -9,31 +9,26 @@ actuators:
   - {name: heater, tau: 5.0}
   - {name: plasma, tau: 1.0}
 edges:
-  - {nodes: [CP, Center], conductance: 0.05625}
-  - {nodes: [Center, middle], conductance: 0.08182}
-  - {nodes: [middle, edge], conductance: 0.06923}
-  - {nodes: [Center, edge], conductance: 0.02813}
+  - {nodes: [CP, Center], conductance: {type: constant, value: 0.05625}}
+  - {nodes: [Center, middle], conductance: {type: constant, value: 0.08182}}
+  - {nodes: [middle, edge], conductance: {type: constant, value: 0.06923}}
+  - {nodes: [Center, edge], conductance: {type: constant, value: 0.02813}}
 sources:
   - name: plasma_heating
-    actuator: plasma
     node_weights: {CP: 0.70, Center: 0.60, middle: 0.45, edge: 0.30}
-    gain: 0.01
+    heat_rate: {type: positive_part, control: plasma, gain: 0.01}
   - name: heater_heating
-    actuator: heater
     node_weights: {CP: 0.25, Center: 0.70, middle: 0.60, edge: 0.45}
-    gain: 0.014
-    threshold: 70.0
+    heat_rate: {type: positive_part, control: heater, gain: 0.014, threshold: 70.0}
 boundaries:
   - name: brine_cooling
-    actuator: brine
-    temperature_intercept: 55.0
-    temperature_slope: -0.45
     node_weights: {CP: 0.20, Center: 0.25, middle: 0.45, edge: 0.75}
-    conductance: 0.03
+    reservoir_temperature: {control: brine, intercept: 55.0, slope: -0.45}
+    conductance: {type: constant, value: 0.03}
   - name: ambient
-    temperature_intercept: 45.0
     node_weights: {CP: 1.0, Center: 1.0, middle: 1.0, edge: 1.0}
-    conductance: 0.004
+    reservoir_temperature: {intercept: 45.0}
+    conductance: {type: constant, value: 0.004}
 sensors:
   - {name: CP, node: CP}
   - {name: Center, node: Center}

@@ -11,7 +11,12 @@ import yaml
 from celltemp.domain import (
     ActuatorSpec,
     BoundarySpec,
+    ConstantLawSpec,
     EdgeSpec,
+    PositivePartLawSpec,
+    PowerLawSpec,
+    ReservoirTemperatureSpec,
+    ScalarLawSpec,
     SourceSpec,
     ThermalSystemSpec,
 )
@@ -28,14 +33,55 @@ def _node_weights(
     return tuple(float(item) for item in value)
 
 
+def _reservoir_temperature(value: object) -> ReservoirTemperatureSpec:
+    if not isinstance(value, Mapping):
+        raise ValueError("boundary reservoir_temperature must be a mapping")
+    control = value.get("control")
+    return ReservoirTemperatureSpec(
+        intercept=float(value["intercept"]),
+        control=None if control is None else str(control),
+        slope=float(value.get("slope", 0.0)),
+    )
+
+
+def _scalar_law(value: object, owner: str) -> ScalarLawSpec:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{owner} must be a scalar-law mapping")
+    law_type = str(value.get("type", ""))
+    if law_type == "constant":
+        return ConstantLawSpec(
+            value=float(value["value"]),
+            learnable=bool(value.get("learnable", True)),
+        )
+    if law_type == "positive_part":
+        return PositivePartLawSpec(
+            control=str(value["control"]),
+            gain=float(value["gain"]),
+            threshold=float(value.get("threshold", 0.0)),
+            learnable=bool(value.get("learnable", True)),
+        )
+    if law_type == "power_law":
+        return PowerLawSpec(
+            control=str(value["control"]),
+            reference=float(value["reference"]),
+            offset=float(value["offset"]),
+            scale=float(value["scale"]),
+            exponent=float(value["exponent"]),
+            offset_learnable=bool(value.get("offset_learnable", False)),
+            scale_learnable=bool(value.get("scale_learnable", True)),
+            exponent_learnable=bool(value.get("exponent_learnable", False)),
+        )
+    raise ValueError(f"unsupported scalar law type {law_type!r} for {owner}")
+
+
 def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
     """Build a validated system definition from a compact mapping.
 
     Node weights may be a dense list or a mapping keyed by node name.  The latter
     keeps hand-written system files readable and independent of node ordering.
     """
-    version = int(data.get("version", 1))
-    if version != 1:
+    version = int(data.get("version", 3))
+    if version != 3:
         raise ValueError(f"unsupported system schema version {version}")
 
     nodes = tuple(data.get("nodes", ()))
@@ -56,19 +102,15 @@ def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
         EdgeSpec(
             node_a=str(item["nodes"][0]),
             node_b=str(item["nodes"][1]),
-            conductance=float(item["conductance"]),
-            learnable=bool(item.get("learnable", True)),
+            conductance=_scalar_law(item["conductance"], "edge conductance"),
         )
         for item in data.get("edges", ())
     )
     sources = tuple(
         SourceSpec(
             name=str(item["name"]),
-            actuator=str(item["actuator"]),
             node_weights=_node_weights(item["node_weights"], node_names),
-            gain=float(item["gain"]),
-            threshold=float(item.get("threshold", 0.0)),
-            learnable=bool(item.get("learnable", True)),
+            heat_rate=_scalar_law(item["heat_rate"], "source heat_rate"),
         )
         for item in data.get("sources", ())
     )
@@ -76,11 +118,8 @@ def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
         BoundarySpec(
             name=str(item["name"]),
             node_weights=_node_weights(item["node_weights"], node_names),
-            conductance=float(item["conductance"]),
-            temperature_intercept=float(item["temperature_intercept"]),
-            actuator=(None if item.get("actuator") is None else str(item["actuator"])),
-            temperature_slope=float(item.get("temperature_slope", 0.0)),
-            learnable=bool(item.get("learnable", True)),
+            reservoir_temperature=_reservoir_temperature(item["reservoir_temperature"]),
+            conductance=_scalar_law(item["conductance"], "boundary conductance"),
         )
         for item in data.get("boundaries", ())
     )
@@ -116,8 +155,35 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
     def weights(values: tuple[float, ...]) -> dict[str, float]:
         return {name: float(value) for name, value in zip(spec.node_names, values) if value != 0.0}
 
+    def law(item: ScalarLawSpec) -> dict[str, Any]:
+        if isinstance(item, ConstantLawSpec):
+            return {
+                "type": "constant",
+                "value": item.value,
+                "learnable": item.learnable,
+            }
+        if isinstance(item, PositivePartLawSpec):
+            return {
+                "type": "positive_part",
+                "control": item.control,
+                "gain": item.gain,
+                "threshold": item.threshold,
+                "learnable": item.learnable,
+            }
+        return {
+            "type": "power_law",
+            "control": item.control,
+            "reference": item.reference,
+            "offset": item.offset,
+            "scale": item.scale,
+            "exponent": item.exponent,
+            "offset_learnable": item.offset_learnable,
+            "scale_learnable": item.scale_learnable,
+            "exponent_learnable": item.exponent_learnable,
+        }
+
     return {
-        "version": 1,
+        "version": 3,
         "nodes": [
             {"name": name, "heat_capacity": float(capacity)}
             for name, capacity in zip(spec.node_names, spec.heat_capacity)
@@ -129,19 +195,15 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
         "edges": [
             {
                 "nodes": [item.node_a, item.node_b],
-                "conductance": item.conductance,
-                "learnable": item.learnable,
+                "conductance": law(item.conductance),
             }
             for item in spec.edges
         ],
         "sources": [
             {
                 "name": item.name,
-                "actuator": item.actuator,
                 "node_weights": weights(item.node_weights),
-                "gain": item.gain,
-                "threshold": item.threshold,
-                "learnable": item.learnable,
+                "heat_rate": law(item.heat_rate),
             }
             for item in spec.sources
         ],
@@ -149,11 +211,12 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
             {
                 "name": item.name,
                 "node_weights": weights(item.node_weights),
-                "conductance": item.conductance,
-                "temperature_intercept": item.temperature_intercept,
-                "actuator": item.actuator,
-                "temperature_slope": item.temperature_slope,
-                "learnable": item.learnable,
+                "reservoir_temperature": {
+                    "intercept": item.reservoir_temperature.intercept,
+                    "control": item.reservoir_temperature.control,
+                    "slope": item.reservoir_temperature.slope,
+                },
+                "conductance": law(item.conductance),
             }
             for item in spec.boundaries
         ],

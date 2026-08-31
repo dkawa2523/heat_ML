@@ -21,3 +21,6 @@ dist/
 
 examples/*/work/
 benchmarks/*/work/
+external_tools/*/work/
+external_tools/**/*.class
+external_tools/**/*.class.status

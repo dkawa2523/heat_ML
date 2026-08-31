@@ -1,7 +1,7 @@
 seed: 42
 
 project:
-  run_name: thermal_rc_demo
+  run_name: thermal_network_demo
   output_dir: work/outputs/runs
   overwrite_run: true
 
@@ -28,9 +28,8 @@ engine:
 
 training:
   epochs: 30
-  steps_per_epoch: 4
   batch_size: 8
-  horizon: 30
+  horizon: null
   learning_rate: 0.03
   huber_delta: 1.0
   prior_weight: 0.0001
@@ -52,6 +51,8 @@ monitor:
   overwrite: true
   device: cpu
   observer:
-    temperature_process_std: 0.02
+    # Omit bias_reference when no calibrated sensor is available; bias is then zero-mean.
+    disturbance_process_std: 0.02
     bias_process_std: 0.005
     sensor_std: 0.15
+    innovation_gate_sigma: 4.0

@@ -1,0 +1,3 @@
+case_id,time,chip,sink_base,fins,chip_power,coolant_temperature,inlet_air_velocity,mesh_uncertainty_chip,mesh_uncertainty_sink_base,mesh_uncertainty_fins,mesh_profile,mesh_qualified,benchmark_qualified,qualification_basis
+MC01_nominal,0,111.1960139,110.8457267,109.5107774,12,25,0.1,0.4962085957,0.4954013419,0.4922401557,local-fine,False,True,absolute difference from local-medium
+MC02_hot_low_flow_radiation,0,119.2012297,118.8419384,117.5051909,12,40,0.05,0.1544275062,0.1537747003,0.1490998637,local-fine,False,True,absolute difference from local-medium

@@ -16,7 +16,10 @@ from celltemp.config import save_yaml
 from celltemp.domain import (
     ActuatorSpec,
     BoundarySpec,
+    ConstantLawSpec,
     EdgeSpec,
+    PositivePartLawSpec,
+    ReservoirTemperatureSpec,
     SourceSpec,
     ThermalSystemSpec,
 )
@@ -56,26 +59,36 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert len(forecast) == 11
     assert np.isfinite(forecast[[f"temperature_{name}" for name in SENSORS]]).all().all()
     monitored = pd.read_csv(monitor_dir / "monitor_case.csv")
-    assert np.isfinite(monitored[[f"filtered_{name}" for name in SENSORS]]).all().all()
-    assert np.isfinite(pd.read_csv(monitor_dir / "monitor_summary.csv")["residual_rmse"]).all()
+    assert np.isfinite(monitored[[f"posterior_physical_{name}" for name in SENSORS]]).all().all()
+    assert set(monitored["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
+    assert np.equal(monitored[f"sensor_bias_{SENSORS[-1]}"], 0.0).all()
+    summary = pd.read_csv(monitor_dir / "monitor_summary.csv")
+    assert set(summary["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
+    assert np.isfinite(summary["innovation_rmse"]).all()
+    assert np.isfinite(summary["mean_nis_per_dof"]).all()
 
 
-def test_forecast_exposes_hidden_state_without_accepting_future_measurements(
+def test_forecast_uses_history_without_accepting_measurements_after_the_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     spec = ThermalSystemSpec(
         node_names=("core", "shell"),
         heat_capacity=(3.0, 1.0),
-        edges=(EdgeSpec("core", "shell", 0.4, learnable=False),),
+        edges=(EdgeSpec("core", "shell", ConstantLawSpec(0.4, learnable=False)),),
         actuators=(ActuatorSpec("heater", tau=0.0, learnable=False),),
-        sources=(SourceSpec("core_heating", "heater", (1.0, 0.0), 0.2, learnable=False),),
+        sources=(
+            SourceSpec(
+                "core_heating",
+                (1.0, 0.0),
+                PositivePartLawSpec("heater", 0.2, learnable=False),
+            ),
+        ),
         boundaries=(
             BoundarySpec(
                 "ambient",
                 (0.0, 1.0),
-                conductance=0.1,
-                temperature_intercept=25.0,
-                learnable=False,
+                ReservoirTemperatureSpec(25.0),
+                ConstantLawSpec(0.1, learnable=False),
             ),
         ),
         sensor_names=("surface_tc",),
@@ -115,10 +128,20 @@ def test_forecast_exposes_hidden_state_without_accepting_future_measurements(
     assert "state_shell" in output
     assert np.isfinite(output[["state_core", "state_shell"]]).all().all()
 
-    previous_output = output_path.read_bytes()
     request.loc[1, "surface_tc"] = 26.0
     request.to_csv(request_path, index=False)
-    with pytest.raises(ValueError, match="only allowed on the initial row"):
+    _run_cli(monkeypatch, "forecast", "--config", str(config_path))
+    history_initialized = pd.read_csv(output_path)
+    assert history_initialized["time"].tolist() == [1.0, 2.0]
+    summary = pd.read_csv(tmp_path / "outputs" / "forecast" / "forecast_summary.csv")
+    assert summary.loc[0, "history_rows"] == 2
+    assert summary.loc[0, "forecast_start_time"] == 1.0
+
+    previous_output = output_path.read_bytes()
+    request.loc[1, "surface_tc"] = np.nan
+    request.loc[2, "surface_tc"] = 26.0
+    request.to_csv(request_path, index=False)
+    with pytest.raises(ValueError, match="contiguous history prefix"):
         _run_cli(monkeypatch, "forecast", "--config", str(config_path))
     assert output_path.read_bytes() == previous_output
 

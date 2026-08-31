@@ -16,13 +16,13 @@
 - `work/data/raw/`: 同定専用228軌道。
   - 定常64運転点 × 3初期温度 = 192軌道。
   - brine/heater/plasmaを個別にstep/ramp励振する36軌道。
-- `work/data/eval/forecast/`: 学習探索先に含まれない外部forecast 11ケース。
+- `work/data/eval/forecast/`: 学習探索先に含まれない外部forecast 12ケース。
 - `work/data/eval/monitor/`: noise、drift、故障、欠測、外乱を持つ外部monitor 5ケース。
 - `system.yaml`: truthから意図的にずらしたengineering prior。
 - `scripts/definition.py`: generatorとevaluatorが共有する合成truthの唯一の数値定義。
 
-すべて自己完結CSVです。forecastでは通常入力列の将来温度を空欄とし、評価専用の`truth_*`
-列を別名で保持します。workflowは`truth_*`を読みません。
+すべて自己完結CSVです。forecastでは通常入力列に先頭から連続する観測履歴を置き、その後の
+将来温度を空欄とします。評価専用の`truth_*`列は別名で保持し、workflowは読みません。
 
 学習run内のrandom train/validation/testはoptimizer選択と回帰確認用です。benchmarkの主結果は、
 学習directoryから物理的に分離した`work/data/eval/`に対する評価です。`work/`は生成物なので
@@ -43,40 +43,42 @@ py -3 benchmarks/topcell/run.py
 
 ### 外部forecast
 
-seed 42、60 epochでの結果です。model gapを除く10ケースの平均RMSEは`0.156 K`、
-engineering priorは`7.202 K`でした。
+seed 42、case-balanced全軌道20 epochでの結果です。model gapを除く11ケースの平均RMSEは
+`0.143 K`、engineering priorは`7.185 K`でした。
 
 | group | cases | mean RMSE [K] | worst RMSE [K] | 分かること |
 |---|---:|---:|---:|---|
-| interpolation | 2 | 0.023 | 0.031 | 未学習の中間運転点 |
-| extrapolation | 2 | 0.020 | 0.030 | 学習範囲外の高入熱・強冷却 |
-| dynamics | 3 | 0.036 | 0.039 | 短周期pulse、未知phase順、複合ramp |
-| initialization | 2 | 0.658 | 1.304 | 高温初期状態と初期sensor欠測 |
+| interpolation | 2 | 0.021 | 0.031 | 未学習の中間運転点 |
+| extrapolation | 2 | 0.016 | 0.027 | 学習範囲外の高入熱・強冷却 |
+| dynamics | 3 | 0.032 | 0.039 | 短周期pulse、未知phase順、複合ramp |
+| initialization | 3 | 0.450 | 1.303 | 高温初期状態、初期sensor欠測、履歴posterior handoff |
 | sampling | 1 | 0.050 | 0.050 | 可変`dt`をresampleせず積分 |
-| model gap | 1 | 9.832 | 9.832 | 温度依存熱損失を線形RCで表せないこと |
+| model gap | 1 | 9.823 | 9.823 | 温度依存熱損失を線形RCで表せないこと |
 
-最大のcore誤差は、初期4sensor中2点だけを与える`F09`です。これは係数誤差ではなく、未観測
-初期温度を一意に復元できない影響を明示します。`F11`の大誤差は失敗ではなく、非線形物理項が
-必要な領域を検出するnegative controlです。
+最大のcore誤差は、初期4sensor中2点だけを時刻0で与える`F09`です。これは係数誤差ではなく、
+未観測初期温度を一意に復元できない影響を明示します。同じ初期状態・運転・2 sensorを20秒の
+因果履歴として与える`F12`は、履歴を評価へ混ぜずorigin以後RMSE `0.038 K`となり、F09の
+`1.303 K`から97.1%低減しました。`F11`の大誤差は失敗ではなく、非線形物理項が必要な領域を
+検出するnegative controlです。
 
 ### Monitor
 
 | case | 主評価 | 結果 |
 |---|---|---:|
-| M01 noise only | residual RMSE / filtered truth RMSE | 0.153 / 0.057 K |
-| M02 slow drift | raw measurement / filtered truth RMSE | 0.273 / 0.059 K |
-| M03 sensor step fault | 最大normalized residual / 検出遅れ | 18.98 / 0 s |
-| M04 sensor outages | 欠測率 / filtered truth RMSE | 14.5% / 0.050 K |
-| M05 unmodeled heat load | 最大normalized residual / 検出遅れ | 24.33 / 1 s |
+| M01 noise only | innovation / posterior physical RMSE | 0.167 / 0.063 K |
+| M02 slow drift | zero-mean sensor bias / posterior physical RMSE | 0.100 / 0.185 K |
+| M03 sensor step fault | 最大NIS / 検出遅れ | 279.17 / 0 s |
+| M04 sensor outages | 欠測率 / posterior physical RMSE | 14.5% / 0.077 K |
+| M05 unmodeled heat load | peak未知熱推定 / 検出遅れ | 0.758 W / 1 s |
 
-M05ではobserverが未知熱源を既知物理として再構成することは期待せず、innovationで速やかに
-検出できることを合格条件にしています。絶対sensor offsetは基準温度なしに物理温度と一意分離
-できないため、M02は初期bias 0からのdrift追跡を評価します。
+M05ではobserverが既知source空間経路上の未知熱として外乱を推定し、sensor biasへの漏れと分けて
+評価します。絶対sensor offsetは基準温度なしに物理温度と一意分離できないため、M02/M03は
+共通成分を除いたsensor biasと、gross innovationに対する物理状態保護を評価します。
 
 ### 同定
 
-内部random splitの平均RMSEはtrain `0.023 K`、validation `0.025 K`、test `0.022 K`です。
-source/boundary/edgeの最大相対誤差は`1.7%`、actuator tauの最大相対誤差は`7.9%`です。
+内部random splitの平均RMSEはtrain `0.020 K`、validation `0.023 K`、test `0.019 K`です。
+source/boundary/edgeの最大相対誤差は`1.4%`、actuator tauの最大相対誤差は`7.9%`です。
 parameter一致は副指標であり、外部trajectory
 予測とworst caseを主指標にします。
 

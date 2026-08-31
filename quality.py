@@ -26,6 +26,7 @@ PATHS = [
     "quality.py",
     "benchmarks/topcell/scripts",
     "benchmarks/topcell/run.py",
+    "external_tools/comsol_chip_cooling",
 ]
 
 
@@ -43,7 +44,14 @@ def run(tool: str, *args: str, timeout: int = 3600) -> subprocess.CompletedProce
         if tool == "lint-imports"
         else [sys.executable, "-m", tool, *args]
     )
-    environment = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    source_path = str(REPO / "src")
+    python_path = os.environ.get("PYTHONPATH")
+    environment = {
+        **os.environ,
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "PYTHONPATH": source_path if not python_path else source_path + os.pathsep + python_path,
+    }
     return subprocess.run(
         command,
         cwd=REPO,
@@ -62,7 +70,9 @@ def report(name: str, result: subprocess.CompletedProcess[str]) -> bool:
     print(f"  {'PASS' if passed else 'FAIL'}  {name}")
     if not passed:
         detail = (result.stdout + result.stderr).strip().splitlines()[-40:]
-        print("\n".join(f"        {line}" for line in detail))
+        encoding = sys.stdout.encoding or "utf-8"
+        printable = "\n".join(f"        {line}" for line in detail)
+        print(printable.encode(encoding, errors="replace").decode(encoding))
     return passed
 
 

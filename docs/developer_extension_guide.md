@@ -5,10 +5,10 @@
 コード変更なしで次を追加できます。
 
 - thermal nodeとheat capacity
-- conductive edge
+- constantまたは入力依存conductanceを持つinternal edge
 - actuatorとtau
-- source、threshold、node分布
-- boundaryとaffine boundary temperature
+- scalar heat-rate lawとnode分布を持つsource
+- reservoir温度、scalar conductance law、node分布を持つboundary
 - sensor-to-node mapping
 
 まずYAMLだけを変更し、`test` splitのworst-caseとセンサー別残差を比較してください。
@@ -28,8 +28,12 @@
 
 ## 新しい物理項
 
-温度依存項が必要な場合は、まず`ThermalRCModel.system_matrix`と`forcing`の責務を崩さない
-独立した小さな項として実装します。次を試験してください。
+入力から非負の係数またはheat rateを作るだけなら、既存のscalar lawをedge、source、boundaryの
+適切な位置へ配置します。特定装置部品や冷却方式の名前をlawへ追加しません。単一problemの残差に
+しか効かない変換は外部評価側に残し、複数の独立problemで同じ数学的応答が必要な場合だけ共通lawを
+追加します。
+温度依存項が必要な場合だけ、`ThermalRCModel.system_matrix`と`forcing`で表せる区間affine経路と、
+非線形heat-rate経路を分けます。学習・forecast・monitorで別モデルを作らず、次を試験してください。
 
 - 単位と符号
 - 係数制約
@@ -43,10 +47,10 @@ substepのいずれを選ぶかを物理時間尺度に基づいて決めてく�
 
 ## 新しいobserver state
 
-既存observerはthermal nodeとsensor biasを持ちます。初期時点から存在する絶対offsetは外部基準
-なしにphysical temperatureと一意分離できないため、biasを絶対校正値とは扱いません。校正点が
-ある場合や、装置別drift・遅い未観測熱源を追加する場合は、状態遷移、process noise、measurement
-matrixを同じ拡張状態に組み込みます。推論後のEMAとして別処理を増やさないでください。
+既存observerはthermal node、unknown heat、sensor biasを持ちます。基準なしでは零平均gauge、
+校正済みsensorを`bias_reference`へ指定した場合はreference gaugeを使います。新しいbias表現を
+並行実装せず、`bias_basis`、状態遷移、process noise、measurement matrixを同じ拡張状態として
+変更してください。推論後のEMAとして別処理を増やさないでください。
 
 ## 新しいworkflow
 

@@ -1,4 +1,4 @@
-version: 1
+version: 3
 
 # One physical-unit state definition shared by identification, forecasting,
 # monitoring, and deployment. Values are engineering priors, not fitted outputs.
@@ -14,38 +14,28 @@ actuators:
   - {name: plasma, tau: 2.0, learnable: true}
 
 edges:
-  - {nodes: [CP, Center], conductance: 0.0533333333, learnable: true}
-  - {nodes: [Center, middle], conductance: 0.0800000000, learnable: true}
-  - {nodes: [middle, edge], conductance: 0.0666666667, learnable: true}
-  - {nodes: [Center, edge], conductance: 0.0250000000, learnable: true}
+  - {nodes: [CP, Center], conductance: {type: constant, value: 0.0533333333, learnable: true}}
+  - {nodes: [Center, middle], conductance: {type: constant, value: 0.0800000000, learnable: true}}
+  - {nodes: [middle, edge], conductance: {type: constant, value: 0.0666666667, learnable: true}}
+  - {nodes: [Center, edge], conductance: {type: constant, value: 0.0250000000, learnable: true}}
 
 sources:
   - name: plasma_heating
-    actuator: plasma
     node_weights: {CP: 1.0, Center: 0.75, middle: 0.55, edge: 0.35}
-    gain: 0.008
-    threshold: 0.0
-    learnable: true
+    heat_rate: {type: positive_part, control: plasma, gain: 0.008, threshold: 0.0, learnable: true}
   - name: heater_heating
-    actuator: heater
     node_weights: {CP: 0.25, Center: 0.85, middle: 0.65, edge: 0.45}
-    gain: 0.010
-    threshold: 70.0
-    learnable: true
+    heat_rate: {type: positive_part, control: heater, gain: 0.010, threshold: 70.0, learnable: true}
 
 boundaries:
   - name: brine_cooling
-    actuator: brine
-    temperature_intercept: 55.0
-    temperature_slope: -0.45
     node_weights: {CP: 0.15, Center: 0.25, middle: 0.55, edge: 0.90}
-    conductance: 0.025
-    learnable: true
+    reservoir_temperature: {control: brine, intercept: 55.0, slope: -0.45}
+    conductance: {type: constant, value: 0.025, learnable: true}
   - name: ambient
-    temperature_intercept: 45.0
     node_weights: {CP: 1.0, Center: 1.0, middle: 1.0, edge: 1.0}
-    conductance: 0.003
-    learnable: true
+    reservoir_temperature: {intercept: 45.0}
+    conductance: {type: constant, value: 0.003, learnable: true}
 
 sensors:
   - {name: CP, node: CP}

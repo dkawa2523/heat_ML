@@ -57,7 +57,7 @@ def test_override_parses_current_config_values(tmp_path: Path) -> None:
     path = write_cfg(
         tmp_path,
         {
-            "training": {"epochs": 1, "steps_per_epoch": 2},
+            "training": {"epochs": 1, "batch_size": 2},
             "forecast": {"device": "cpu"},
             "project": {"overwrite_run": True},
         },
@@ -73,7 +73,7 @@ def test_override_parses_current_config_values(tmp_path: Path) -> None:
     )
     assert cfg["training"] == {
         "epochs": 50,
-        "steps_per_epoch": 2,
+        "batch_size": 2,
         "learning_rate": pytest.approx(0.001),
     }
     assert cfg["forecast"]["device"] == "cuda"

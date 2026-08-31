@@ -1,0 +1,61 @@
+layer,case_id,role,problem,evaluation_target,result,source_path
+線形CAE,T01_power_step_4w,同定,"P 0–4 W; Tin 25 °C; 600 s, Δt 2 s",入熱利得、chip熱容量、内部時定数のレベル一貫性,学習 RMSE 0.005 K; CAE Tmax 40.4 °C,data/train/T01_power_step_4w.csv
+線形CAE,T02_power_step_6w,同定,"P 0–6 W; Tin 25 °C; 600 s, Δt 2 s",入熱利得、chip熱容量、内部時定数のレベル一貫性,検証 RMSE 0.008 K; CAE Tmax 48.1 °C,data/train/T02_power_step_6w.csv
+線形CAE,T03_power_step_8w,同定,"P 0–8 W; Tin 25 °C; 600 s, Δt 2 s",入熱利得、chip熱容量、内部時定数のレベル一貫性,学習 RMSE 0.007 K; CAE Tmax 55.8 °C,data/train/T03_power_step_8w.csv
+線形CAE,T04_power_step_10w,同定,"P 0–10 W; Tin 25 °C; 600 s, Δt 2 s",入熱利得、chip熱容量、内部時定数のレベル一貫性,学習 RMSE 0.009 K; CAE Tmax 63.5 °C,data/train/T04_power_step_10w.csv
+線形CAE,T05_power_step_12w,同定,"P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",入熱利得、chip熱容量、内部時定数のレベル一貫性,学習 RMSE 0.011 K; CAE Tmax 71.2 °C,data/train/T05_power_step_12w.csv
+線形CAE,T06_coolant_step_20c,同定,"P 0–8 W; Tin 20–25 °C; 720 s, Δt 2 s",発熱経路と独立した境界温度・対流経路の分離,学習 RMSE 0.009 K; CAE Tmax 56.5 °C,data/train/T06_coolant_step_20c.csv
+線形CAE,T07_coolant_step_15c,同定,"P 0–8 W; Tin 15–25 °C; 720 s, Δt 2 s",発熱経路と独立した境界温度・対流経路の分離,学習 RMSE 0.014 K; CAE Tmax 53.4 °C,data/train/T07_coolant_step_15c.csv
+線形CAE,T08_coolant_step_30c,同定,"P 0–8 W; Tin 25–30 °C; 720 s, Δt 2 s",発熱経路と独立した境界温度・対流経路の分離,学習 RMSE 0.009 K; CAE Tmax 62.7 °C,data/train/T08_coolant_step_30c.csv
+線形CAE,T09_coolant_step_35c,同定,"P 0–8 W; Tin 25–35 °C; 720 s, Δt 2 s",発熱経路と独立した境界温度・対流経路の分離,内部テスト RMSE 0.014 K; CAE Tmax 65.8 °C,data/train/T09_coolant_step_35c.csv
+線形CAE,T10_power_ramp,同定,"P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",step波形だけに依存しない連続入力追従,学習 RMSE 0.055 K; CAE Tmax 48.5 °C,data/train/T10_power_ramp.csv
+線形CAE,T11_coolant_ramp,同定,"P 0–8 W; Tin 17–33 °C; 600 s, Δt 2 s",step波形だけに依存しない連続入力追従,学習 RMSE 0.011 K; CAE Tmax 57.2 °C,data/train/T11_coolant_ramp.csv
+線形CAE,T12_power_multilevel,同定,"P 0–11 W; Tin 25 °C; 600 s, Δt 2 s",複数運転レベル・複数時間スケールでの係数一貫性,学習 RMSE 0.044 K; CAE Tmax 53.1 °C,data/train/T12_power_multilevel.csv
+線形CAE,T13_coolant_multilevel,同定,"P 0–8 W; Tin 18–32 °C; 600 s, Δt 2 s",複数運転レベル・複数時間スケールでの係数一貫性,学習 RMSE 0.014 K; CAE Tmax 56.4 °C,data/train/T13_coolant_multilevel.csv
+線形CAE,T14_combined_recipe,同定,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",発熱と境界温度の重ね合わせ、および係数分離,内部テスト RMSE 0.040 K; CAE Tmax 54.5 °C,data/train/T14_combined_recipe.csv
+線形CAE,T15_combined_ramps,同定,"P 0–12 W; Tin 19–31 °C; 600 s, Δt 2 s",発熱と境界温度の重ね合わせ、および係数分離,検証 RMSE 0.053 K; CAE Tmax 53.8 °C,data/train/T15_combined_ramps.csv
+線形CAE,T16_warm_start,同定,"P 0–7 W; Tin 30 °C; Tchip,0 40 °C; 600 s, Δt 2 s",単一初期温度への依存回避と初期状態からの回復,学習 RMSE 0.045 K; CAE Tmax 52.1 °C,data/train/T16_warm_start.csv
+線形CAE,F01_power_interpolation,外部予測,"P 0–7 W; Tin 25 °C; 600 s, Δt 2 s",未学習7 Wでの発熱内挿,外部RMSE 0.006 K; 最大誤差 0.071 K; prior比 99.9%改善,data/eval/forecast/F01_power_interpolation.csv
+線形CAE,F02_joint_interpolation,外部予測,"P 0–9 W; Tin 22.5–27.5 °C; 600 s, Δt 2 s",発熱・境界温度の同時内挿と重ね合わせ,外部RMSE 0.025 K; 最大誤差 0.093 K; prior比 99.7%改善,data/eval/forecast/F02_joint_interpolation.csv
+線形CAE,F03_power_extrapolation,外部予測,"P 0–16 W; Tin 25 °C; 600 s, Δt 2 s",学習上限12 Wを超える16 W hot-side外挿,外部RMSE 0.014 K; 最大誤差 0.163 K; prior比 99.9%改善,data/eval/forecast/F03_power_extrapolation.csv
+線形CAE,F04_coolant_extrapolation,外部予測,"P 0–9 W; Tin 10–25 °C; 600 s, Δt 2 s",学習下限15 °Cを下回る10 °C cold-side外挿,外部RMSE 0.021 K; 最大誤差 0.092 K; prior比 99.8%改善,data/eval/forecast/F04_coolant_extrapolation.csv
+線形CAE,F05_short_pulses,外部予測,"P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",反復短パルスで3-node縮約が落とす高速モード,外部RMSE 0.083 K; 最大誤差 0.256 K; prior比 95.4%改善,data/eval/forecast/F05_short_pulses.csv
+線形CAE,F06_unseen_recipe,外部予測,"P 0–12 W; Tin 18–31 °C; 600 s, Δt 2 s",未知の入力順序・重なりに対するrecipe汎化,外部RMSE 0.059 K; 最大誤差 0.193 K; prior比 99.1%改善,data/eval/forecast/F06_unseen_recipe.csv
+線形CAE,F07_hot_initial_state,外部予測,"P 0–6 W; Tin 25 °C; Tchip,0 50 °C; 600 s, Δt 2 s",未学習50 °C一様初期状態からの冷却・再加熱,外部RMSE 0.039 K; 最大誤差 0.142 K; prior比 99.5%改善,data/eval/forecast/F07_hot_initial_state.csv
+線形CAE,F08_variable_sampling,外部予測,"P 0–11 W; Tin 20–30 °C; 600 s, Δt 1/2/3 s",1/2/3秒の非均一時刻を直接積分できるか,外部RMSE 0.044 K; 最大誤差 0.099 K; prior比 99.2%改善,data/eval/forecast/F08_variable_sampling.csv
+線形CAE,M01_noise_baseline,監視,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",0.15 K測定noise下の正常innovationとfalse alert,alert率 0.0%; posterior物理RMSE 0.040 K,data/eval/monitor/M01_noise_baseline.csv
+線形CAE,M02_sensor_drift,監視,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",slow sensor driftと物理温度の分離,alert率 0.0%; 最終bias誤差 0.027 K,data/eval/monitor/M02_sensor_drift.csv
+線形CAE,M03_sensor_offset,監視,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",+3 K chip sensor stepの検出とbias帰属,検出遅延 0 s; alert率 27.3%; 最終bias誤差 0.111 K,data/eval/monitor/M03_sensor_offset.csv
+線形CAE,M04_missing_measurements,監視,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",base/fins欠測窓でも状態推定を継続できるか,欠測 132点; 欠測窓RMSE 0.040 K; 推定finite,data/eval/monitor/M04_missing_measurements.csv
+線形CAE,M05_uncommanded_heat,監視,"P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",commandにない3 W chip発熱の検出と熱外乱帰属,検出遅延 10 s; peak外乱 3.182 W; alert率 4.3%,data/eval/monitor/M05_uncommanded_heat.csv
+非線形CAE,NT01_power_levels,同定,"P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",発熱レベル依存の熱抵抗・時定数を同定,"学習 RMSE 0.237 K; Tchip,max 71.8 °C; dp,max 0.0167 Pa",data/nonlinear/train/NT01_power_levels.csv
+非線形CAE,NT02_power_reverse,同定,"P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",高温後の冷却と再加熱の非対称性を分離,"検証 RMSE 0.313 K; Tchip,max 63.9 °C; dp,max 0.0164 Pa",data/nonlinear/train/NT02_power_reverse.csv
+非線形CAE,NT03_inlet_temperature_levels,同定,"P 0–8 W; Tin 15–35 °C; v 0.1 m/s; 900 s, Δt 10 s",入口温度レベルに対する空気側応答を同定,"学習 RMSE 0.237 K; Tchip,max 66.1 °C; dp,max 0.0164 Pa",data/nonlinear/train/NT03_inlet_temperature_levels.csv
+非線形CAE,NT04_air_velocity_levels,同定,"P 0–8 W; Tin 25 °C; v 0.05–0.2 m/s; 900 s, Δt 10 s",入口流速で変化する冷却conductanceを同定,"学習 RMSE 0.126 K; Tchip,max 63.3 °C; dp,max 0.0428 Pa",data/nonlinear/train/NT04_air_velocity_levels.csv
+非線形CAE,NT05_power_ramp,同定,"P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",step形状に依存しない連続非線形応答を同定,"学習 RMSE 0.216 K; Tchip,max 59.1 °C; dp,max 0.0163 Pa",data/nonlinear/train/NT05_power_ramp.csv
+非線形CAE,NT06_combined_levels,同定,"P 0–12 W; Tin 18–32 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",3入力の非同期変化から効果を分離,"学習 RMSE 0.301 K; Tchip,max 60.6 °C; dp,max 0.0424 Pa",data/nonlinear/train/NT06_combined_levels.csv
+非線形CAE,NT07_combined_ramps,同定,"P 0–12 W; Tin 18–32 °C; v 0.06–0.18 m/s; 900 s, Δt 10 s",運転域内部を連続3入力で被覆,"学習 RMSE 0.090 K; Tchip,max 61.0 °C; dp,max 0.0351 Pa",data/nonlinear/train/NT07_combined_ramps.csv
+非線形CAE,NT08_hot_low_flow,同定,"P 0–10 W; Tin 35 °C; v 0.05 m/s; 900 s, Δt 10 s",高温・低流量の学習端を被覆,"学習 RMSE 0.150 K; Tchip,max 83.0 °C; dp,max 0.0070 Pa",data/nonlinear/train/NT08_hot_low_flow.csv
+非線形CAE,NT09_cold_high_flow,同定,"P 0–12 W; Tin 15 °C; v 0.2 m/s; 900 s, Δt 10 s",低温・高流量の学習端を被覆しheld-out評価,"内部テスト RMSE 0.405 K; Tchip,max 50.1 °C; dp,max 0.0427 Pa",data/nonlinear/train/NT09_cold_high_flow.csv
+非線形CAE,NT10_stationary_hot_start,同定,"P 2–10 W; Tin 20–30 °C; v 0.1–0.2 m/s; Tchip,0 87.68 °C; 900 s, Δt 10 s",非一様な発熱定常場からの初期化を評価,"学習 RMSE 0.360 K; Tchip,max 87.8 °C; dp,max 0.0430 Pa",data/nonlinear/train/NT10_stationary_hot_start.csv
+非線形CAE,NF01_fixed_flow_interpolation,外部予測,"P 0–9 W; Tin 22.5–25 °C; v 0.1 m/s; 900 s, Δt 10 s",固定流速で発熱・入口温度を内挿,"CAE truth生成済み; Tchip,max 61.9 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF01_fixed_flow_interpolation.csv
+非線形CAE,NF02_unseen_three_input_recipe,外部予測,"P 0–11 W; Tin 17–31 °C; v 0.075–0.15 m/s; 900 s, Δt 10 s",未知の3入力順序・重なりへのrecipe汎化,"CAE truth生成済み; Tchip,max 59.2 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF02_unseen_three_input_recipe.csv
+非線形CAE,NF03_power_extrapolation,外部予測,"P 0–16 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",学習上限12 Wを超える16 W外挿,"CAE truth生成済み; Tchip,max 102.2 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF03_power_extrapolation.csv
+非線形CAE,NF04_hot_low_flow_corner,外部予測,"P 0–12 W; Tin 40 °C; v 0.05 m/s; 900 s, Δt 10 s",40 °C・0.05 m/s・12 Wの複合外挿,"CAE truth生成済み; Tchip,max 114.6 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF04_hot_low_flow_corner.csv
+非線形CAE,NF05_cold_inlet_extrapolation,外部予測,"P 0–9 W; Tin 10–25 °C; v 0.1 m/s; 900 s, Δt 10 s",学習下限を下回る入口10 °C外挿,"CAE truth生成済み; Tchip,max 57.3 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF05_cold_inlet_extrapolation.csv
+非線形CAE,NF06_air_velocity_interpolation,外部予測,"P 0–9 W; Tin 25 °C; v 0.075–0.15 m/s; 900 s, Δt 10 s",未学習0.075/0.15 m/sの流速内挿,"CAE truth生成済み; Tchip,max 63.8 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF06_air_velocity_interpolation.csv
+非線形CAE,NF07_air_velocity_extrapolation,外部予測,"P 0–12 W; Tin 25 °C; v 0.1–0.3 m/s; 900 s, Δt 10 s",0.30 m/sへの流速外挿,"CAE truth生成済み; Tchip,max 54.8 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF07_air_velocity_extrapolation.csv
+非線形CAE,NF08_short_power_pulses,外部予測,"P 0–15 W; Tin 25 °C; v 0.1 m/s; 600 s, Δt 1 s",20秒・15 W反復pulseで欠落fast modeを露出,"CAE truth生成済み; Tchip,max 34.5 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF08_short_power_pulses.csv
+非線形CAE,NF09_stationary_hot_start,外部予測,"P 3–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; Tchip,0 142.99 °C; 900 s, Δt 10 s",未学習の非一様12 W定常場から予測,"CAE truth生成済み; Tchip,max 143.2 °C; 現行成果物では独立open-loop誤差を未集計",data/nonlinear/eval/forecast/NF09_stationary_hot_start.csv
+非線形CAE,NM01_nominal_nonlinear,監視,"P 0–11 W; Tin 20–30 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",非線形通常運転でのfalse alertを評価,CAE/0.15 K noise生成済み; 正常noise系列; 監視器の検出結果は未集計,data/nonlinear/eval/monitor/NM01_nominal_nonlinear.csv
+非線形CAE,NM02_uncommanded_heat,監視,"P 0–11 W; Tin 20–30 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",420–520秒の未指令3 W発熱を検出,CAE/0.15 K noise生成済み; 未指令3 W発熱を注入; 監視器の検出結果は未集計,data/nonlinear/eval/monitor/NM02_uncommanded_heat.csv
+非線形CAE,NM03_uncommanded_cooling_loss,監視,"P 0–8 W; Tin 25 °C; v 0.1–0.15 m/s; 900 s, Δt 10 s",commandにない一時流量低下を検出,CAE/0.15 K noise生成済み; 未指令流量低下を注入; 監視器の検出結果は未集計,data/nonlinear/eval/monitor/NM03_uncommanded_cooling_loss.csv
+非線形CAE,NR01_power_levels,モデル差,"P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",発熱レベルごとの放射省略差を同一入力pairで測定,base比 terminal ΔTchip -5.02 K; max|Qrad| 1.879 W,data/nonlinear/eval/model_gap/NR01_power_levels.csv
+非線形CAE,NR02_power_ramp,モデル差,"P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",連続温度sweep中の放射省略差を測定,base比 terminal ΔTchip -4.65 K; max|Qrad| 1.319 W,data/nonlinear/eval/model_gap/NR02_power_ramp.csv
+非線形CAE,NR03_combined_levels,モデル差,"P 0–12 W; Tin 18–32 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",3入力運転中の放射省略差を測定,base比 terminal ΔTchip -4.05 K; max|Qrad| 1.309 W,data/nonlinear/eval/model_gap/NR03_combined_levels.csv
+非線形CAE,NR04_hot_low_flow_corner,モデル差,"P 0–12 W; Tin 40 °C; v 0.05 m/s; 900 s, Δt 10 s",弱対流・高温端での放射省略差を測定,base比 terminal ΔTchip -12.45 K; max|Qrad| 3.062 W,data/nonlinear/eval/model_gap/NR04_hot_low_flow_corner.csv
+非線形CAE,NR05_stationary_hot_start,モデル差,"P 3–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; Tchip,0 110.27 °C; 900 s, Δt 10 s",非一様hot-start冷却中の放射省略差を測定,base比 terminal ΔTchip -15.15 K; max|Qrad| 4.436 W,data/nonlinear/eval/model_gap/NR05_stationary_hot_start.csv
+局所メッシュ,MC01_nominal,メッシュ収束,12 W; Tin 25 °C; v 0.10 m/s; 放射なし; 4 mesh profile,定格熱抵抗、fin間流路、圧力損失の離散化感度,"medium→fine ΔTchip,avg 0.496 K; Δdp 0.62%; strict 未達 / benchmark 合格",data/nonlinear_high_fidelity/mesh_convergence_deltas.csv
+局所メッシュ,MC02_hot_low_flow_radiation,メッシュ収束,12 W; Tin 40 °C; v 0.05 m/s; 放射あり; 4 mesh profile,高温・低流量・弱対流・放射条件での離散化感度,"medium→fine ΔTchip,avg 0.154 K; Δdp 0.90%; strict 合格 / benchmark 合格",data/nonlinear_high_fidelity/mesh_convergence_deltas.csv
+高忠実度過渡,HV01_composite_conjugate,外部予測,"P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",局所mesh上で発熱→流速低下→入口昇温の複合非線形予測,RMSE 0.048 K; 最大誤差 0.112 K; mesh差内 100%,data/nonlinear_high_fidelity/dynamic/eval/forecast/HV01_composite_conjugate.csv
+高忠実度過渡,HV02_composite_radiation,モデル差,"P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",HV01と同一入力で放射だけを追加しmodel-form差を分離,RMSE 0.144 K; 最大誤差 0.344 K; mesh差内 100%,data/nonlinear_high_fidelity/dynamic/eval/model_gap/HV02_composite_radiation.csv

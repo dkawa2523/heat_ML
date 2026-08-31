@@ -43,7 +43,7 @@ def resolve_artifact_path(cfg: dict, root: Path) -> Path:
     if "artifact" in cfg:
         return as_path(str(cfg["artifact"]), root)
     base = as_path(str(project.get("output_dir", "outputs/runs")), root)
-    run_name = str(project.get("run_name", "thermal_rc"))
+    run_name = str(project.get("run_name", "thermal_network"))
     return base / run_name / "artifact"
 
 

@@ -36,7 +36,13 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
     observer_cfg = values.get("observer", {})
     reject_unknown_keys(
         observer_cfg,
-        {"bias_process_std", "sensor_std", "temperature_process_std"},
+        {
+            "bias_reference",
+            "bias_process_std",
+            "disturbance_process_std",
+            "innovation_gate_sigma",
+            "sensor_std",
+        },
         "monitor.observer",
     )
     summaries: list[dict[str, object]] = []
@@ -46,30 +52,51 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
             output = pd.DataFrame({"time": result.time})
             for sensor_index, sensor in enumerate(artifact.sensor_names):
                 output[f"measured_{sensor}"] = trajectory.temperature[:, sensor_index]
-                output[f"prior_{sensor}"] = result.prior_sensor_temperature[:, sensor_index]
-                output[f"filtered_{sensor}"] = result.filtered_sensor_temperature[:, sensor_index]
-                output[f"residual_{sensor}"] = result.residual[:, sensor_index]
-                output[f"residual_std_{sensor}"] = result.residual_std[:, sensor_index]
-                output[f"bias_{sensor}"] = result.sensor_bias[:, sensor_index]
+                output[f"prior_physical_{sensor}"] = result.prior_physical_temperature[
+                    :, sensor_index
+                ]
+                output[f"predicted_measurement_{sensor}"] = result.predicted_measurement[
+                    :, sensor_index
+                ]
+                output[f"posterior_physical_{sensor}"] = result.posterior_physical_temperature[
+                    :, sensor_index
+                ]
+                output[f"reconstructed_measurement_{sensor}"] = result.reconstructed_measurement[
+                    :, sensor_index
+                ]
+                output[f"innovation_{sensor}"] = result.innovation[:, sensor_index]
+                output[f"innovation_std_{sensor}"] = result.innovation_std[:, sensor_index]
+                output[f"sensor_bias_{sensor}"] = result.sensor_bias[:, sensor_index]
             for node_index, node in enumerate(artifact.model.spec.node_names):
-                output[f"state_{node}"] = result.filtered_node_temperature[:, node_index]
+                output[f"state_{node}"] = result.posterior_node_temperature[:, node_index]
+                output[f"disturbance_{node}_w"] = result.node_heat_disturbance[:, node_index]
             for control_index, control in enumerate(artifact.control_names):
                 output[f"effective_{control}"] = result.actuator[:, control_index]
+            output["nis"] = result.nis
+            output["nis_dof"] = result.nis_dof
+            output["bias_gauge"] = result.bias_gauge
             output_file = out_dir / f"{trajectory.case_id}.csv"
             output.to_csv(output_file, index=False)
-            valid = np.isfinite(result.residual)
-            residual_values = result.residual[valid]
+            valid = np.isfinite(result.innovation)
+            innovation_values = result.innovation[valid]
+            valid_nis = np.isfinite(result.nis) & (result.nis_dof > 0)
             summaries.append(
                 {
                     "case_id": trajectory.case_id,
-                    "residual_rmse": (
-                        float(np.sqrt(np.mean(residual_values**2)))
-                        if residual_values.size
+                    "bias_gauge": result.bias_gauge,
+                    "innovation_rmse": (
+                        float(np.sqrt(np.mean(innovation_values**2)))
+                        if innovation_values.size
                         else float("nan")
                     ),
-                    "max_abs_residual": (
-                        float(np.max(np.abs(residual_values)))
-                        if residual_values.size
+                    "max_abs_innovation": (
+                        float(np.max(np.abs(innovation_values)))
+                        if innovation_values.size
+                        else float("nan")
+                    ),
+                    "mean_nis_per_dof": (
+                        float(np.mean(result.nis[valid_nis] / result.nis_dof[valid_nis]))
+                        if np.any(valid_nis)
                         else float("nan")
                     ),
                     "output": output_file.name,

@@ -81,7 +81,7 @@ def _write_cae_csv(
 
 def system_config() -> dict:
     return {
-        "version": 1,
+        "version": 3,
         "nodes": [
             {"name": name, "heat_capacity": float(capacity)}
             for name, capacity in zip(SENSORS, THERMAL_MASS)
@@ -94,39 +94,56 @@ def system_config() -> dict:
         "edges": [
             {
                 "nodes": [SENSORS[node_a], SENSORS[node_b]],
-                "conductance": 0.040 / resistance,
+                "conductance": {
+                    "type": "constant",
+                    "value": 0.040 / resistance,
+                },
             }
             for (node_a, node_b), resistance in EDGE_RESISTANCE.items()
         ],
         "sources": [
             {
                 "name": "plasma_heating",
-                "actuator": "plasma",
                 "node_weights": dict(zip(SENSORS, PLASMA_WEIGHT.tolist())),
-                "gain": 0.008,
+                "heat_rate": {
+                    "type": "positive_part",
+                    "control": "plasma",
+                    "gain": 0.008,
+                },
             },
             {
                 "name": "heater_heating",
-                "actuator": "heater",
                 "node_weights": dict(zip(SENSORS, HEATER_WEIGHT.tolist())),
-                "gain": 0.011,
-                "threshold": 70.0,
+                "heat_rate": {
+                    "type": "positive_part",
+                    "control": "heater",
+                    "gain": 0.011,
+                    "threshold": 70.0,
+                },
             },
         ],
         "boundaries": [
             {
                 "name": "brine_cooling",
-                "actuator": "brine",
-                "temperature_intercept": 55.0,
-                "temperature_slope": -0.45,
                 "node_weights": dict(zip(SENSORS, BRINE_WEIGHT.tolist())),
-                "conductance": 0.024,
+                "reservoir_temperature": {
+                    "control": "brine",
+                    "intercept": 55.0,
+                    "slope": -0.45,
+                },
+                "conductance": {
+                    "type": "constant",
+                    "value": 0.024,
+                },
             },
             {
                 "name": "ambient",
-                "temperature_intercept": 45.0,
                 "node_weights": dict.fromkeys(SENSORS, 1.0),
-                "conductance": 0.003,
+                "reservoir_temperature": {"intercept": 45.0},
+                "conductance": {
+                    "type": "constant",
+                    "value": 0.003,
+                },
             },
         ],
         "sensors": [{"name": name, "node": name} for name in SENSORS],
@@ -161,9 +178,8 @@ def train_config() -> dict:
         "engine": {"integrator": "exact"},
         "training": {
             "epochs": 8,
-            "steps_per_epoch": 2,
             "batch_size": 4,
-            "horizon": 25,
+            "horizon": None,
             "learning_rate": 0.04,
             "validation_every": 2,
             "patience": 5,
@@ -186,7 +202,11 @@ def runtime_config() -> dict:
             "output_dir": "outputs/monitor",
             "overwrite": True,
             "device": "cpu",
-            "observer": {"sensor_std": 0.15},
+            "observer": {
+                "bias_reference": SENSORS[-1],
+                "sensor_std": 0.15,
+                "innovation_gate_sigma": 4.0,
+            },
         },
     }
 

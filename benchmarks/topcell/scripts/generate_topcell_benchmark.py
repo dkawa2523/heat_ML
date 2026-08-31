@@ -60,6 +60,7 @@ class ForecastCase:
     controls: np.ndarray
     initial_temperature: np.ndarray
     initial_sensor_mask: np.ndarray
+    history_end_time: float = 0.0
     ambient_temperature_coefficient: float = 0.0
 
 
@@ -355,6 +356,16 @@ def forecast_cases() -> list[ForecastCase]:
             observed_all,
             ambient_temperature_coefficient=0.012,
         ),
+        ForecastCase(
+            "F12_history_initialized_sparse",
+            "initialization",
+            "causal sensor history reconstructs hidden temperatures before open-loop handoff",
+            REGULAR_TIMES,
+            _novel_recipe(REGULAR_TIMES),
+            np.array([52.0, 58.0, 64.0, 70.0]),
+            np.array([False, True, True, False]),
+            history_end_time=20.0,
+        ),
     ]
 
 
@@ -369,10 +380,11 @@ def generate_forecast_evaluation() -> None:
             ambient_temperature_coefficient=case.ambient_temperature_coefficient,
         )
         frame = pd.DataFrame({"time": case.times})
+        history = case.times <= case.history_end_time
         for sensor_index, sensor in enumerate(SENSORS):
             request = np.full(len(case.times), np.nan)
             if case.initial_sensor_mask[sensor_index]:
-                request[0] = truth[0, sensor_index]
+                request[history] = truth[history, sensor_index]
             frame[sensor] = request
         for control_index, control in enumerate(CONTROLS):
             frame[control] = case.controls[:, control_index]
@@ -407,6 +419,9 @@ def _write_monitor_case(
         if deterministic_bias is None
         else np.asarray(deterministic_bias, dtype=float)
     )
+    disturbance = (
+        np.zeros_like(truth) if extra_heat is None else np.asarray(extra_heat, dtype=float)
+    )
     measured = truth + bias + rng.normal(0.0, SENSOR_NOISE_STD, size=truth.shape)
     if missing is not None:
         measured[np.asarray(missing, dtype=bool)] = np.nan
@@ -419,6 +434,7 @@ def _write_monitor_case(
     for sensor_index, sensor in enumerate(SENSORS):
         frame[f"truth_{sensor}"] = truth[:, sensor_index]
         frame[f"truth_bias_{sensor}"] = bias[:, sensor_index]
+        frame[f"truth_disturbance_{sensor}_w"] = disturbance[:, sensor_index]
     frame["benchmark_group"] = group
     frame["benchmark_purpose"] = purpose
     if event_start is not None:

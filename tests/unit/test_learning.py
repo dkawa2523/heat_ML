@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 import torch
 
-from celltemp.domain import ActuatorSpec, SourceSpec, ThermalSystemSpec, Trajectory
+from celltemp.domain import (
+    ActuatorSpec,
+    PositivePartLawSpec,
+    SourceSpec,
+    ThermalSystemSpec,
+    Trajectory,
+)
 from celltemp.engine import ThermalRCModel
 from celltemp.learning import TrainingConfig, fit_thermal_model, trajectory_loss, trajectory_rmse
 from celltemp.learning.trainer import _valid_starts
@@ -14,7 +20,7 @@ def _source_system(gain: float) -> ThermalSystemSpec:
         heat_capacity=(2.0,),
         edges=(),
         actuators=(ActuatorSpec("power", tau=0.0, learnable=False),),
-        sources=(SourceSpec("heater", "power", (1.0,), gain=gain),),
+        sources=(SourceSpec("heater", (1.0,), PositivePartLawSpec("power", gain)),),
     )
 
 
@@ -52,9 +58,8 @@ def test_fit_reduces_full_rollout_error() -> None:
         [trajectory],
         config=TrainingConfig(
             epochs=30,
-            steps_per_epoch=2,
             batch_size=2,
-            horizon=12,
+            horizon=None,
             learning_rate=0.08,
             validation_every=2,
             patience=20,
@@ -65,6 +70,35 @@ def test_fit_reduces_full_rollout_error() -> None:
     assert result.best_epoch > 0
     assert after < before * 0.1
     assert extension_parameter.item() == 10.0
+
+
+def test_full_trajectory_training_batches_different_lengths() -> None:
+    trajectory = _synthetic_trajectory()
+    shorter = Trajectory(
+        case_id="shorter",
+        time=trajectory.time[:9],
+        temperature=trajectory.temperature[:9],
+        commands=trajectory.commands[:8],
+        sensor_names=trajectory.sensor_names,
+        control_names=trajectory.control_names,
+    )
+    model = ThermalRCModel(_source_system(0.12))
+    before = np.mean([trajectory_rmse(model, item) for item in (trajectory, shorter)])
+    fit_thermal_model(
+        model,
+        [trajectory, shorter],
+        config=TrainingConfig(
+            epochs=20,
+            batch_size=2,
+            horizon=None,
+            learning_rate=0.08,
+            validation_every=2,
+            patience=20,
+            seed=2,
+        ),
+    )
+    after = np.mean([trajectory_rmse(model, item) for item in (trajectory, shorter)])
+    assert after < before * 0.2
 
 
 def test_shooting_starts_preserve_the_requested_horizon() -> None:
@@ -89,6 +123,7 @@ def test_shooting_starts_preserve_the_requested_horizon() -> None:
     "options",
     [
         {"epochs": 0},
+        {"horizon": 0},
         {"learning_rate": 0.0},
         {"prior_weight": -1.0},
         {"gradient_clip": -1.0},

@@ -1,0 +1,49 @@
+seed: 42
+
+project:
+  run_name: nonlinear_high_fidelity_network
+  output_dir: work/high_fidelity_benchmark/runs
+  overwrite_run: true
+
+# These ten trajectories are the identification set defined by the nonlinear
+# problem. The local-mesh HV01/HV02 pair is never included here.
+data:
+  directory: data/nonlinear/train
+  pattern: "*.csv"
+  time_col: time
+  control_convention: left
+  sep: ","
+  dt: 10.0
+  temp_min: -50.0
+  temp_max: 200.0
+
+split:
+  method: random
+  group_by_controls: true
+  train_ratio: 0.75
+  val_ratio: 0.125
+
+system: system_nonlinear.yaml
+
+engine:
+  integrator: exact
+
+training:
+  epochs: 240
+  batch_size: 8
+  horizon: null
+  learning_rate: 0.02
+  huber_delta: 1.0
+  prior_weight: 0.0001
+  gradient_clip: 10.0
+  validation_every: 5
+  patience: 12
+
+# The benchmark runner executes this public forecast workflow once for each
+# member of the high-fidelity pair, changing only input_dir and output_dir.
+forecast:
+  input_dir: data/nonlinear_high_fidelity/dynamic/eval/forecast
+  pattern: "*.csv"
+  output_dir: work/high_fidelity_benchmark/forecast/conjugate
+  overwrite: true
+  device: cpu

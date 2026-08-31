@@ -1,0 +1,13 @@
+case_id,time,chip,sink_base,fins,chip_power,coolant_temperature,inlet_air_velocity,uncertainty_chip,uncertainty_sink_base,uncertainty_fins,run_id,sample_id
+HV02_composite_radiation,0,,,,0,25,0.1,,,,,
+HV02_composite_radiation,20,,,,0,25,0.1,,,,,
+HV02_composite_radiation,40,,,,0,25,0.1,,,,,
+HV02_composite_radiation,60,,,,4,25,0.1,,,,,
+HV02_composite_radiation,80,,,,8,25,0.1,,,,,
+HV02_composite_radiation,100,,,,12,25,0.1,,,,,
+HV02_composite_radiation,120,,,,12,25,0.08333333333,,,,,
+HV02_composite_radiation,140,,,,12,25,0.06666666667,,,,,
+HV02_composite_radiation,160,,,,12,28.33333333,0.05,,,,,
+HV02_composite_radiation,180,,,,12,31.66666667,0.05,,,,,
+HV02_composite_radiation,200,,,,12,35,0.05,,,,,
+HV02_composite_radiation,220,,,,12,35,0.05,,,,,

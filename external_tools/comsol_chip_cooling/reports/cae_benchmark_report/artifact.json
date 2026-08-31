@@ -1,0 +1,3671 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "CAEベンチマークケース技術レポート",
+    "description": "Electronic Chip Coolingを用いた全CAEケースの問題設定・評価対象・結果・解釈を監査可能に整理した技術レポート。",
+    "generatedAt": "2026-08-31T01:13:27+00:00",
+    "cards": [
+      {
+        "id": "case_count_card",
+        "description": "第三者が追跡できるreader-facing scenario ID数。monitor派生系列とmesh profile差を区別。",
+        "dataset": "headline_summary",
+        "sourceId": "headline_source",
+        "metrics": [
+          {
+            "label": "評価scenario ID",
+            "field": "case_ids",
+            "format": "number"
+          },
+          {
+            "label": "COMSOL solve",
+            "field": "underlying_comsol_solves",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "linear_rmse_card",
+        "description": "physics-matched線形外部forecast 8ケースの平均温度RMSE。",
+        "dataset": "linear_summary",
+        "sourceId": "linear_summary_source",
+        "metrics": [
+          {
+            "label": "線形外部平均RMSE [K]",
+            "field": "mean_rmse_k",
+            "format": "number"
+          },
+          {
+            "label": "screening上限 [K]",
+            "field": "mean_screening_limit_k",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "nonlinear_test_card",
+        "description": "非線形同定10ケースのうち、held-out cold/high-flowケースの内部test結果。",
+        "dataset": "nonlinear_summary",
+        "sourceId": "nonlinear_summary_source",
+        "metrics": [
+          {
+            "label": "非線形held-out RMSE [K]",
+            "field": "test_rmse_k",
+            "format": "number"
+          },
+          {
+            "label": "validation RMSE [K]",
+            "field": "validation_rmse_k",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "hf_rmse_card",
+        "description": "局所medium mesh上のHV01/HV02外部予測2ケース。",
+        "dataset": "high_fidelity_summary",
+        "sourceId": "hf_summary_source",
+        "metrics": [
+          {
+            "label": "高忠実度平均RMSE [K]",
+            "field": "mean_rmse_k",
+            "format": "number"
+          },
+          {
+            "label": "worst RMSE [K]",
+            "field": "worst_rmse_k",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "mesh_delta_card",
+        "description": "local-medium採用時に付与する保守的な隣接mesh温度差。",
+        "dataset": "mesh_summary",
+        "sourceId": "mesh_summary_source",
+        "metrics": [
+          {
+            "label": "最大隣接mesh差 [K]",
+            "field": "max_adjacent_mesh_delta_k",
+            "format": "number"
+          },
+          {
+            "label": "benchmark基準 [K]",
+            "field": "benchmark_limit_k",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "coverage_chart",
+        "title": "CAEケース構成",
+        "subtitle": "reader-facing scenario ID 60件。色は同定・外部予測・監視・モデル差・mesh収束の役割。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "stackedBar",
+        "dataset": "coverage",
+        "sourceId": "coverage_source",
+        "encodings": {
+          "x": {
+            "field": "layer",
+            "type": "ordinal",
+            "label": "評価層"
+          },
+          "y": {
+            "field": "cases",
+            "type": "quantitative",
+            "label": "ケース数",
+            "unit": "件"
+          },
+          "color": {
+            "field": "role",
+            "type": "nominal",
+            "label": "役割"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "ケース数",
+        "unit": "件"
+      },
+      {
+        "id": "linear_forecast_chart",
+        "title": "線形CAE外部forecastのケース別RMSE",
+        "subtitle": "8ケース、初期行を除く3領域平均温度。全ケースがworst screening基準0.75 Kを下回る。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "horizontalBar",
+        "dataset": "linear_forecast",
+        "sourceId": "linear_forecast_source",
+        "encodings": {
+          "x": {
+            "field": "case_id",
+            "type": "ordinal",
+            "label": "ケース"
+          },
+          "y": {
+            "field": "rmse_k",
+            "type": "quantitative",
+            "label": "RMSE",
+            "unit": "K"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "sequential"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "RMSE [K]",
+        "unit": "K",
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 0.75,
+            "label": "worst screening 0.75 K",
+            "color": "neutral",
+            "lineStyle": "dashed"
+          }
+        ]
+      },
+      {
+        "id": "linear_monitor_chart",
+        "title": "線形CAE監視ケースのalert率",
+        "subtitle": "M01/M02/M04は0%、sensor offset M03は27.3%、未指令発熱M05は4.3%。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "horizontalBar",
+        "dataset": "linear_monitor",
+        "sourceId": "linear_monitor_source",
+        "encodings": {
+          "x": {
+            "field": "case_id",
+            "type": "ordinal",
+            "label": "ケース"
+          },
+          "y": {
+            "field": "alert_rate_percent",
+            "type": "quantitative",
+            "label": "alert率",
+            "unit": "%"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "sequential"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "alert率 [%]",
+        "unit": "%"
+      },
+      {
+        "id": "nonlinear_envelope_chart",
+        "title": "非線形CAEの役割別最大chip温度",
+        "subtitle": "各役割内の最大truth hotspot。forecast群は最大143.2 °Cまで外挿端を含む。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "horizontalBar",
+        "dataset": "nonlinear_envelope",
+        "sourceId": "nonlinear_envelope_source",
+        "encodings": {
+          "x": {
+            "field": "role",
+            "type": "ordinal",
+            "label": "役割"
+          },
+          "y": {
+            "field": "max_chip_c",
+            "type": "quantitative",
+            "label": "最大chip温度",
+            "unit": "°C"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "sequential"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "最大chip温度 [°C]",
+        "unit": "°C"
+      },
+      {
+        "id": "radiation_pairs_chart",
+        "title": "中忠実度CAEの放射pair終端温度差",
+        "subtitle": "同一入力で放射あり−なしを比較したchip平均温度差の絶対値。mesh未収束のためscreening値。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "horizontalBar",
+        "dataset": "radiation_pairs",
+        "sourceId": "radiation_pairs_source",
+        "encodings": {
+          "x": {
+            "field": "pair",
+            "type": "ordinal",
+            "label": "radiation / base pair"
+          },
+          "y": {
+            "field": "abs_terminal_chip_delta_k",
+            "type": "quantitative",
+            "label": "|終端ΔTchip|",
+            "unit": "K"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "sequential"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "|終端ΔTchip| [K]",
+        "unit": "K"
+      },
+      {
+        "id": "mesh_convergence_chart",
+        "title": "mesh profile別の定常chip平均温度",
+        "subtitle": "global meshと3段階の局所meshを同一条件で比較。局所medium→fine差はMC01で0.496 K。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "bar",
+        "dataset": "mesh_convergence",
+        "sourceId": "mesh_convergence_source",
+        "encodings": {
+          "x": {
+            "field": "mesh_label",
+            "type": "ordinal",
+            "label": "mesh profile"
+          },
+          "y": {
+            "field": "chip_average_c",
+            "type": "quantitative",
+            "label": "chip平均温度",
+            "unit": "°C"
+          },
+          "color": {
+            "field": "case_label",
+            "type": "nominal",
+            "label": "定常ケース"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "chip平均温度 [°C]",
+        "unit": "°C"
+      },
+      {
+        "id": "hf_error_chart",
+        "title": "高忠実度過渡の誤差と隣接mesh差",
+        "subtitle": "各ケースのRMSE・最大絶対誤差と、約0.49 Kの保守的mesh差proxyを同じ温度単位で比較。",
+        "showDescription": true,
+        "intent": "comparison",
+        "type": "bar",
+        "dataset": "hf_error_comparison",
+        "sourceId": "hf_error_source",
+        "encodings": {
+          "x": {
+            "field": "case_label",
+            "type": "ordinal",
+            "label": "ケース"
+          },
+          "y": {
+            "field": "value_k",
+            "type": "quantitative",
+            "label": "温度差",
+            "unit": "K"
+          },
+          "color": {
+            "field": "metric",
+            "type": "nominal",
+            "label": "評価量"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "温度差 [K]",
+        "unit": "K"
+      },
+      {
+        "id": "hv01_trace_chart",
+        "title": "HV01 chip平均温度のCAE・予測軌跡",
+        "subtitle": "0–220 s、12点。発熱・流速・入口温度を順次励起した共役熱流動ケース。",
+        "showDescription": true,
+        "intent": "trend",
+        "type": "line",
+        "dataset": "hv01_trace",
+        "sourceId": "hf_predictions_source",
+        "encodings": {
+          "x": {
+            "field": "time",
+            "type": "quantitative",
+            "label": "時間",
+            "unit": "s"
+          },
+          "y": {
+            "fields": [
+              "truth_chip",
+              "predicted_chip"
+            ],
+            "type": "quantitative",
+            "label": "chip平均温度",
+            "unit": "°C"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "chip平均温度 [°C]",
+        "unit": "°C",
+        "combinationRationale": "同じ領域平均温度・同じ時刻・同じ単位のCAE truthとopen-loop予測を直接比較する。"
+      },
+      {
+        "id": "hv02_trace_chart",
+        "title": "HV02 chip平均温度のCAE・予測軌跡",
+        "subtitle": "0–220 s、12点。HV01と同じ入力に表面間放射だけを追加。",
+        "showDescription": true,
+        "intent": "trend",
+        "type": "line",
+        "dataset": "hv02_trace",
+        "sourceId": "hf_predictions_source",
+        "encodings": {
+          "x": {
+            "field": "time",
+            "type": "quantitative",
+            "label": "時間",
+            "unit": "s"
+          },
+          "y": {
+            "fields": [
+              "truth_chip",
+              "predicted_chip"
+            ],
+            "type": "quantitative",
+            "label": "chip平均温度",
+            "unit": "°C"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "chip平均温度 [°C]",
+        "unit": "°C",
+        "combinationRationale": "同じ領域平均温度・同じ時刻・同じ単位のCAE truthとopen-loop予測を直接比較する。"
+      },
+      {
+        "id": "hf_radiation_trace_chart",
+        "title": "高忠実度pairのchip放射差",
+        "subtitle": "HV02−HV01。truthは終端−0.381 K、予測pair差は−0.0012 Kで、放射方向のみ一致。",
+        "showDescription": true,
+        "intent": "trend",
+        "type": "line",
+        "dataset": "hf_radiation_trace",
+        "sourceId": "hf_radiation_trace_source",
+        "encodings": {
+          "x": {
+            "field": "time",
+            "type": "quantitative",
+            "label": "時間",
+            "unit": "s"
+          },
+          "y": {
+            "fields": [
+              "truth_delta_chip_k",
+              "predicted_delta_chip_k"
+            ],
+            "type": "quantitative",
+            "label": "HV02−HV01 chip温度差",
+            "unit": "K"
+          }
+        },
+        "layout": "full",
+        "valueFormat": "number",
+        "palette": {
+          "kind": "categorical"
+        },
+        "surface": {
+          "surface": "card",
+          "viewMode": "both"
+        },
+        "yAxisTitle": "HV02−HV01 ΔTchip [K]",
+        "unit": "K",
+        "combinationRationale": "同一入力pairについて、CAEが示す放射差と現在の汎用モデルが生成するpair差を同じ単位で比較する。"
+      }
+    ],
+    "tables": [
+      {
+        "id": "linear_catalog_table",
+        "title": "線形CAE 全29ケース",
+        "subtitle": "問題設定、評価対象、最新の同定・予測・監視結果をcase ID単位で対応付け。",
+        "showDescription": true,
+        "dataset": "linear_catalog",
+        "sourceId": "linear_catalog_source",
+        "density": "compact",
+        "layout": "full",
+        "defaultSort": {
+          "field": "case_id",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "case_id",
+            "label": "Case ID",
+            "type": "text"
+          },
+          {
+            "field": "role",
+            "label": "役割",
+            "type": "text"
+          },
+          {
+            "field": "problem",
+            "label": "問題設定",
+            "type": "text"
+          },
+          {
+            "field": "evaluation_target",
+            "label": "評価対象",
+            "type": "text"
+          },
+          {
+            "field": "result",
+            "label": "結果・判定",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "nonlinear_catalog_table",
+        "title": "非線形CAE 全27ケース",
+        "subtitle": "forecast/monitorはデータ生成状態とモデル評価状態を分離して明記。",
+        "showDescription": true,
+        "dataset": "nonlinear_catalog",
+        "sourceId": "nonlinear_catalog_source",
+        "density": "compact",
+        "layout": "full",
+        "defaultSort": {
+          "field": "case_id",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "case_id",
+            "label": "Case ID",
+            "type": "text"
+          },
+          {
+            "field": "role",
+            "label": "役割",
+            "type": "text"
+          },
+          {
+            "field": "problem",
+            "label": "問題設定",
+            "type": "text"
+          },
+          {
+            "field": "evaluation_target",
+            "label": "評価対象",
+            "type": "text"
+          },
+          {
+            "field": "result",
+            "label": "結果・判定",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "mesh_catalog_table",
+        "title": "局所mesh収束 2 operating points",
+        "subtitle": "local-medium→fineの差とstrict/benchmark両基準の判定。",
+        "showDescription": true,
+        "dataset": "mesh_catalog",
+        "sourceId": "mesh_catalog_source",
+        "density": "compact",
+        "layout": "full",
+        "defaultSort": {
+          "field": "case_id",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "case_id",
+            "label": "Case ID",
+            "type": "text"
+          },
+          {
+            "field": "role",
+            "label": "役割",
+            "type": "text"
+          },
+          {
+            "field": "problem",
+            "label": "問題設定",
+            "type": "text"
+          },
+          {
+            "field": "evaluation_target",
+            "label": "評価対象",
+            "type": "text"
+          },
+          {
+            "field": "result",
+            "label": "結果・判定",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "hf_catalog_table",
+        "title": "高忠実度過渡 2ケース",
+        "subtitle": "同一入力pairに対する外部予測誤差とmesh proxy内率。",
+        "showDescription": true,
+        "dataset": "hf_catalog",
+        "sourceId": "hf_catalog_source",
+        "density": "compact",
+        "layout": "full",
+        "defaultSort": {
+          "field": "case_id",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "case_id",
+            "label": "Case ID",
+            "type": "text"
+          },
+          {
+            "field": "role",
+            "label": "役割",
+            "type": "text"
+          },
+          {
+            "field": "problem",
+            "label": "問題設定",
+            "type": "text"
+          },
+          {
+            "field": "evaluation_target",
+            "label": "評価対象",
+            "type": "text"
+          },
+          {
+            "field": "result",
+            "label": "結果・判定",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "metric_definition_table",
+        "title": "評価指標の定義",
+        "subtitle": "温度平均、hotspot、監視、mesh差、放射pairを同じ『誤差』として混同しないための定義。",
+        "showDescription": true,
+        "dataset": "metric_definitions",
+        "sourceId": "metric_definition_source",
+        "density": "compact",
+        "layout": "full",
+        "defaultSort": {
+          "field": "metric",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "metric",
+            "label": "指標",
+            "type": "text"
+          },
+          {
+            "field": "definition",
+            "label": "計算・母集団",
+            "type": "text"
+          },
+          {
+            "field": "interpretation",
+            "label": "解釈境界",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "case_inventory",
+        "label": "CAE case inventory",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Reader-facing case IDs grouped by benchmark layer and role.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [
+            "case_ids = published/evaluation scenario IDs: linear 29 + nonlinear 27 + mesh operating points 2 + high-fidelity transient 2",
+            "underlying_comsol_solves = linear physical solves 26 + nonlinear 27 + mesh variants 8 + high-fidelity transient 2"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "coverage_source",
+        "label": "CAE case coverage",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Count of reader-facing case IDs by benchmark layer and role.",
+          "sql": "SELECT layer, role, COUNT(*) AS cases FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv', header = true) GROUP BY layer, role ORDER BY layer, role",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "linear_catalog_source",
+        "label": "Linear CAE case catalog",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "All 29 published linear identification, forecast, and monitoring scenarios.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "linear_forecast_source",
+        "label": "Linear external forecast metrics",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Case-level open-loop forecast metrics generated by evaluate.py.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv"
+          ],
+          "filters": [
+            "初期行を評価から除外",
+            "3領域平均温度を集約",
+            "外部forecast 8ケース"
+          ],
+          "metric_definitions": [
+            "rmse_k = sqrt(mean((prediction - CAE truth)^2)) over forecast times and 3 sensors",
+            "rmse_improvement_percent = 100 * (prior_rmse_k - rmse_k) / prior_rmse_k"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "linear_monitor_source",
+        "label": "Linear causal-monitor metrics",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Case-level observer, alert, bias, disturbance, and missing-data metrics.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv"
+          ],
+          "filters": [
+            "NIS confidence 0.9999",
+            "fins sensor fixed as the reference bias gauge"
+          ],
+          "metric_definitions": [
+            "alert_rate_percent = 100 * alert_timepoints / evaluable timepoints",
+            "detection_delay_s = first detection time - injected event start time"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "nonlinear_catalog_source",
+        "label": "Nonlinear CAE case catalog",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "All 27 conjugate-flow, monitoring, and radiation-pair scenarios.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "nonlinear_envelope_source",
+        "label": "Nonlinear CAE operating envelope",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Worst chip temperature and physical diagnostic ranges summarized by role.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [
+            "max_chip_c = maximum truth chip maximum temperature across cases in each role"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "nonlinear_model_source",
+        "label": "Nonlinear identification split metrics",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Current generic scalar-law model metrics on the 10 nonlinear identification trajectories.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv"
+          ],
+          "filters": [
+            "8 train, 1 validation, 1 held-out internal test case"
+          ],
+          "metric_definitions": [
+            "rmse = all observed timepoints and 3 region-average sensors for each case"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "radiation_pairs_source",
+        "label": "Medium-fidelity radiation pairs",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Radiation-minus-no-radiation differences for five identical-input CAE pairs.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [
+            "abs_terminal_chip_delta_k = absolute terminal chip-average temperature pair difference"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "mesh_catalog_source",
+        "label": "Mesh qualification case catalog",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "The two steady operating points used for local-mesh qualification.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "mesh_convergence_source",
+        "label": "Mesh convergence results",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Steady chip-average temperatures across global and three local mesh profiles.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv"
+          ],
+          "filters": [
+            "MC01 nominal and MC02 hot/low-flow + radiation",
+            "steady-state solutions"
+          ],
+          "metric_definitions": [
+            "benchmark qualification uses 0.50 K region-average temperature tolerance"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_catalog_source",
+        "label": "High-fidelity transient case catalog",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "The two information-dense local-medium transient evaluation cases.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_metrics_source",
+        "label": "High-fidelity benchmark case metrics",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "External forecast error, prior comparison, and mesh-difference ratios for HV01/HV02.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv"
+          ],
+          "filters": [
+            "initial row excluded",
+            "11 forecast times × 3 region-average sensors per case"
+          ],
+          "metric_definitions": [
+            "rms_error_over_mesh_difference = RMSE divided by the conservative adjacent-mesh temperature difference",
+            "fraction_abs_error_within_mesh_difference = fraction of scalar errors below the sensor-specific mesh proxy"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_error_source",
+        "label": "High-fidelity error and mesh comparison",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Tidy comparison of RMSE, maximum error, and conservative adjacent-mesh difference.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_predictions_source",
+        "label": "High-fidelity temperature trajectories",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "CAE truth and generic-model chip temperature trajectories for HV01 and HV02.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv"
+          ],
+          "filters": [
+            "12 time rows per case",
+            "same left zero-order-hold input convention"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_radiation_trace_source",
+        "label": "High-fidelity radiation pair trajectory",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Truth and predicted HV02-minus-HV01 chip-average temperature differences.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [
+            "truth_delta_chip_k = truth_chip(HV02 radiation) - truth_chip(HV01 conjugate)",
+            "predicted_delta_chip_k = predicted_chip(HV02 radiation) - predicted_chip(HV01 conjugate)"
+          ],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "metric_definition_source",
+        "label": "Benchmark metric definitions",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Reader-facing definitions and interpretation boundaries for all reported metrics.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "headline_source",
+        "label": "Report headline case counts",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Headline inventory of reader-facing case IDs and underlying COMSOL solve executions.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "linear_summary_source",
+        "label": "Linear forecast summary",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Mean and worst external linear forecast RMSE with the screening limit.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "nonlinear_summary_source",
+        "label": "Nonlinear held-out summary",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Validation and held-out internal-test RMSE for the nonlinear identification set.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "hf_summary_source",
+        "label": "High-fidelity forecast summary",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Mean/worst HV RMSE and fraction of errors within the mesh proxy.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "mesh_summary_source",
+        "label": "Mesh uncertainty summary",
+        "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv",
+        "query": {
+          "engine": "DuckDB",
+          "language": "sql",
+          "description": "Largest local-medium to local-fine region-average temperature difference.",
+          "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv', header = true)",
+          "tables_used": [
+            "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv"
+          ],
+          "filters": [
+            "レポート生成時点で確認済みの全行"
+          ],
+          "metric_definitions": [],
+          "executed_at": "2026-08-31T01:13:27+00:00"
+        }
+      },
+      {
+        "id": "linear_problem_doc",
+        "label": "Linear Electronic Chip Cooling problem definition",
+        "path": "external_tools/comsol_chip_cooling/docs/problem_definition.md"
+      },
+      {
+        "id": "nonlinear_problem_doc",
+        "label": "Nonlinear Electronic Chip Cooling problem definition",
+        "path": "external_tools/comsol_chip_cooling/docs/nonlinear_problem_definition.md"
+      },
+      {
+        "id": "hf_validation_doc",
+        "label": "Local-mesh and same-boundary validation definition",
+        "path": "external_tools/comsol_chip_cooling/docs/high_fidelity_validation.md"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# CAEベンチマークケース技術レポート"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "body": "## 技術サマリー\n\n**現状のCAE群は、汎用熱RC基盤の機能検証には有用ですが、半導体製造装置の設計妥当化を完了したものではありません。** 線形physics-matched層は8外部予測で平均RMSE **0.036 K**、worst **0.083 K**、監視を含む10/10 screening checkを満たしました。これは同定・可変dt・open-loop・observer workflowが正しくつながることを強く支持します。\n\n**非線形層は広い運転域と省略物理を露出しますが、評価の完成度は不均一です。** 10同定ケースのheld-out内部testは **0.405 K RMSE**です。一方、NF01–NF09の独立open-loop集計とNM01–NM03の監視器集計は現行成果物に無く、CAEデータ生成完了をモデル性能合格とは扱えません。\n\n**局所mesh上のHV01/HV02は平均RMSE 0.096 K、worst 0.144 Kで、全誤差が保守的隣接mesh差内でした。** ただし最大隣接mesh差は **0.496 K**、strict収束・時間刻み収束・実験妥当化は未完です。したがって「モデル誤差が小さい」ことは示せても、「CAE数値不確かさを超えてモデル構造が正しい」とはまだ判定できません。\n\n**放射の固有効果を現在の汎用モデルは再現していませんが、この一例だけで本体へ放射専用物理を追加すべきではありません。** HV pairのtruth終端差はchipで −0.381 K、予測pair差は −0.0012 Kですが、truth差自体が0.496 K mesh proxy未満です。次の優先事項は、装置固有実験を同じ評価境界へ投入し、複数装置ケースで再現する誤差構造だけを汎用lawとして採用することです。"
+      },
+      {
+        "id": "headline_metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "case_count_card",
+          "linear_rmse_card",
+          "nonlinear_test_card",
+          "hf_rmse_card",
+          "mesh_delta_card"
+        ]
+      },
+      {
+        "id": "problem_boundary",
+        "type": "markdown",
+        "body": "## 問題設定と評価境界\n\n出発点はCOMSOL 6.4 Application Libraryの **Electronic Chip Cooling** です。観測はmesh番号に依存するpoint probeではなく、`chip`、`sink_base`、`fins`の体積平均温度に統一しています。`truth_chip_max`はhotspot診断であり、RC node温度と同一視しません。\n\n```text\nchip_power → [silicon chip] → [50 µm grease/contact] → [Al sink base] → [4 fins]\n                 chip              sink_base              fins\n                                      ↓                      ↓\n線形層:                          h=10 W/(m²K), coolant_temperature\n非線形層:                temperature-dependent air + laminar conjugate flow\n                         controls = power, inlet temperature, inlet velocity\n高忠実度層:              fin流路・境界層・chip/contactを局所mesh化\n```\n\nすべての時系列入力はrow `k`を区間 `[t[k], t[k+1])`へ適用するleft zero-order holdです。forecast/model-gap CSVは初期観測だけを公開し、全時刻の`truth_*`は評価専用なので、CAE truthを予測入力へ漏洩させません。"
+      },
+      {
+        "id": "coverage_reading",
+        "type": "markdown",
+        "body": "### ケース構成の読み方\n\nケースは一つの巨大な合否表ではなく、**線形workflow確認 → 非線形adequacy screening → mesh資格確認 → 高忠実度外部予測**の順に役割を分けています。60 scenario IDは、線形monitor 5系列が2本のCAE truthから派生する一方、mesh 2条件を4 profileずつ解くため、基礎となるCOMSOL solveは63件です。"
+      },
+      {
+        "id": "coverage_chart_block",
+        "type": "chart",
+        "chartId": "coverage_chart",
+        "layout": "full"
+      },
+      {
+        "id": "linear_results",
+        "type": "markdown",
+        "sourceId": "linear_problem_doc",
+        "body": "## 線形CAEはworkflowの整合性を高精度で確認した\n\n線形層は流体・放射を解かず、`storage + conduction/contact + constant convection`を3-node RCと対応させたphysics-matched問題です。16同定ケースがpower/coolantのstep・ramp・multilevel・combined・warm-startを分離し、8外部予測が内挿、外挿、short pulse、未知recipe、hot-start、可変dtを確認します。monitor 5系列はnoise、drift、offset、欠測、実在する未指令発熱を分けます。\n\nこの層の小さな誤差は、本体のデータ契約・積分・同定・observerが一貫して働く証拠です。一方、COMSOL側のphysicsを本体構造へ合わせた試験なので、共役流・放射・装置実測へそのまま外挿する根拠にはしません。"
+      },
+      {
+        "id": "linear_forecast_reading",
+        "type": "markdown",
+        "body": "### 外部予測ではshort pulseが最も難しい\n\n8ケース平均RMSEは0.036 Kで、全ケースがworst screening基準0.75 Kを十分下回りました。最大はF05 short pulsesの0.083 K、次点はF06 unseen recipeの0.059 Kです。空間hotspot underpredictionは最大0.328 Kなので、平均温度の高精度とhotspot保証は分けて扱う必要があります。"
+      },
+      {
+        "id": "linear_forecast_chart_block",
+        "type": "chart",
+        "chartId": "linear_forecast_chart",
+        "layout": "full"
+      },
+      {
+        "id": "linear_monitor_reading",
+        "type": "markdown",
+        "body": "### 正常・drift・欠測ではfalse alertを抑え、注入事象を検出した\n\nM01 noise、M02 drift、M04 missingではalert率0%でした。M03の+3 K sensor offsetは事象開始時に検出し、M05の3 W未指令発熱は10秒で検出、peak外乱推定3.182 Wでした。M02/M03の絶対bias推定は`fins`を校正済みreferenceとして0へ固定した条件に依存します。"
+      },
+      {
+        "id": "linear_monitor_chart_block",
+        "type": "chart",
+        "chartId": "linear_monitor_chart",
+        "layout": "full"
+      },
+      {
+        "id": "linear_catalog_block",
+        "type": "table",
+        "tableId": "linear_catalog_table",
+        "layout": "full"
+      },
+      {
+        "id": "nonlinear_results",
+        "type": "markdown",
+        "sourceId": "nonlinear_problem_doc",
+        "body": "## 非線形CAEは運転域と省略物理を露出したが、全workflow評価は未完\n\n非線形層は3D laminar conjugate heat transfer、温度依存air、3入力（power・入口温度・入口流速）を解き、必要なpairだけ表面間放射を追加します。通常ケースは900秒・10秒刻み、NF08だけ600秒・1秒刻みです。入力域は0–16 W、10–40 °C、0.05–0.30 m/sで、外部forecastには143.2 °Cのhot-start端まで含みます。\n\n10同定ケースでは8 train / 1 validation / 1 held-out testを実行し、testのNT09 cold/high-flowは0.405 K RMSEでした。しかしNF forecast 9件とNM monitor 3件について、最新成果物にはモデル側の集計結果がありません。したがってこの表では、**CAE truth生成**と**モデル性能評価**を明示的に分離しています。"
+      },
+      {
+        "id": "nonlinear_envelope_reading",
+        "type": "markdown",
+        "body": "### forecast群は学習域より厳しい温度端を意図的に含む\n\n役割別の最大hotspotは同定87.8 °Cに対しforecast 143.2 °Cです。これはF03/F04/F09が高発熱・高入口温度・低流量・hot-startを組み合わせ、モデルの安定性と誤差増幅を露出するためです。設計上限を意味する値ではなく、Application Library形状上のstress testです。"
+      },
+      {
+        "id": "nonlinear_envelope_chart_block",
+        "type": "chart",
+        "chartId": "nonlinear_envelope_chart",
+        "layout": "full"
+      },
+      {
+        "id": "radiation_pair_reading",
+        "type": "markdown",
+        "body": "### 中忠実度pairでは高温・低流量ほど放射省略差が拡大した\n\n5 pairの終端chip差は4.05–15.15 Kで、最大は非一様hot-startのNR05です。ただしこの27ケース群のglobal level-8 meshは収束しておらず、hot-start pairはphysicsごとに作った初期定常場の差も含みます。ここから読めるのは放射影響の方向・運転依存性であり、絶対温度差の設計確定値ではありません。"
+      },
+      {
+        "id": "radiation_pairs_chart_block",
+        "type": "chart",
+        "chartId": "radiation_pairs_chart",
+        "layout": "full"
+      },
+      {
+        "id": "nonlinear_catalog_block",
+        "type": "table",
+        "tableId": "nonlinear_catalog_table",
+        "layout": "full"
+      },
+      {
+        "id": "mesh_results",
+        "type": "markdown",
+        "sourceId": "hf_validation_doc",
+        "body": "## 局所meshは用途限定基準を満たしたがstrict収束していない\n\nfin間流路、heat-sink wall、channel wall、chip/contact、固体を個別に細分化し、2定常点をglobal-8、local-coarse、local-medium、local-fineで独立に解きました。global-8→local-coarseではMC01 chip平均が15.913 K変わり、元のglobal meshを絶対温度設計値に使えないことが明確です。\n\nlocal-medium→fine差はMC01でchip平均0.496 K、MC02で0.154 Kでした。両点とも用途限定0.50 K benchmark基準は満たしますが、MC01はstrict 0.25 K基準を満たしません。そのためlocal-mediumはモデル比較用に限定し、0.496 Kを保守的mesh proxyとして付与します。"
+      },
+      {
+        "id": "mesh_chart_reading",
+        "type": "markdown",
+        "body": "### 局所化による絶対温度の変化は、単なる全体細分化では無視できない\n\nMC01では局所mesh化でchip平均温度が約94 °Cから約111 °Cへ移動し、その後の隣接差は縮小しました。MC02は局所coarse以降の変化が小さい一方、2条件で収束速度が異なるため、単一nominal点だけでmeshを採用してはいけません。"
+      },
+      {
+        "id": "mesh_convergence_chart_block",
+        "type": "chart",
+        "chartId": "mesh_convergence_chart",
+        "layout": "full"
+      },
+      {
+        "id": "mesh_catalog_block",
+        "type": "table",
+        "tableId": "mesh_catalog_table",
+        "layout": "full"
+      },
+      {
+        "id": "hf_results",
+        "type": "markdown",
+        "body": "## 高忠実度過渡はpriorを大幅改善したが、model adequacyはmesh差を超えて未解決\n\nHV01/HV02は0–220秒・20秒刻みの同一3入力pairです。40–100秒で0→12 W、100–160秒で0.10→0.05 m/s、140–200秒で25→35 °Cを励起します。HV01は共役熱流動、HV02は表面間放射だけを追加します。\n\nHV01 RMSEは0.048 K（prior 0.977 Kから95.1%改善）、HV02は0.144 K（prior 0.801 Kから82.1%改善）でした。最大誤差0.344 Kを含む全33 scalar error/caseがsensor別mesh proxy内です。これは運転域内の予測が数値不確かさより小さいことを示しますが、逆にmodel-form差をmesh差より細かく識別できていません。"
+      },
+      {
+        "id": "hf_error_reading",
+        "type": "markdown",
+        "body": "### 外部予測誤差は保守的mesh差より小さい\n\nRMSEと最大絶対誤差を約0.49 Kの隣接mesh proxyと同じ軸で比較すると、HV02のworst errorでもproxyの約70%です。統計的な信頼区間ではないため「95%保証」には使えませんが、現段階ではモデル調整よりCAE不確かさ低減が先です。"
+      },
+      {
+        "id": "hf_error_chart_block",
+        "type": "chart",
+        "chartId": "hf_error_chart",
+        "layout": "full"
+      },
+      {
+        "id": "hv01_reading",
+        "type": "markdown",
+        "body": "### HV01は複合入力の温度軌跡を追従した\n\n共役熱流動だけのHV01では、発熱ramp後から高温・低流量端までtruthと予測がほぼ重なり、最大ずれは0.112 Kでした。22分未満の短い過渡であるため、さらに遅い装置熱容量の妥当性はこのケースからは分かりません。"
+      },
+      {
+        "id": "hv01_trace_chart_block",
+        "type": "chart",
+        "chartId": "hv01_trace_chart",
+        "layout": "full"
+      },
+      {
+        "id": "hv02_reading",
+        "type": "markdown",
+        "body": "### HV02は放射を含むtruthにも低RMSEだが、後半に系統差が増える\n\nHV02ではairflow励起以降に差が拡大し、160–220秒のcoupled hot/low-flow phase RMSEが0.253 K、最大誤差0.344 Kでした。全体RMSEだけを見ると見落とすため、phase別に誤差増幅を監視する必要があります。"
+      },
+      {
+        "id": "hv02_trace_chart_block",
+        "type": "chart",
+        "chartId": "hv02_trace_chart",
+        "layout": "full"
+      },
+      {
+        "id": "hf_pair_reading",
+        "type": "markdown",
+        "body": "### 現在の汎用モデルは放射pair差の方向だけを再現した\n\nCAEのHV02−HV01 chip差は終端−0.381 Kですが、モデルpair差は−0.0012 Kで振幅の約0.32%です。モデルが放射専用状態を持たないため自然な結果です。ただしtruth差は保守的mesh proxy 0.496 Kより小さく、paired transient mesh refinementも未実施です。この一例だけを根拠に本体へ放射専用物理を足すと、Electronic Chip Cooling固有の実装になり得ます。"
+      },
+      {
+        "id": "hf_radiation_trace_chart_block",
+        "type": "chart",
+        "chartId": "hf_radiation_trace_chart",
+        "layout": "full"
+      },
+      {
+        "id": "hf_catalog_block",
+        "type": "table",
+        "tableId": "hf_catalog_table",
+        "layout": "full"
+      },
+      {
+        "id": "metrics_method",
+        "type": "markdown",
+        "body": "## 指標と評価方法\n\n**同定**はcase単位splitを用い、同じtrajectoryの時間行をtrain/testへ分割しません。**forecast**は初期観測から先をopen-loopで進め、初期行を誤差集計から除外します。**monitor**はCAE truthへ決定論的noise・fault・missingを付与し、NIS、検出遅延、bias、unknown heat、欠測時posteriorを別々に評価します。\n\n**mesh比較**は同じ定常問題の隣接profile差で、統計的uncertaintyではありません。**radiation pair**は時刻・公開入力を一致させた差分で物理追加効果を分離します。**実験比較**はtemplateとvalidation codeだけが存在し、測定温度が空なので評価件数0です。"
+      },
+      {
+        "id": "metric_definition_block",
+        "type": "table",
+        "tableId": "metric_definition_table",
+        "layout": "full"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## 限界・不確かさ・頑健性\n\n- **半導体製造装置の代表性:** Electronic Chip Coolingはchip–grease–sink–airの単一形状です。wafer/chuck、複数heater、真空、冷却channel、接触・組付けばらつき、装置筐体の長時間熱容量を代表しません。\n- **観測境界:** 3領域の体積平均であり、単一点thermocoupleや安全上のhotspotとは異なります。最大hotspot underpredictionを別指標として残しています。\n- **数値収束:** local-mediumはbenchmark-only qualifiedです。strict mesh収束、過渡時間刻み収束、solver tolerance感度は未完です。\n- **外部評価の欠落:** NF01–NF09のcurrent-model open-loop集計、NM01–NM03のobserver集計、実験同一境界比較が未実施です。\n- **放射の識別性:** medium-fidelityの大きなpair差はmesh未収束、high-fidelityの小さなpair差はmesh proxy未満です。両者は同じ確度の数値ではありません。\n- **因果主張:** 予測誤差とNIS検出は記述・予測的評価です。実装変更が実機温度を改善するという因果効果は示しません。"
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## 推奨する次の評価\n\n1. **既存の汎用モデルを変えず、NF01–NF09とNM01–NM03を一括評価する。** 内挿、外挿、fast mode、未指令発熱、冷却低下を同じcase-level表へ集計し、どの誤差が複数ケースで再現するか確認します。\n2. **HV pairの数値識別力を上げる。** paired transientをlocal-fineまたはQoI適応meshで再計算し、時間刻み系列も追加して、放射差と数値差を分離します。\n3. **実験templateへ実測値と標準不確かさを投入する。** CAEと同じ`case_id, time, sensor, controls`を維持し、補間せず、領域平均近似の空間集約誤差を含めます。\n4. **半導体製造装置を代表する複数外部ケースへ拡張する。** heater plate/wafer stage、liquid-cooled chuck、真空＋放射、接触抵抗変動、複数sensor・複数heaterを別々のbenchmark layerとして追加します。\n5. **共通して残る誤差だけを本体の汎用lawへ昇格する。** 単一COMSOLケース固有の放射、流路、geometryをcoreへ埋め込まず、input-dependent edge/source/boundary lawで表せる再現性の高い依存性だけを採用します。"
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## 追加で答えるべき問い\n\n- 実務上の一次判定量は領域平均温度、hotspot、温度均一性、整定時間のどれか。\n- 対象装置で公開可能なcontrol、実測sensor、校正reference、不確かさは何か。\n- 予測・監視に必要な時間範囲は秒、分、時間のどこまでか。\n- CAE差・実験差・model差のどれを、どの許容値で受入れるか。\n- 複数装置で共通する非線形性は流速依存conductance、温度依存source、接触依存edgeのどれか。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-31T01:13:27+00:00",
+    "status": "ready",
+    "datasets": {
+      "headline_summary": [
+        {
+          "case_ids": 60,
+          "underlying_comsol_solves": 63
+        }
+      ],
+      "linear_summary": [
+        {
+          "mean_rmse_k": 0.036291143012624996,
+          "worst_rmse_k": 0.0829768118,
+          "worst_case": "F05_short_pulses",
+          "mean_screening_limit_k": 0.25
+        }
+      ],
+      "nonlinear_summary": [
+        {
+          "test_rmse_k": 0.4047951117287358,
+          "validation_rmse_k": 0.3126877359777144
+        }
+      ],
+      "high_fidelity_summary": [
+        {
+          "mean_rmse_k": 0.09561470295,
+          "worst_rmse_k": 0.1435971416,
+          "all_points_within_mesh_proxy": 1.0
+        }
+      ],
+      "mesh_summary": [
+        {
+          "max_adjacent_mesh_delta_k": 0.4962085957,
+          "benchmark_limit_k": 0.5
+        }
+      ],
+      "coverage": [
+        {
+          "layer": "線形CAE",
+          "role": "同定",
+          "cases": 16
+        },
+        {
+          "layer": "線形CAE",
+          "role": "外部予測",
+          "cases": 8
+        },
+        {
+          "layer": "線形CAE",
+          "role": "監視",
+          "cases": 5
+        },
+        {
+          "layer": "非線形CAE",
+          "role": "同定",
+          "cases": 10
+        },
+        {
+          "layer": "非線形CAE",
+          "role": "外部予測",
+          "cases": 9
+        },
+        {
+          "layer": "非線形CAE",
+          "role": "監視",
+          "cases": 3
+        },
+        {
+          "layer": "非線形CAE",
+          "role": "モデル差",
+          "cases": 5
+        },
+        {
+          "layer": "局所メッシュ",
+          "role": "メッシュ収束",
+          "cases": 2
+        },
+        {
+          "layer": "高忠実度過渡",
+          "role": "外部予測",
+          "cases": 1
+        },
+        {
+          "layer": "高忠実度過渡",
+          "role": "モデル差",
+          "cases": 1
+        }
+      ],
+      "linear_forecast": [
+        {
+          "case_id": "F01_power_interpolation",
+          "case_group": "interpolation",
+          "n_rows": 301,
+          "rmse_k": 0.006417588681,
+          "mae_k": 0.003665434666,
+          "max_abs_error_k": 0.07146954547,
+          "prior_rmse_k": 5.738137855,
+          "rmse_improvement_percent": 99.88815904,
+          "chip_peak_error_k": 0.00232947171,
+          "max_spatial_hotspot_gap_k": 0.10398537,
+          "max_hotspot_underprediction_k": 0.1016558983
+        },
+        {
+          "case_id": "F02_joint_interpolation",
+          "case_group": "interpolation",
+          "n_rows": 301,
+          "rmse_k": 0.02471965212,
+          "mae_k": 0.01750257488,
+          "max_abs_error_k": 0.09270729297,
+          "prior_rmse_k": 7.181495799,
+          "rmse_improvement_percent": 99.65578686,
+          "chip_peak_error_k": -0.02182949758,
+          "max_spatial_hotspot_gap_k": 0.12893651,
+          "max_hotspot_underprediction_k": 0.188343113
+        },
+        {
+          "case_id": "F03_power_extrapolation",
+          "case_group": "extrapolation",
+          "n_rows": 301,
+          "rmse_k": 0.01430185263,
+          "mae_k": 0.007960870926,
+          "max_abs_error_k": 0.1633589611,
+          "prior_rmse_k": 13.52710685,
+          "rmse_improvement_percent": 99.89427264,
+          "chip_peak_error_k": 0.004085014003,
+          "max_spatial_hotspot_gap_k": 0.23802152,
+          "max_hotspot_underprediction_k": 0.233936506
+        },
+        {
+          "case_id": "F04_coolant_extrapolation",
+          "case_group": "extrapolation",
+          "n_rows": 301,
+          "rmse_k": 0.02068696922,
+          "mae_k": 0.01698478802,
+          "max_abs_error_k": 0.09188941561,
+          "prior_rmse_k": 11.25512925,
+          "rmse_improvement_percent": 99.81619963,
+          "chip_peak_error_k": -0.01562514389,
+          "max_spatial_hotspot_gap_k": 0.13867992,
+          "max_hotspot_underprediction_k": 0.1611693671
+        },
+        {
+          "case_id": "F05_short_pulses",
+          "case_group": "dynamics",
+          "n_rows": 301,
+          "rmse_k": 0.0829768118,
+          "mae_k": 0.07113682276,
+          "max_abs_error_k": 0.2555981646,
+          "prior_rmse_k": 1.807756493,
+          "rmse_improvement_percent": 95.40995637,
+          "chip_peak_error_k": 0.05911468884,
+          "max_spatial_hotspot_gap_k": 0.1545202,
+          "max_hotspot_underprediction_k": 0.3279624446
+        },
+        {
+          "case_id": "F06_unseen_recipe",
+          "case_group": "dynamics",
+          "n_rows": 301,
+          "rmse_k": 0.05899627776,
+          "mae_k": 0.04921246112,
+          "max_abs_error_k": 0.1926454899,
+          "prior_rmse_k": 6.893264683,
+          "rmse_improvement_percent": 99.14414605,
+          "chip_peak_error_k": 0.03720938848,
+          "max_spatial_hotspot_gap_k": 0.16982053,
+          "max_hotspot_underprediction_k": 0.2705920481
+        },
+        {
+          "case_id": "F07_hot_initial_state",
+          "case_group": "initialization",
+          "n_rows": 301,
+          "rmse_k": 0.03858765155,
+          "mae_k": 0.0273398272,
+          "max_abs_error_k": 0.1418864842,
+          "prior_rmse_k": 7.262963641,
+          "rmse_improvement_percent": 99.46870653,
+          "chip_peak_error_k": -4.405364962e-13,
+          "max_spatial_hotspot_gap_k": 0.08882034,
+          "max_hotspot_underprediction_k": 0.05040885643
+        },
+        {
+          "case_id": "F08_variable_sampling",
+          "case_group": "sampling",
+          "n_rows": 361,
+          "rmse_k": 0.04364234034,
+          "mae_k": 0.03655964341,
+          "max_abs_error_k": 0.09896207605,
+          "prior_rmse_k": 5.228461062,
+          "rmse_improvement_percent": 99.16529281,
+          "chip_peak_error_k": 0.06216951241,
+          "max_spatial_hotspot_gap_k": 0.14658871,
+          "max_hotspot_underprediction_k": 0.07836785725
+        }
+      ],
+      "linear_monitor": [
+        {
+          "case_id": "M01_noise_baseline",
+          "bias_gauge": "reference:fins",
+          "n_rows": 301,
+          "missing_measurements": 0,
+          "measurement_rmse_k": 0.1544631704,
+          "prior_physical_rmse_k": 0.04227559822,
+          "posterior_physical_rmse_k": 0.04044793671,
+          "reconstruction_rmse_k": 0.1472974005,
+          "sensor_bias_rmse_k": 0.02736861954,
+          "max_final_sensor_bias_error_k": 0.02166166301,
+          "missing_posterior_rmse_k": null,
+          "final_chip_disturbance_w": 0.06525855413,
+          "peak_event_chip_disturbance_w": null,
+          "max_event_abs_sensor_bias_k": null,
+          "max_nis": 15.13546793,
+          "mean_nis_per_dof": 1.040911273,
+          "alert_timepoints": 0,
+          "alert_rate": 0,
+          "all_posterior_finite": true,
+          "detected": null,
+          "detection_delay_s": null,
+          "false_alerts_before_event": null,
+          "alert_rate_percent": 0.0
+        },
+        {
+          "case_id": "M02_sensor_drift",
+          "bias_gauge": "reference:fins",
+          "n_rows": 301,
+          "missing_measurements": 0,
+          "measurement_rmse_k": 0.5923558015,
+          "prior_physical_rmse_k": 0.1267625367,
+          "posterior_physical_rmse_k": 0.1235921819,
+          "reconstruction_rmse_k": 0.1661578728,
+          "sensor_bias_rmse_k": 0.1532473663,
+          "max_final_sensor_bias_error_k": 0.02677545486,
+          "missing_posterior_rmse_k": null,
+          "final_chip_disturbance_w": -0.08712735806,
+          "peak_event_chip_disturbance_w": null,
+          "max_event_abs_sensor_bias_k": null,
+          "max_nis": 14.52583807,
+          "mean_nis_per_dof": 1.309832265,
+          "alert_timepoints": 0,
+          "alert_rate": 0,
+          "all_posterior_finite": true,
+          "detected": null,
+          "detection_delay_s": null,
+          "false_alerts_before_event": null,
+          "alert_rate_percent": 0.0
+        },
+        {
+          "case_id": "M03_sensor_offset",
+          "bias_gauge": "reference:fins",
+          "n_rows": 301,
+          "missing_measurements": 0,
+          "measurement_rmse_k": 1.238078137,
+          "prior_physical_rmse_k": 0.158449752,
+          "posterior_physical_rmse_k": 0.1552357691,
+          "reconstruction_rmse_k": 0.6790834462,
+          "sensor_bias_rmse_k": 0.7138021385,
+          "max_final_sensor_bias_error_k": 0.111293916,
+          "missing_posterior_rmse_k": null,
+          "final_chip_disturbance_w": -0.06860886665,
+          "peak_event_chip_disturbance_w": null,
+          "max_event_abs_sensor_bias_k": null,
+          "max_nis": 403.309294,
+          "mean_nis_per_dof": 18.38759152,
+          "alert_timepoints": 82,
+          "alert_rate": 0.2733333333,
+          "all_posterior_finite": true,
+          "detected": true,
+          "detection_delay_s": 0,
+          "false_alerts_before_event": 0,
+          "alert_rate_percent": 27.33333333
+        },
+        {
+          "case_id": "M04_missing_measurements",
+          "bias_gauge": "reference:fins",
+          "n_rows": 301,
+          "missing_measurements": 132,
+          "measurement_rmse_k": 0.1534709215,
+          "prior_physical_rmse_k": 0.04120595084,
+          "posterior_physical_rmse_k": 0.03848473906,
+          "reconstruction_rmse_k": 0.1453651001,
+          "sensor_bias_rmse_k": 0.02444840884,
+          "max_final_sensor_bias_error_k": 0.07446682028,
+          "missing_posterior_rmse_k": 0.04030462277,
+          "final_chip_disturbance_w": 0.03394231404,
+          "peak_event_chip_disturbance_w": null,
+          "max_event_abs_sensor_bias_k": null,
+          "max_nis": 15.20863685,
+          "mean_nis_per_dof": 0.9984457508,
+          "alert_timepoints": 0,
+          "alert_rate": 0,
+          "all_posterior_finite": true,
+          "detected": null,
+          "detection_delay_s": null,
+          "false_alerts_before_event": null,
+          "alert_rate_percent": 0.0
+        },
+        {
+          "case_id": "M05_uncommanded_heat",
+          "bias_gauge": "reference:fins",
+          "n_rows": 301,
+          "missing_measurements": 0,
+          "measurement_rmse_k": 0.1509989808,
+          "prior_physical_rmse_k": 0.1653667021,
+          "posterior_physical_rmse_k": 0.1483010964,
+          "reconstruction_rmse_k": 0.1952565981,
+          "sensor_bias_rmse_k": 0.02678087075,
+          "max_final_sensor_bias_error_k": 0.009610203595,
+          "missing_posterior_rmse_k": null,
+          "final_chip_disturbance_w": -0.09382615139,
+          "peak_event_chip_disturbance_w": 3.182419724,
+          "max_event_abs_sensor_bias_k": 0.06088649325,
+          "max_nis": 45.83423115,
+          "mean_nis_per_dof": 1.859032321,
+          "alert_timepoints": 13,
+          "alert_rate": 0.04333333333,
+          "all_posterior_finite": true,
+          "detected": true,
+          "detection_delay_s": 10,
+          "false_alerts_before_event": 0,
+          "alert_rate_percent": 4.333333333000001
+        }
+      ],
+      "linear_catalog": [
+        {
+          "layer": "線形CAE",
+          "case_id": "T01_power_step_4w",
+          "role": "同定",
+          "problem": "P 0–4 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "入熱利得、chip熱容量、内部時定数のレベル一貫性",
+          "result": "学習 RMSE 0.005 K; CAE Tmax 40.4 °C",
+          "source_path": "data/train/T01_power_step_4w.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T02_power_step_6w",
+          "role": "同定",
+          "problem": "P 0–6 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "入熱利得、chip熱容量、内部時定数のレベル一貫性",
+          "result": "検証 RMSE 0.008 K; CAE Tmax 48.1 °C",
+          "source_path": "data/train/T02_power_step_6w.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T03_power_step_8w",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "入熱利得、chip熱容量、内部時定数のレベル一貫性",
+          "result": "学習 RMSE 0.007 K; CAE Tmax 55.8 °C",
+          "source_path": "data/train/T03_power_step_8w.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T04_power_step_10w",
+          "role": "同定",
+          "problem": "P 0–10 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "入熱利得、chip熱容量、内部時定数のレベル一貫性",
+          "result": "学習 RMSE 0.009 K; CAE Tmax 63.5 °C",
+          "source_path": "data/train/T04_power_step_10w.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T05_power_step_12w",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "入熱利得、chip熱容量、内部時定数のレベル一貫性",
+          "result": "学習 RMSE 0.011 K; CAE Tmax 71.2 °C",
+          "source_path": "data/train/T05_power_step_12w.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T06_coolant_step_20c",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 20–25 °C; 720 s, Δt 2 s",
+          "evaluation_target": "発熱経路と独立した境界温度・対流経路の分離",
+          "result": "学習 RMSE 0.009 K; CAE Tmax 56.5 °C",
+          "source_path": "data/train/T06_coolant_step_20c.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T07_coolant_step_15c",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 15–25 °C; 720 s, Δt 2 s",
+          "evaluation_target": "発熱経路と独立した境界温度・対流経路の分離",
+          "result": "学習 RMSE 0.014 K; CAE Tmax 53.4 °C",
+          "source_path": "data/train/T07_coolant_step_15c.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T08_coolant_step_30c",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 25–30 °C; 720 s, Δt 2 s",
+          "evaluation_target": "発熱経路と独立した境界温度・対流経路の分離",
+          "result": "学習 RMSE 0.009 K; CAE Tmax 62.7 °C",
+          "source_path": "data/train/T08_coolant_step_30c.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T09_coolant_step_35c",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 25–35 °C; 720 s, Δt 2 s",
+          "evaluation_target": "発熱経路と独立した境界温度・対流経路の分離",
+          "result": "内部テスト RMSE 0.014 K; CAE Tmax 65.8 °C",
+          "source_path": "data/train/T09_coolant_step_35c.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T10_power_ramp",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "step波形だけに依存しない連続入力追従",
+          "result": "学習 RMSE 0.055 K; CAE Tmax 48.5 °C",
+          "source_path": "data/train/T10_power_ramp.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T11_coolant_ramp",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 17–33 °C; 600 s, Δt 2 s",
+          "evaluation_target": "step波形だけに依存しない連続入力追従",
+          "result": "学習 RMSE 0.011 K; CAE Tmax 57.2 °C",
+          "source_path": "data/train/T11_coolant_ramp.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T12_power_multilevel",
+          "role": "同定",
+          "problem": "P 0–11 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "複数運転レベル・複数時間スケールでの係数一貫性",
+          "result": "学習 RMSE 0.044 K; CAE Tmax 53.1 °C",
+          "source_path": "data/train/T12_power_multilevel.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T13_coolant_multilevel",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 18–32 °C; 600 s, Δt 2 s",
+          "evaluation_target": "複数運転レベル・複数時間スケールでの係数一貫性",
+          "result": "学習 RMSE 0.014 K; CAE Tmax 56.4 °C",
+          "source_path": "data/train/T13_coolant_multilevel.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T14_combined_recipe",
+          "role": "同定",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "発熱と境界温度の重ね合わせ、および係数分離",
+          "result": "内部テスト RMSE 0.040 K; CAE Tmax 54.5 °C",
+          "source_path": "data/train/T14_combined_recipe.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T15_combined_ramps",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 19–31 °C; 600 s, Δt 2 s",
+          "evaluation_target": "発熱と境界温度の重ね合わせ、および係数分離",
+          "result": "検証 RMSE 0.053 K; CAE Tmax 53.8 °C",
+          "source_path": "data/train/T15_combined_ramps.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "T16_warm_start",
+          "role": "同定",
+          "problem": "P 0–7 W; Tin 30 °C; Tchip,0 40 °C; 600 s, Δt 2 s",
+          "evaluation_target": "単一初期温度への依存回避と初期状態からの回復",
+          "result": "学習 RMSE 0.045 K; CAE Tmax 52.1 °C",
+          "source_path": "data/train/T16_warm_start.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F01_power_interpolation",
+          "role": "外部予測",
+          "problem": "P 0–7 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "未学習7 Wでの発熱内挿",
+          "result": "外部RMSE 0.006 K; 最大誤差 0.071 K; prior比 99.9%改善",
+          "source_path": "data/eval/forecast/F01_power_interpolation.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F02_joint_interpolation",
+          "role": "外部予測",
+          "problem": "P 0–9 W; Tin 22.5–27.5 °C; 600 s, Δt 2 s",
+          "evaluation_target": "発熱・境界温度の同時内挿と重ね合わせ",
+          "result": "外部RMSE 0.025 K; 最大誤差 0.093 K; prior比 99.7%改善",
+          "source_path": "data/eval/forecast/F02_joint_interpolation.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F03_power_extrapolation",
+          "role": "外部予測",
+          "problem": "P 0–16 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "学習上限12 Wを超える16 W hot-side外挿",
+          "result": "外部RMSE 0.014 K; 最大誤差 0.163 K; prior比 99.9%改善",
+          "source_path": "data/eval/forecast/F03_power_extrapolation.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F04_coolant_extrapolation",
+          "role": "外部予測",
+          "problem": "P 0–9 W; Tin 10–25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "学習下限15 °Cを下回る10 °C cold-side外挿",
+          "result": "外部RMSE 0.021 K; 最大誤差 0.092 K; prior比 99.8%改善",
+          "source_path": "data/eval/forecast/F04_coolant_extrapolation.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F05_short_pulses",
+          "role": "外部予測",
+          "problem": "P 0–12 W; Tin 25 °C; 600 s, Δt 2 s",
+          "evaluation_target": "反復短パルスで3-node縮約が落とす高速モード",
+          "result": "外部RMSE 0.083 K; 最大誤差 0.256 K; prior比 95.4%改善",
+          "source_path": "data/eval/forecast/F05_short_pulses.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F06_unseen_recipe",
+          "role": "外部予測",
+          "problem": "P 0–12 W; Tin 18–31 °C; 600 s, Δt 2 s",
+          "evaluation_target": "未知の入力順序・重なりに対するrecipe汎化",
+          "result": "外部RMSE 0.059 K; 最大誤差 0.193 K; prior比 99.1%改善",
+          "source_path": "data/eval/forecast/F06_unseen_recipe.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F07_hot_initial_state",
+          "role": "外部予測",
+          "problem": "P 0–6 W; Tin 25 °C; Tchip,0 50 °C; 600 s, Δt 2 s",
+          "evaluation_target": "未学習50 °C一様初期状態からの冷却・再加熱",
+          "result": "外部RMSE 0.039 K; 最大誤差 0.142 K; prior比 99.5%改善",
+          "source_path": "data/eval/forecast/F07_hot_initial_state.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "F08_variable_sampling",
+          "role": "外部予測",
+          "problem": "P 0–11 W; Tin 20–30 °C; 600 s, Δt 1/2/3 s",
+          "evaluation_target": "1/2/3秒の非均一時刻を直接積分できるか",
+          "result": "外部RMSE 0.044 K; 最大誤差 0.099 K; prior比 99.2%改善",
+          "source_path": "data/eval/forecast/F08_variable_sampling.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "M01_noise_baseline",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "0.15 K測定noise下の正常innovationとfalse alert",
+          "result": "alert率 0.0%; posterior物理RMSE 0.040 K",
+          "source_path": "data/eval/monitor/M01_noise_baseline.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "M02_sensor_drift",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "slow sensor driftと物理温度の分離",
+          "result": "alert率 0.0%; 最終bias誤差 0.027 K",
+          "source_path": "data/eval/monitor/M02_sensor_drift.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "M03_sensor_offset",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "+3 K chip sensor stepの検出とbias帰属",
+          "result": "検出遅延 0 s; alert率 27.3%; 最終bias誤差 0.111 K",
+          "source_path": "data/eval/monitor/M03_sensor_offset.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "M04_missing_measurements",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "base/fins欠測窓でも状態推定を継続できるか",
+          "result": "欠測 132点; 欠測窓RMSE 0.040 K; 推定finite",
+          "source_path": "data/eval/monitor/M04_missing_measurements.csv"
+        },
+        {
+          "layer": "線形CAE",
+          "case_id": "M05_uncommanded_heat",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–29 °C; 600 s, Δt 2 s",
+          "evaluation_target": "commandにない3 W chip発熱の検出と熱外乱帰属",
+          "result": "検出遅延 10 s; peak外乱 3.182 W; alert率 4.3%",
+          "source_path": "data/eval/monitor/M05_uncommanded_heat.csv"
+        }
+      ],
+      "nonlinear_catalog": [
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT01_power_levels",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "発熱レベル依存の熱抵抗・時定数を同定",
+          "result": "学習 RMSE 0.237 K; Tchip,max 71.8 °C; dp,max 0.0167 Pa",
+          "source_path": "data/nonlinear/train/NT01_power_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT02_power_reverse",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "高温後の冷却と再加熱の非対称性を分離",
+          "result": "検証 RMSE 0.313 K; Tchip,max 63.9 °C; dp,max 0.0164 Pa",
+          "source_path": "data/nonlinear/train/NT02_power_reverse.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT03_inlet_temperature_levels",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 15–35 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "入口温度レベルに対する空気側応答を同定",
+          "result": "学習 RMSE 0.237 K; Tchip,max 66.1 °C; dp,max 0.0164 Pa",
+          "source_path": "data/nonlinear/train/NT03_inlet_temperature_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT04_air_velocity_levels",
+          "role": "同定",
+          "problem": "P 0–8 W; Tin 25 °C; v 0.05–0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "入口流速で変化する冷却conductanceを同定",
+          "result": "学習 RMSE 0.126 K; Tchip,max 63.3 °C; dp,max 0.0428 Pa",
+          "source_path": "data/nonlinear/train/NT04_air_velocity_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT05_power_ramp",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "step形状に依存しない連続非線形応答を同定",
+          "result": "学習 RMSE 0.216 K; Tchip,max 59.1 °C; dp,max 0.0163 Pa",
+          "source_path": "data/nonlinear/train/NT05_power_ramp.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT06_combined_levels",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 18–32 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "3入力の非同期変化から効果を分離",
+          "result": "学習 RMSE 0.301 K; Tchip,max 60.6 °C; dp,max 0.0424 Pa",
+          "source_path": "data/nonlinear/train/NT06_combined_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT07_combined_ramps",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 18–32 °C; v 0.06–0.18 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "運転域内部を連続3入力で被覆",
+          "result": "学習 RMSE 0.090 K; Tchip,max 61.0 °C; dp,max 0.0351 Pa",
+          "source_path": "data/nonlinear/train/NT07_combined_ramps.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT08_hot_low_flow",
+          "role": "同定",
+          "problem": "P 0–10 W; Tin 35 °C; v 0.05 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "高温・低流量の学習端を被覆",
+          "result": "学習 RMSE 0.150 K; Tchip,max 83.0 °C; dp,max 0.0070 Pa",
+          "source_path": "data/nonlinear/train/NT08_hot_low_flow.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT09_cold_high_flow",
+          "role": "同定",
+          "problem": "P 0–12 W; Tin 15 °C; v 0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "低温・高流量の学習端を被覆しheld-out評価",
+          "result": "内部テスト RMSE 0.405 K; Tchip,max 50.1 °C; dp,max 0.0427 Pa",
+          "source_path": "data/nonlinear/train/NT09_cold_high_flow.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NT10_stationary_hot_start",
+          "role": "同定",
+          "problem": "P 2–10 W; Tin 20–30 °C; v 0.1–0.2 m/s; Tchip,0 87.68 °C; 900 s, Δt 10 s",
+          "evaluation_target": "非一様な発熱定常場からの初期化を評価",
+          "result": "学習 RMSE 0.360 K; Tchip,max 87.8 °C; dp,max 0.0430 Pa",
+          "source_path": "data/nonlinear/train/NT10_stationary_hot_start.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF01_fixed_flow_interpolation",
+          "role": "外部予測",
+          "problem": "P 0–9 W; Tin 22.5–25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "固定流速で発熱・入口温度を内挿",
+          "result": "CAE truth生成済み; Tchip,max 61.9 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF01_fixed_flow_interpolation.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF02_unseen_three_input_recipe",
+          "role": "外部予測",
+          "problem": "P 0–11 W; Tin 17–31 °C; v 0.075–0.15 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "未知の3入力順序・重なりへのrecipe汎化",
+          "result": "CAE truth生成済み; Tchip,max 59.2 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF02_unseen_three_input_recipe.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF03_power_extrapolation",
+          "role": "外部予測",
+          "problem": "P 0–16 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "学習上限12 Wを超える16 W外挿",
+          "result": "CAE truth生成済み; Tchip,max 102.2 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF03_power_extrapolation.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF04_hot_low_flow_corner",
+          "role": "外部予測",
+          "problem": "P 0–12 W; Tin 40 °C; v 0.05 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "40 °C・0.05 m/s・12 Wの複合外挿",
+          "result": "CAE truth生成済み; Tchip,max 114.6 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF04_hot_low_flow_corner.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF05_cold_inlet_extrapolation",
+          "role": "外部予測",
+          "problem": "P 0–9 W; Tin 10–25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "学習下限を下回る入口10 °C外挿",
+          "result": "CAE truth生成済み; Tchip,max 57.3 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF05_cold_inlet_extrapolation.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF06_air_velocity_interpolation",
+          "role": "外部予測",
+          "problem": "P 0–9 W; Tin 25 °C; v 0.075–0.15 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "未学習0.075/0.15 m/sの流速内挿",
+          "result": "CAE truth生成済み; Tchip,max 63.8 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF06_air_velocity_interpolation.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF07_air_velocity_extrapolation",
+          "role": "外部予測",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1–0.3 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "0.30 m/sへの流速外挿",
+          "result": "CAE truth生成済み; Tchip,max 54.8 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF07_air_velocity_extrapolation.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF08_short_power_pulses",
+          "role": "外部予測",
+          "problem": "P 0–15 W; Tin 25 °C; v 0.1 m/s; 600 s, Δt 1 s",
+          "evaluation_target": "20秒・15 W反復pulseで欠落fast modeを露出",
+          "result": "CAE truth生成済み; Tchip,max 34.5 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF08_short_power_pulses.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NF09_stationary_hot_start",
+          "role": "外部予測",
+          "problem": "P 3–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; Tchip,0 142.99 °C; 900 s, Δt 10 s",
+          "evaluation_target": "未学習の非一様12 W定常場から予測",
+          "result": "CAE truth生成済み; Tchip,max 143.2 °C; 現行成果物では独立open-loop誤差を未集計",
+          "source_path": "data/nonlinear/eval/forecast/NF09_stationary_hot_start.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NM01_nominal_nonlinear",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–30 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "非線形通常運転でのfalse alertを評価",
+          "result": "CAE/0.15 K noise生成済み; 正常noise系列; 監視器の検出結果は未集計",
+          "source_path": "data/nonlinear/eval/monitor/NM01_nominal_nonlinear.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NM02_uncommanded_heat",
+          "role": "監視",
+          "problem": "P 0–11 W; Tin 20–30 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "420–520秒の未指令3 W発熱を検出",
+          "result": "CAE/0.15 K noise生成済み; 未指令3 W発熱を注入; 監視器の検出結果は未集計",
+          "source_path": "data/nonlinear/eval/monitor/NM02_uncommanded_heat.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NM03_uncommanded_cooling_loss",
+          "role": "監視",
+          "problem": "P 0–8 W; Tin 25 °C; v 0.1–0.15 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "commandにない一時流量低下を検出",
+          "result": "CAE/0.15 K noise生成済み; 未指令流量低下を注入; 監視器の検出結果は未集計",
+          "source_path": "data/nonlinear/eval/monitor/NM03_uncommanded_cooling_loss.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NR01_power_levels",
+          "role": "モデル差",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "発熱レベルごとの放射省略差を同一入力pairで測定",
+          "result": "base比 terminal ΔTchip -5.02 K; max|Qrad| 1.879 W",
+          "source_path": "data/nonlinear/eval/model_gap/NR01_power_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NR02_power_ramp",
+          "role": "モデル差",
+          "problem": "P 0–12 W; Tin 25 °C; v 0.1 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "連続温度sweep中の放射省略差を測定",
+          "result": "base比 terminal ΔTchip -4.65 K; max|Qrad| 1.319 W",
+          "source_path": "data/nonlinear/eval/model_gap/NR02_power_ramp.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NR03_combined_levels",
+          "role": "モデル差",
+          "problem": "P 0–12 W; Tin 18–32 °C; v 0.075–0.2 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "3入力運転中の放射省略差を測定",
+          "result": "base比 terminal ΔTchip -4.05 K; max|Qrad| 1.309 W",
+          "source_path": "data/nonlinear/eval/model_gap/NR03_combined_levels.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NR04_hot_low_flow_corner",
+          "role": "モデル差",
+          "problem": "P 0–12 W; Tin 40 °C; v 0.05 m/s; 900 s, Δt 10 s",
+          "evaluation_target": "弱対流・高温端での放射省略差を測定",
+          "result": "base比 terminal ΔTchip -12.45 K; max|Qrad| 3.062 W",
+          "source_path": "data/nonlinear/eval/model_gap/NR04_hot_low_flow_corner.csv"
+        },
+        {
+          "layer": "非線形CAE",
+          "case_id": "NR05_stationary_hot_start",
+          "role": "モデル差",
+          "problem": "P 3–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; Tchip,0 110.27 °C; 900 s, Δt 10 s",
+          "evaluation_target": "非一様hot-start冷却中の放射省略差を測定",
+          "result": "base比 terminal ΔTchip -15.15 K; max|Qrad| 4.436 W",
+          "source_path": "data/nonlinear/eval/model_gap/NR05_stationary_hot_start.csv"
+        }
+      ],
+      "nonlinear_envelope": [
+        {
+          "role": "同定",
+          "cases": 10,
+          "max_chip_c": 87.84431266421291,
+          "max_chip_case": "NT10_stationary_hot_start",
+          "max_pressure_drop_pa": 0.04299401804371002,
+          "max_energy_residual_w": 0.0536031641874235
+        },
+        {
+          "role": "外部予測",
+          "cases": 9,
+          "max_chip_c": 143.20215967324606,
+          "max_chip_case": "NF09_stationary_hot_start",
+          "max_pressure_drop_pa": 0.0762736516692668,
+          "max_energy_residual_w": 0.10957081523887247
+        },
+        {
+          "role": "監視",
+          "cases": 3,
+          "max_chip_c": 60.42364598203869,
+          "max_chip_case": "NM03_uncommanded_cooling_loss",
+          "max_pressure_drop_pa": 0.04255294159086729,
+          "max_energy_residual_w": 0.05602916493214316
+        },
+        {
+          "role": "モデル差",
+          "cases": 5,
+          "max_chip_c": 110.45880804239624,
+          "max_chip_case": "NR05_stationary_hot_start",
+          "max_pressure_drop_pa": 0.03967804117629107,
+          "max_energy_residual_w": 0.04034198289898949
+        }
+      ],
+      "radiation_pairs": [
+        {
+          "radiation_case_id": "NR01_power_levels",
+          "base_case_id": "NT01_power_levels",
+          "rows": 91,
+          "chip_delta_final_c": -5.0164994,
+          "chip_delta_min_c": -5.0164994,
+          "chip_delta_max_c": 0.04760838,
+          "chip_peak_delta_final_c": -5.0128925,
+          "radiative_heat_rate_max_abs_w": 1.879230114,
+          "radiative_heat_rate_final_w": -1.879230114,
+          "pair": "NR01_power_levels / NT01_power_levels",
+          "abs_terminal_chip_delta_k": 5.0164994
+        },
+        {
+          "radiation_case_id": "NR02_power_ramp",
+          "base_case_id": "NT05_power_ramp",
+          "rows": 91,
+          "chip_delta_final_c": -4.6488025,
+          "chip_delta_min_c": -4.6488025,
+          "chip_delta_max_c": -0.01510035,
+          "chip_peak_delta_final_c": -4.65449656,
+          "radiative_heat_rate_max_abs_w": 1.319474416,
+          "radiative_heat_rate_final_w": -1.109640029,
+          "pair": "NR02_power_ramp / NT05_power_ramp",
+          "abs_terminal_chip_delta_k": 4.6488025
+        },
+        {
+          "radiation_case_id": "NR03_combined_levels",
+          "base_case_id": "NT06_combined_levels",
+          "rows": 91,
+          "chip_delta_final_c": -4.04969427,
+          "chip_delta_min_c": -4.04969427,
+          "chip_delta_max_c": -0.01510035,
+          "chip_peak_delta_final_c": -4.05298185,
+          "radiative_heat_rate_max_abs_w": 1.308541118,
+          "radiative_heat_rate_final_w": -0.9242592853,
+          "pair": "NR03_combined_levels / NT06_combined_levels",
+          "abs_terminal_chip_delta_k": 4.04969427
+        },
+        {
+          "radiation_case_id": "NR04_hot_low_flow_corner",
+          "base_case_id": "NF04_hot_low_flow_corner",
+          "rows": 91,
+          "chip_delta_final_c": -12.4525303,
+          "chip_delta_min_c": -12.4525303,
+          "chip_delta_max_c": -0.030459,
+          "chip_peak_delta_final_c": -12.4520923,
+          "radiative_heat_rate_max_abs_w": 3.062464701,
+          "radiative_heat_rate_final_w": -3.062464701,
+          "pair": "NR04_hot_low_flow_corner / NF04_hot_low_flow_corner",
+          "abs_terminal_chip_delta_k": 12.4525303
+        },
+        {
+          "radiation_case_id": "NR05_stationary_hot_start",
+          "base_case_id": "NF09_stationary_hot_start",
+          "rows": 91,
+          "chip_delta_final_c": -15.14810202,
+          "chip_delta_min_c": -32.7157373,
+          "chip_delta_max_c": -15.14810202,
+          "chip_peak_delta_final_c": -15.17310702,
+          "radiative_heat_rate_max_abs_w": 4.436084473,
+          "radiative_heat_rate_final_w": -1.966056524,
+          "pair": "NR05_stationary_hot_start / NF09_stationary_hot_start",
+          "abs_terminal_chip_delta_k": 15.14810202
+        }
+      ],
+      "mesh_catalog": [
+        {
+          "layer": "局所メッシュ",
+          "case_id": "MC01_nominal",
+          "role": "メッシュ収束",
+          "problem": "12 W; Tin 25 °C; v 0.10 m/s; 放射なし; 4 mesh profile",
+          "evaluation_target": "定格熱抵抗、fin間流路、圧力損失の離散化感度",
+          "result": "medium→fine ΔTchip,avg 0.496 K; Δdp 0.62%; strict 未達 / benchmark 合格",
+          "source_path": "data/nonlinear_high_fidelity/mesh_convergence_deltas.csv"
+        },
+        {
+          "layer": "局所メッシュ",
+          "case_id": "MC02_hot_low_flow_radiation",
+          "role": "メッシュ収束",
+          "problem": "12 W; Tin 40 °C; v 0.05 m/s; 放射あり; 4 mesh profile",
+          "evaluation_target": "高温・低流量・弱対流・放射条件での離散化感度",
+          "result": "medium→fine ΔTchip,avg 0.154 K; Δdp 0.90%; strict 合格 / benchmark 合格",
+          "source_path": "data/nonlinear_high_fidelity/mesh_convergence_deltas.csv"
+        }
+      ],
+      "mesh_convergence": [
+        {
+          "case_id": "MC01_nominal",
+          "mesh_profile": "global-8",
+          "chip_average_c": 93.75274709,
+          "chip_max_c": 93.95569748,
+          "sink_base_average_c": 93.43878376,
+          "fins_average_c": 92.13618223,
+          "fins_max_c": 93.64599698,
+          "outlet_air_average_c": 44.83376694,
+          "pressure_drop_pa": 0.01763328742,
+          "radiative_heat_rate_w": 0,
+          "energy_residual_w": -0.003756988719,
+          "solver_seconds": 30,
+          "mesh_label": "global-8",
+          "case_label": "MC01 nominal",
+          "profile_order": 1
+        },
+        {
+          "case_id": "MC02_hot_low_flow_radiation",
+          "mesh_profile": "global-8",
+          "chip_average_c": 114.9099643,
+          "chip_max_c": 115.091931,
+          "sink_base_average_c": 114.5891631,
+          "fins_average_c": 113.3061915,
+          "fins_max_c": 114.7990968,
+          "outlet_air_average_c": 74.65431206,
+          "pressure_drop_pa": 0.007750093281,
+          "radiative_heat_rate_w": -3.921360786,
+          "energy_residual_w": 0.002689144072,
+          "solver_seconds": 62,
+          "mesh_label": "global-8",
+          "case_label": "MC02 hot/low-flow + radiation",
+          "profile_order": 1
+        },
+        {
+          "case_id": "MC01_nominal",
+          "mesh_profile": "local-coarse",
+          "chip_average_c": 109.6655566,
+          "chip_max_c": 109.8574555,
+          "sink_base_average_c": 109.3172419,
+          "fins_average_c": 107.9901739,
+          "fins_max_c": 109.4790143,
+          "outlet_air_average_c": 44.98117589,
+          "pressure_drop_pa": 0.01395926038,
+          "radiative_heat_rate_w": 0,
+          "energy_residual_w": -0.005985416888,
+          "solver_seconds": 223,
+          "mesh_label": "local coarse",
+          "case_label": "MC01 nominal",
+          "profile_order": 2
+        },
+        {
+          "case_id": "MC02_hot_low_flow_radiation",
+          "mesh_profile": "local-coarse",
+          "chip_average_c": 118.8015763,
+          "chip_max_c": 118.9937049,
+          "sink_base_average_c": 118.4438478,
+          "fins_average_c": 117.1171321,
+          "fins_max_c": 118.6232698,
+          "outlet_air_average_c": 74.57127984,
+          "pressure_drop_pa": 0.007087749297,
+          "radiative_heat_rate_w": -4.151761224,
+          "energy_residual_w": -0.0006253198054,
+          "solver_seconds": 537,
+          "mesh_label": "local coarse",
+          "case_label": "MC02 hot/low-flow + radiation",
+          "profile_order": 2
+        },
+        {
+          "case_id": "MC01_nominal",
+          "mesh_profile": "local-medium",
+          "chip_average_c": 110.6998053,
+          "chip_max_c": 110.8918638,
+          "sink_base_average_c": 110.3503254,
+          "fins_average_c": 109.0185372,
+          "fins_max_c": 110.5141457,
+          "outlet_air_average_c": 44.99934916,
+          "pressure_drop_pa": 0.0136055292,
+          "radiative_heat_rate_w": 0,
+          "energy_residual_w": -0.00704453902,
+          "solver_seconds": 492,
+          "mesh_label": "local medium",
+          "case_label": "MC01 nominal",
+          "profile_order": 3
+        },
+        {
+          "case_id": "MC02_hot_low_flow_radiation",
+          "mesh_profile": "local-medium",
+          "chip_average_c": 119.0468022,
+          "chip_max_c": 119.2382872,
+          "sink_base_average_c": 118.6881637,
+          "fins_average_c": 117.356091,
+          "fins_max_c": 118.8687987,
+          "outlet_air_average_c": 74.49066833,
+          "pressure_drop_pa": 0.006982897286,
+          "radiative_heat_rate_w": -4.142586455,
+          "energy_residual_w": -0.0007591853846,
+          "solver_seconds": 1380,
+          "mesh_label": "local medium",
+          "case_label": "MC02 hot/low-flow + radiation",
+          "profile_order": 3
+        },
+        {
+          "case_id": "MC01_nominal",
+          "mesh_profile": "local-fine",
+          "chip_average_c": 111.1960139,
+          "chip_max_c": 111.3882798,
+          "sink_base_average_c": 110.8457267,
+          "fins_average_c": 109.5107774,
+          "fins_max_c": 111.0115284,
+          "outlet_air_average_c": 44.95050425,
+          "pressure_drop_pa": 0.01352119191,
+          "radiative_heat_rate_w": 0,
+          "energy_residual_w": -0.008165609065,
+          "solver_seconds": 1169,
+          "mesh_label": "local fine",
+          "case_label": "MC01 nominal",
+          "profile_order": 4
+        },
+        {
+          "case_id": "MC02_hot_low_flow_radiation",
+          "mesh_profile": "local-fine",
+          "chip_average_c": 119.2012297,
+          "chip_max_c": 119.392321,
+          "sink_base_average_c": 118.8419384,
+          "fins_average_c": 117.5051909,
+          "fins_max_c": 119.0218078,
+          "outlet_air_average_c": 74.45678065,
+          "pressure_drop_pa": 0.00692028151,
+          "radiative_heat_rate_w": -4.137196228,
+          "energy_residual_w": -0.0007074890744,
+          "solver_seconds": 3950,
+          "mesh_label": "local fine",
+          "case_label": "MC02 hot/low-flow + radiation",
+          "profile_order": 4
+        }
+      ],
+      "hf_catalog": [
+        {
+          "layer": "高忠実度過渡",
+          "case_id": "HV01_composite_conjugate",
+          "role": "外部予測",
+          "problem": "P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",
+          "evaluation_target": "局所mesh上で発熱→流速低下→入口昇温の複合非線形予測",
+          "result": "RMSE 0.048 K; 最大誤差 0.112 K; mesh差内 100%",
+          "source_path": "data/nonlinear_high_fidelity/dynamic/eval/forecast/HV01_composite_conjugate.csv"
+        },
+        {
+          "layer": "高忠実度過渡",
+          "case_id": "HV02_composite_radiation",
+          "role": "モデル差",
+          "problem": "P 0–12 W; Tin 25–35 °C; v 0.05–0.1 m/s; 220 s, Δt 20 s",
+          "evaluation_target": "HV01と同一入力で放射だけを追加しmodel-form差を分離",
+          "result": "RMSE 0.144 K; 最大誤差 0.344 K; mesh差内 100%",
+          "source_path": "data/nonlinear_high_fidelity/dynamic/eval/model_gap/HV02_composite_radiation.csv"
+        }
+      ],
+      "hf_error_comparison": [
+        {
+          "case_id": "HV01_composite_conjugate",
+          "case_label": "HV01 共役熱流動",
+          "metric": "RMSE",
+          "value_k": 0.0476322643,
+          "prior_rmse_k": 0.9769315839,
+          "rmse_improvement_percent": 95.12429887
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "case_label": "HV01 共役熱流動",
+          "metric": "最大絶対誤差",
+          "value_k": 0.1120949259,
+          "prior_rmse_k": 0.9769315839,
+          "rmse_improvement_percent": 95.12429887
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "case_label": "HV01 共役熱流動",
+          "metric": "保守的隣接mesh差",
+          "value_k": 0.49548502171185693,
+          "prior_rmse_k": 0.9769315839,
+          "rmse_improvement_percent": 95.12429887
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "case_label": "HV02 + 放射",
+          "metric": "RMSE",
+          "value_k": 0.1435971416,
+          "prior_rmse_k": 0.8009057775,
+          "rmse_improvement_percent": 82.0706573
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "case_label": "HV02 + 放射",
+          "metric": "最大絶対誤差",
+          "value_k": 0.3439330487,
+          "prior_rmse_k": 0.8009057775,
+          "rmse_improvement_percent": 82.0706573
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "case_label": "HV02 + 放射",
+          "metric": "保守的隣接mesh差",
+          "value_k": 0.4941331625093376,
+          "prior_rmse_k": 0.8009057775,
+          "rmse_improvement_percent": 82.0706573
+        }
+      ],
+      "hv01_trace": [
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 0,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 25.00001509,
+          "predicted_chip": 25.00001509,
+          "error_chip": 3.552713679e-15,
+          "prior_chip": 25.00001509,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 25.00001508,
+          "predicted_sink_base": 25.00001508,
+          "error_sink_base": 3.552713679e-15,
+          "prior_sink_base": 25.00001508,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.0000151,
+          "predicted_fins": 25.0000151,
+          "error_fins": 0,
+          "prior_fins": 25.0000151,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 25.0000151,
+          "hotspot_underprediction": 9.999993722e-09
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 20,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 25.00001509,
+          "predicted_chip": 25.0000145,
+          "error_chip": -5.857306427e-07,
+          "prior_chip": 25.00001366,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 25.00001509,
+          "predicted_sink_base": 25.0000145,
+          "error_sink_base": -5.940267229e-07,
+          "prior_sink_base": 25.00001364,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.0000151,
+          "predicted_fins": 25.00001441,
+          "error_fins": -6.939775226e-07,
+          "prior_fins": 25.00001347,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 25.0000151,
+          "hotspot_underprediction": 5.957306399e-07
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 40,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 25.00001509,
+          "predicted_chip": 25.00001388,
+          "error_chip": -1.207330005e-06,
+          "prior_chip": 25.00001225,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 25.00001509,
+          "predicted_sink_base": 25.00001387,
+          "error_sink_base": -1.215271151e-06,
+          "prior_sink_base": 25.00001224,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.0000151,
+          "predicted_fins": 25.00001379,
+          "error_fins": -1.311374476e-06,
+          "prior_fins": 25.00001209,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 25.0000151,
+          "hotspot_underprediction": 1.217330002e-06
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 60,
+          "chip_power": 4,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 25.00001509,
+          "predicted_chip": 25.00001329,
+          "error_chip": -1.802294516e-06,
+          "prior_chip": 25.000011,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 25.00001509,
+          "predicted_sink_base": 25.00001328,
+          "error_sink_base": -1.809895327e-06,
+          "prior_sink_base": 25.00001098,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.0000151,
+          "predicted_fins": 25.0000132,
+          "error_fins": -1.902308547e-06,
+          "prior_fins": 25.00001085,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 25.0000151,
+          "hotspot_underprediction": 1.812294514e-06
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 80,
+          "chip_power": 8,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 26.161472,
+          "predicted_chip": 26.18476838,
+          "error_chip": 0.0232963801,
+          "prior_chip": 26.13491676,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 26.07015405,
+          "predicted_sink_base": 26.09710155,
+          "error_sink_base": 0.02694750101,
+          "prior_sink_base": 26.04668316,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.85528646,
+          "predicted_fins": 25.85631299,
+          "error_fins": 0.001026525489,
+          "prior_fins": 25.84727516,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 26.19854432,
+          "hotspot_underprediction": 0.0137759399
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 100,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 28.28370763,
+          "predicted_chip": 28.30306983,
+          "error_chip": 0.01936220115,
+          "prior_chip": 28.12484625,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 28.09597881,
+          "predicted_sink_base": 28.12720073,
+          "error_sink_base": 0.03122192085,
+          "prior_sink_base": 27.94717128,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 27.62924402,
+          "predicted_fins": 27.63981547,
+          "error_fins": 0.01057144778,
+          "prior_fins": 27.53781266,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 28.36181359,
+          "hotspot_underprediction": 0.05874375885
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 120,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.08333333333,
+          "truth_chip": 31.26834901,
+          "predicted_chip": 31.31489784,
+          "error_chip": 0.0465488341,
+          "prior_chip": 30.88204258,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 30.98323674,
+          "predicted_sink_base": 31.05031536,
+          "error_sink_base": 0.06707861922,
+          "prior_sink_base": 30.61384254,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 30.25552443,
+          "predicted_fins": 30.31079154,
+          "error_fins": 0.05526711073,
+          "prior_fins": 29.98507395,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 31.38818575,
+          "hotspot_underprediction": 0.0732879059
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 140,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.06666666667,
+          "truth_chip": 34.05881502,
+          "predicted_chip": 34.02896823,
+          "error_chip": -0.02984679389,
+          "prior_chip": 33.26560927,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 33.76664696,
+          "predicted_sink_base": 33.76338061,
+          "error_sink_base": -0.003266350762,
+          "prior_sink_base": 32.9953036,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 32.98415242,
+          "predicted_fins": 33.01278997,
+          "error_fins": 0.0286375462,
+          "prior_fins": 32.34788317,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 34.18414542,
+          "hotspot_underprediction": 0.1551771939
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 160,
+          "chip_power": 12,
+          "coolant_temperature": 28.33333333,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 36.76338023,
+          "predicted_chip": 36.68817923,
+          "error_chip": -0.07520099696,
+          "prior_chip": 35.54230058,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 36.46997503,
+          "predicted_sink_base": 36.42199982,
+          "error_sink_base": -0.04797520854,
+          "prior_sink_base": 35.27090069,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 35.67561357,
+          "predicted_fins": 35.66482307,
+          "error_fins": -0.01079049947,
+          "prior_fins": 34.6136406,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 36.88969974,
+          "hotspot_underprediction": 0.201520507
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 180,
+          "chip_power": 12,
+          "coolant_temperature": 31.66666667,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 39.49718402,
+          "predicted_chip": 39.40593872,
+          "error_chip": -0.09124530004,
+          "prior_chip": 37.98743756,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 39.20473547,
+          "predicted_sink_base": 39.14073518,
+          "error_sink_base": -0.06400029004,
+          "prior_sink_base": 37.71862573,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 38.41923062,
+          "predicted_fins": 38.39397188,
+          "error_fins": -0.02525874226,
+          "prior_fins": 37.08367326,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 39.62288141,
+          "hotspot_underprediction": 0.21694269
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 200,
+          "chip_power": 12,
+          "coolant_temperature": 35,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 42.24786783,
+          "predicted_chip": 42.14551024,
+          "error_chip": -0.1023575856,
+          "prior_chip": 40.49954,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 41.95570914,
+          "predicted_sink_base": 41.88052027,
+          "error_sink_base": -0.07518886742,
+          "prior_sink_base": 40.23144048,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 41.17313397,
+          "predicted_fins": 41.13607352,
+          "error_fins": -0.03706044937,
+          "prior_fins": 39.60271055,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 42.37336195,
+          "hotspot_underprediction": 0.2278517056
+        },
+        {
+          "case_id": "HV01_composite_conjugate",
+          "time": 220,
+          "chip_power": 12,
+          "coolant_temperature": 35,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 45.01330438,
+          "predicted_chip": 44.90120945,
+          "error_chip": -0.1120949259,
+          "prior_chip": 43.06447975,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 44.72145136,
+          "predicted_sink_base": 44.6364272,
+          "error_sink_base": -0.08502415525,
+          "prior_sink_base": 42.79704669,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 43.94184011,
+          "predicted_fins": 43.89423352,
+          "error_fins": -0.04760659191,
+          "prior_fins": 42.17413884,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 45.13857137,
+          "hotspot_underprediction": 0.2373619159
+        }
+      ],
+      "hv02_trace": [
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 0,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 24.99816052,
+          "predicted_chip": 24.99816052,
+          "error_chip": 2.842170943e-14,
+          "prior_chip": 24.99816052,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 24.99816058,
+          "predicted_sink_base": 24.99816058,
+          "error_sink_base": 2.842170943e-14,
+          "prior_sink_base": 24.99816058,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 24.99816868,
+          "predicted_fins": 24.99816868,
+          "error_fins": -5.684341886e-14,
+          "prior_fins": 24.99816868,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 24.99816281,
+          "hotspot_underprediction": 2.289999973e-06
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 20,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 24.99816011,
+          "predicted_chip": 24.99823671,
+          "error_chip": 7.660434584e-05,
+          "prior_chip": 24.99833983,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 24.99816016,
+          "predicted_sink_base": 24.99823772,
+          "error_sink_base": 7.756295692e-05,
+          "prior_sink_base": 24.99834218,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 24.99816824,
+          "predicted_fins": 24.99824866,
+          "error_fins": 8.041900729e-05,
+          "prior_fins": 24.99836264,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 24.99816244,
+          "hotspot_underprediction": -7.427434584e-05
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 40,
+          "chip_power": 0,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 24.99815973,
+          "predicted_chip": 24.99831228,
+          "error_chip": 0.0001525526988,
+          "prior_chip": 24.99851023,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 24.99815978,
+          "predicted_sink_base": 24.99831325,
+          "error_sink_base": 0.0001534681035,
+          "prior_sink_base": 24.99851233,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 24.99816788,
+          "predicted_fins": 24.99832372,
+          "error_fins": 0.0001558357132,
+          "prior_fins": 24.9985307,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 24.99816205,
+          "hotspot_underprediction": -0.0001502326988
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 60,
+          "chip_power": 4,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 24.99815948,
+          "predicted_chip": 24.99838461,
+          "error_chip": 0.0002251326001,
+          "prior_chip": 24.99866313,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 24.99815953,
+          "predicted_sink_base": 24.99838554,
+          "error_sink_base": 0.0002260066308,
+          "prior_sink_base": 24.99866502,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 24.99816765,
+          "predicted_fins": 24.99839556,
+          "error_fins": 0.0002279056339,
+          "prior_fins": 24.9986815,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 24.9981618,
+          "hotspot_underprediction": -0.0002228126001
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 80,
+          "chip_power": 8,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 26.15398647,
+          "predicted_chip": 26.1832095,
+          "error_chip": 0.02922303454,
+          "prior_chip": 26.13370723,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 26.06231864,
+          "predicted_sink_base": 26.09554357,
+          "error_sink_base": 0.03322492716,
+          "prior_sink_base": 26.04547534,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 25.84538092,
+          "predicted_fins": 25.85476467,
+          "error_fins": 0.009383750142,
+          "prior_fins": 25.84608226,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 26.1913984,
+          "hotspot_underprediction": 0.008188895458
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 100,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.1,
+          "truth_chip": 28.28252256,
+          "predicted_chip": 28.30157776,
+          "error_chip": 0.01905520377,
+          "prior_chip": 28.12376086,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 28.0911407,
+          "predicted_sink_base": 28.12570952,
+          "error_sink_base": 0.03456881696,
+          "prior_sink_base": 27.94608742,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 27.59981348,
+          "predicted_fins": 27.63833351,
+          "error_fins": 0.03852002803,
+          "prior_fins": 27.53674218,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 28.36345532,
+          "hotspot_underprediction": 0.06187755623
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 120,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.08333333333,
+          "truth_chip": 31.24546586,
+          "predicted_chip": 31.31346972,
+          "error_chip": 0.06800386172,
+          "prior_chip": 30.88106859,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 30.95870759,
+          "predicted_sink_base": 31.04888805,
+          "error_sink_base": 0.09018046375,
+          "prior_sink_base": 30.61286993,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 30.22142635,
+          "predicted_fins": 30.30937309,
+          "error_fins": 0.08794674281,
+          "prior_fins": 29.98411335,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 31.36657554,
+          "hotspot_underprediction": 0.05310581828
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 140,
+          "chip_power": 12,
+          "coolant_temperature": 25,
+          "inlet_air_velocity": 0.06666666667,
+          "truth_chip": 33.97465202,
+          "predicted_chip": 34.02759465,
+          "error_chip": 0.05294263162,
+          "prior_chip": 33.26472444,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 33.68063657,
+          "predicted_sink_base": 33.76200772,
+          "error_sink_base": 0.08137115447,
+          "prior_sink_base": 32.99441986,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 32.88874523,
+          "predicted_fins": 33.01142456,
+          "error_fins": 0.1226793307,
+          "prior_fins": 32.34700901,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 34.10139471,
+          "hotspot_underprediction": 0.07380005838
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 160,
+          "chip_power": 12,
+          "coolant_temperature": 28.33333333,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 36.5948217,
+          "predicted_chip": 36.68685096,
+          "error_chip": 0.09202925621,
+          "prior_chip": 35.54148555,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 36.29892334,
+          "predicted_sink_base": 36.42067212,
+          "error_sink_base": 0.1217487776,
+          "prior_sink_base": 35.27008652,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 35.49112482,
+          "predicted_fins": 35.66350158,
+          "error_fins": 0.1723767613,
+          "prior_fins": 34.61283397,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 36.72305384,
+          "hotspot_underprediction": 0.03620288379
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 180,
+          "chip_power": 12,
+          "coolant_temperature": 31.66666667,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 39.25308989,
+          "predicted_chip": 39.40464718,
+          "error_chip": 0.1515572861,
+          "prior_chip": 37.98667582,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 38.95845575,
+          "predicted_sink_base": 39.1394441,
+          "error_sink_base": 0.1809883505,
+          "prior_sink_base": 37.71786465,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 38.16124718,
+          "predicted_fins": 38.39268584,
+          "error_fins": 0.2314386561,
+          "prior_fins": 37.08291795,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 39.38046159,
+          "hotspot_underprediction": -0.02418558606
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 200,
+          "chip_power": 12,
+          "coolant_temperature": 35,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 41.93067917,
+          "predicted_chip": 42.14425378,
+          "error_chip": 0.2135746105,
+          "prior_chip": 40.49882727,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 41.63645118,
+          "predicted_sink_base": 41.87926426,
+          "error_sink_base": 0.2428130805,
+          "prior_sink_base": 40.23072836,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 40.84286941,
+          "predicted_fins": 41.13482241,
+          "error_fins": 0.2919529994,
+          "prior_fins": 39.60200384,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 42.05775493,
+          "hotspot_underprediction": -0.0864988505
+        },
+        {
+          "case_id": "HV02_composite_radiation",
+          "time": 220,
+          "chip_power": 12,
+          "coolant_temperature": 35,
+          "inlet_air_velocity": 0.05,
+          "truth_chip": 44.63197071,
+          "predicted_chip": 44.89998712,
+          "error_chip": 0.2680164073,
+          "prior_chip": 43.06381287,
+          "mesh_difference_chip": 0.4962085957,
+          "truth_sink_base": 44.33824959,
+          "predicted_sink_base": 44.63520531,
+          "error_sink_base": 0.2969557176,
+          "prior_sink_base": 42.7963804,
+          "mesh_difference_sink_base": 0.4954013419,
+          "truth_fins": 43.54908334,
+          "predicted_fins": 43.89301639,
+          "error_fins": 0.3439330487,
+          "prior_fins": 42.1734776,
+          "mesh_difference_fins": 0.4922401557,
+          "truth_chip_max": 44.75865705,
+          "hotspot_underprediction": -0.1413300673
+        }
+      ],
+      "hf_radiation_trace": [
+        {
+          "time": 0.0,
+          "truth_delta_chip_k": -0.0018545700000025533,
+          "predicted_delta_chip_k": -0.0018545700000025533,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 20.0,
+          "truth_delta_chip_k": -0.0018549800000009498,
+          "predicted_delta_chip_k": -0.001777789999998447,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 40.0,
+          "truth_delta_chip_k": -0.0018553600000004167,
+          "predicted_delta_chip_k": -0.001701600000000525,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 60.0,
+          "truth_delta_chip_k": -0.0018556099999997855,
+          "predicted_delta_chip_k": -0.0016286799999996049,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 80.0,
+          "truth_delta_chip_k": -0.0074855300000002956,
+          "predicted_delta_chip_k": -0.0015588800000010394,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 100.0,
+          "truth_delta_chip_k": -0.001185069999998234,
+          "predicted_delta_chip_k": -0.001492069999997625,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 120.0,
+          "truth_delta_chip_k": -0.02288315000000196,
+          "predicted_delta_chip_k": -0.0014281199999999217,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 140.0,
+          "truth_delta_chip_k": -0.08416299999999666,
+          "predicted_delta_chip_k": -0.0013735799999992082,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 160.0,
+          "truth_delta_chip_k": -0.16855853000000565,
+          "predicted_delta_chip_k": -0.0013282700000019076,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 180.0,
+          "truth_delta_chip_k": -0.24409413000000058,
+          "predicted_delta_chip_k": -0.0012915400000039767,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 200.0,
+          "truth_delta_chip_k": -0.31718865999999935,
+          "predicted_delta_chip_k": -0.0012564600000004589,
+          "mesh_difference_chip_k": 0.4962085957
+        },
+        {
+          "time": 220.0,
+          "truth_delta_chip_k": -0.3813336700000036,
+          "predicted_delta_chip_k": -0.00122233000000449,
+          "mesh_difference_chip_k": 0.4962085957
+        }
+      ],
+      "metric_definitions": [
+        {
+          "metric": "温度RMSE",
+          "definition": "初期行を除く評価時刻×3領域平均温度の誤差二乗平均平方根",
+          "interpretation": "open-loop温度軌跡の代表誤差。hotspot誤差とは別。"
+        },
+        {
+          "metric": "最大絶対誤差",
+          "definition": "評価時刻・対象sensor全体での |予測−CAE| 最大値",
+          "interpretation": "局所的な最悪予測ずれ。ただしCAE離散化誤差を含む。"
+        },
+        {
+          "metric": "prior RMSE",
+          "definition": "同定前の初期parameterモデルを同じ軌跡へ適用したRMSE",
+          "interpretation": "学習による改善を示す比較基準で、ゼロ予測との比較ではない。"
+        },
+        {
+          "metric": "NIS / 検出遅延",
+          "definition": "innovation共分散で正規化した二乗残差と、注入開始から最初のalertまでの時間",
+          "interpretation": "監視器の異常検出性能。物理外乱とsensor biasの帰属も別途確認。"
+        },
+        {
+          "metric": "隣接mesh差",
+          "definition": "同一問題のlocal-mediumとlocal-fine間の評価量絶対差",
+          "interpretation": "統計的信頼区間ではなく、離散化不確かさの保守的proxy。"
+        },
+        {
+          "metric": "放射pair差",
+          "definition": "同一時刻・同一3入力で radiation − no-radiation を取った温度差",
+          "interpretation": "放射省略の方向と大きさをscreening。pair差自体のmesh収束が必要。"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "case_inventory",
+      "label": "CAE case inventory",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Reader-facing case IDs grouped by benchmark layer and role.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [
+          "case_ids = published/evaluation scenario IDs: linear 29 + nonlinear 27 + mesh operating points 2 + high-fidelity transient 2",
+          "underlying_comsol_solves = linear physical solves 26 + nonlinear 27 + mesh variants 8 + high-fidelity transient 2"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "coverage_source",
+      "label": "CAE case coverage",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Count of reader-facing case IDs by benchmark layer and role.",
+        "sql": "SELECT layer, role, COUNT(*) AS cases FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv', header = true) GROUP BY layer, role ORDER BY layer, role",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "linear_catalog_source",
+      "label": "Linear CAE case catalog",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "All 29 published linear identification, forecast, and monitoring scenarios.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "linear_forecast_source",
+      "label": "Linear external forecast metrics",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Case-level open-loop forecast metrics generated by evaluate.py.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_forecast_metrics.csv"
+        ],
+        "filters": [
+          "初期行を評価から除外",
+          "3領域平均温度を集約",
+          "外部forecast 8ケース"
+        ],
+        "metric_definitions": [
+          "rmse_k = sqrt(mean((prediction - CAE truth)^2)) over forecast times and 3 sensors",
+          "rmse_improvement_percent = 100 * (prior_rmse_k - rmse_k) / prior_rmse_k"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "linear_monitor_source",
+      "label": "Linear causal-monitor metrics",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Case-level observer, alert, bias, disturbance, and missing-data metrics.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_monitor_metrics.csv"
+        ],
+        "filters": [
+          "NIS confidence 0.9999",
+          "fins sensor fixed as the reference bias gauge"
+        ],
+        "metric_definitions": [
+          "alert_rate_percent = 100 * alert_timepoints / evaluable timepoints",
+          "detection_delay_s = first detection time - injected event start time"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "nonlinear_catalog_source",
+      "label": "Nonlinear CAE case catalog",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "All 27 conjugate-flow, monitoring, and radiation-pair scenarios.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "nonlinear_envelope_source",
+      "label": "Nonlinear CAE operating envelope",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Worst chip temperature and physical diagnostic ranges summarized by role.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_role_envelope.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [
+          "max_chip_c = maximum truth chip maximum temperature across cases in each role"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "nonlinear_model_source",
+      "label": "Nonlinear identification split metrics",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Current generic scalar-law model metrics on the 10 nonlinear identification trajectories.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_model_metrics.csv"
+        ],
+        "filters": [
+          "8 train, 1 validation, 1 held-out internal test case"
+        ],
+        "metric_definitions": [
+          "rmse = all observed timepoints and 3 region-average sensors for each case"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "radiation_pairs_source",
+      "label": "Medium-fidelity radiation pairs",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Radiation-minus-no-radiation differences for five identical-input CAE pairs.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/radiation_pairs.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [
+          "abs_terminal_chip_delta_k = absolute terminal chip-average temperature pair difference"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "mesh_catalog_source",
+      "label": "Mesh qualification case catalog",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "The two steady operating points used for local-mesh qualification.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "mesh_convergence_source",
+      "label": "Mesh convergence results",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Steady chip-average temperatures across global and three local mesh profiles.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_convergence.csv"
+        ],
+        "filters": [
+          "MC01 nominal and MC02 hot/low-flow + radiation",
+          "steady-state solutions"
+        ],
+        "metric_definitions": [
+          "benchmark qualification uses 0.50 K region-average temperature tolerance"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_catalog_source",
+      "label": "High-fidelity transient case catalog",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "The two information-dense local-medium transient evaluation cases.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_catalog.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_metrics_source",
+      "label": "High-fidelity benchmark case metrics",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "External forecast error, prior comparison, and mesh-difference ratios for HV01/HV02.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_case_metrics.csv"
+        ],
+        "filters": [
+          "initial row excluded",
+          "11 forecast times × 3 region-average sensors per case"
+        ],
+        "metric_definitions": [
+          "rms_error_over_mesh_difference = RMSE divided by the conservative adjacent-mesh temperature difference",
+          "fraction_abs_error_within_mesh_difference = fraction of scalar errors below the sensor-specific mesh proxy"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_error_source",
+      "label": "High-fidelity error and mesh comparison",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Tidy comparison of RMSE, maximum error, and conservative adjacent-mesh difference.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_error_comparison.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_predictions_source",
+      "label": "High-fidelity temperature trajectories",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "CAE truth and generic-model chip temperature trajectories for HV01 and HV02.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_predictions.csv"
+        ],
+        "filters": [
+          "12 time rows per case",
+          "same left zero-order-hold input convention"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_radiation_trace_source",
+      "label": "High-fidelity radiation pair trajectory",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Truth and predicted HV02-minus-HV01 chip-average temperature differences.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_radiation_trace.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [
+          "truth_delta_chip_k = truth_chip(HV02 radiation) - truth_chip(HV01 conjugate)",
+          "predicted_delta_chip_k = predicted_chip(HV02 radiation) - predicted_chip(HV01 conjugate)"
+        ],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "metric_definition_source",
+      "label": "Benchmark metric definitions",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Reader-facing definitions and interpretation boundaries for all reported metrics.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/metric_definitions.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "headline_source",
+      "label": "Report headline case counts",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Headline inventory of reader-facing case IDs and underlying COMSOL solve executions.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/headline_summary.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "linear_summary_source",
+      "label": "Linear forecast summary",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Mean and worst external linear forecast RMSE with the screening limit.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/linear_summary.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "nonlinear_summary_source",
+      "label": "Nonlinear held-out summary",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Validation and held-out internal-test RMSE for the nonlinear identification set.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/nonlinear_summary.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "hf_summary_source",
+      "label": "High-fidelity forecast summary",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Mean/worst HV RMSE and fraction of errors within the mesh proxy.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/high_fidelity_summary.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "mesh_summary_source",
+      "label": "Mesh uncertainty summary",
+      "path": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv",
+      "query": {
+        "engine": "DuckDB",
+        "language": "sql",
+        "description": "Largest local-medium to local-fine region-average temperature difference.",
+        "sql": "SELECT * FROM read_csv_auto('external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv', header = true)",
+        "tables_used": [
+          "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/source_data/mesh_summary.csv"
+        ],
+        "filters": [
+          "レポート生成時点で確認済みの全行"
+        ],
+        "metric_definitions": [],
+        "executed_at": "2026-08-31T01:13:27+00:00"
+      }
+    },
+    {
+      "id": "linear_problem_doc",
+      "label": "Linear Electronic Chip Cooling problem definition",
+      "path": "external_tools/comsol_chip_cooling/docs/problem_definition.md"
+    },
+    {
+      "id": "nonlinear_problem_doc",
+      "label": "Nonlinear Electronic Chip Cooling problem definition",
+      "path": "external_tools/comsol_chip_cooling/docs/nonlinear_problem_definition.md"
+    },
+    {
+      "id": "hf_validation_doc",
+      "label": "Local-mesh and same-boundary validation definition",
+      "path": "external_tools/comsol_chip_cooling/docs/high_fidelity_validation.md"
+    }
+  ],
+  "package_info": {
+    "report_generator": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/build_report.py",
+    "snapshot_scope": "COMSOL Electronic Chip Cooling CAE benchmark evidence available on 2026-08-31"
+  }
+}

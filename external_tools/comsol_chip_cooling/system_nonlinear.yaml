@@ -1,0 +1,42 @@
+version: 3
+
+# Minimal flow-dependent thermal network used against the conjugate-flow CAE.
+# Units are J/K, W/K, and m/s. No case-specific correction is present.
+nodes:
+  - {name: chip, heat_capacity: 10.43392}
+  - {name: sink_base, heat_capacity: 24.3}
+  - {name: fins, heat_capacity: 46.17}
+
+actuators:
+  - {name: chip_power, tau: 0.0, learnable: false}
+  - {name: coolant_temperature, tau: 0.0, learnable: false}
+  - {name: inlet_air_velocity, tau: 0.0, learnable: false}
+
+edges:
+  - {nodes: [chip, sink_base], conductance: {type: constant, value: 40.0, learnable: true}}
+  - {nodes: [sink_base, fins], conductance: {type: constant, value: 12.0, learnable: true}}
+
+sources:
+  - name: chip_dissipation
+    node_weights: {chip: 1.0}
+    heat_rate: {type: positive_part, control: chip_power, gain: 1.0, threshold: 0.0, learnable: false}
+
+boundaries:
+  - name: coolant_convection
+    node_weights: {sink_base: 0.090909090909, fins: 0.909090909091}
+    reservoir_temperature: {control: coolant_temperature, intercept: 0.0, slope: 1.0}
+    conductance:
+      type: power_law
+      control: inlet_air_velocity
+      reference: 0.1
+      offset: 0.04
+      scale: 0.40
+      exponent: 0.8
+      offset_learnable: false
+      scale_learnable: true
+      exponent_learnable: true
+
+sensors:
+  - {name: chip, node: chip}
+  - {name: sink_base, node: sink_base}
+  - {name: fins, node: fins}

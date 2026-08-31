@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-30T22:59:44.089781+00:00",
+  "objective": "External open-loop evaluation of the flow-dependent three-node thermal network against local-mesh conjugate-flow CAE, with radiation as a paired model gap.",
+  "data_quality": {
+    "dynamic_reference_matches_hv02": true,
+    "mesh_profile": "local-medium",
+    "mesh_qualified": false,
+    "benchmark_qualified": true,
+    "temporal_qualified": false,
+    "experiment_validated": false,
+    "mesh_difference_k": {
+      "chip": 0.4962085957,
+      "sink_base": 0.4954013419,
+      "fins": 0.4922401557
+    },
+    "pair_time_and_controls_identical": true,
+    "strict_validation_status": "not_qualified",
+    "permitted_use": "model-form screening"
+  },
+  "workflow": {
+    "status": "pass",
+    "artifact_controls": [
+      "chip_power",
+      "coolant_temperature",
+      "inlet_air_velocity"
+    ],
+    "complete_external_control_boundary": true,
+    "forecast_truth_is_not_an_input": true,
+    "all_predictions_finite": true
+  },
+  "model": {
+    "type": "three-node thermal network using shared scalar response laws",
+    "inlet_air_velocity_coupled_to_physics": true,
+    "fitted_parameters": {
+      "edges": [
+        {
+          "node_a": "chip",
+          "node_b": "sink_base",
+          "conductance": {
+            "type": "constant",
+            "value": 39.94871139275545
+          }
+        },
+        {
+          "node_a": "sink_base",
+          "node_b": "fins",
+          "conductance": {
+            "type": "constant",
+            "value": 9.65886632531643
+          }
+        }
+      ],
+      "actuators": [
+        {
+          "name": "chip_power",
+          "tau": 0.0
+        },
+        {
+          "name": "coolant_temperature",
+          "tau": 0.0
+        },
+        {
+          "name": "inlet_air_velocity",
+          "tau": 0.0
+        }
+      ],
+      "sources": [
+        {
+          "name": "chip_dissipation",
+          "heat_rate": {
+            "type": "positive_part",
+            "control": "chip_power",
+            "gain": 1.0,
+            "threshold": 0.0
+          }
+        }
+      ],
+      "boundaries": [
+        {
+          "name": "coolant_convection",
+          "conductance": {
+            "type": "power_law",
+            "control": "inlet_air_velocity",
+            "reference": 0.1,
+            "offset": 0.04,
+            "scale": 0.1375754706541659,
+            "exponent": 0.9432967673337441
+          }
+        }
+      ]
+    },
+    "input_coverage": {
+      "chip_power": {
+        "training_range": [
+          0.0,
+          12.0
+        ],
+        "evaluation_range": [
+          0.0,
+          12.0
+        ],
+        "within_training_range": true
+      },
+      "coolant_temperature": {
+        "training_range": [
+          15.0,
+          35.0
+        ],
+        "evaluation_range": [
+          25.0,
+          35.0
+        ],
+        "within_training_range": true
+      },
+      "inlet_air_velocity": {
+        "training_range": [
+          0.05,
+          0.2
+        ],
+        "evaluation_range": [
+          0.05,
+          0.1
+        ],
+        "within_training_range": true
+      }
+    }
+  },
+  "training": {
+    "data": "data/nonlinear/train/*.csv",
+    "split_assignment": [
+      {
+        "case_id": "NT06_combined_levels",
+        "split": "train"
+      },
+      {
+        "case_id": "NT07_combined_ramps",
+        "split": "train"
+      },
+      {
+        "case_id": "NT01_power_levels",
+        "split": "train"
+      },
+      {
+        "case_id": "NT08_hot_low_flow",
+        "split": "train"
+      },
+      {
+        "case_id": "NT04_air_velocity_levels",
+        "split": "train"
+      },
+      {
+        "case_id": "NT03_inlet_temperature_levels",
+        "split": "train"
+      },
+      {
+        "case_id": "NT05_power_ramp",
+        "split": "train"
+      },
+      {
+        "case_id": "NT10_stationary_hot_start",
+        "split": "train"
+      },
+      {
+        "case_id": "NT02_power_reverse",
+        "split": "val"
+      },
+      {
+        "case_id": "NT09_cold_high_flow",
+        "split": "test"
+      }
+    ],
+    "best_epoch": 200,
+    "best_validation_rmse_k": 0.3126877359777144,
+    "metrics": {
+      "train": {
+        "n_cases": 8,
+        "mean_case_rmse": 0.214619274135676,
+        "median_case_rmse": 0.22642389807836383,
+        "worst_case_rmse": 0.3600077395124808,
+        "mean_case_mae": 0.17313649049112642
+      },
+      "val": {
+        "n_cases": 1,
+        "mean_case_rmse": 0.3126877359777144,
+        "median_case_rmse": 0.3126877359777144,
+        "worst_case_rmse": 0.3126877359777144,
+        "mean_case_mae": 0.2491079871664093
+      },
+      "test": {
+        "n_cases": 1,
+        "mean_case_rmse": 0.4047951117287358,
+        "median_case_rmse": 0.4047951117287358,
+        "worst_case_rmse": 0.4047951117287358,
+        "mean_case_mae": 0.3690957059892836
+      }
+    }
+  },
+  "evaluation": {
+    "cases": [
+      {
+        "case_id": "HV01_composite_conjugate",
+        "radiation_enabled": false,
+        "n_forecast_timepoints": 11,
+        "n_scalar_predictions": 33,
+        "rmse_k": 0.04763226429797162,
+        "mae_k": 0.03384502928115544,
+        "max_abs_error_k": 0.11209492593053483,
+        "prior_rmse_k": 0.976931583910461,
+        "rmse_improvement_percent": 95.124298867756,
+        "rms_error_over_mesh_difference": 0.09613260182219956,
+        "max_abs_error_over_mesh_difference": 0.22590282978150117,
+        "fraction_abs_error_within_mesh_difference": 1.0,
+        "chip_peak_error_k": -0.11209492593053483,
+        "max_hotspot_underprediction_k": 0.2373619159305349
+      },
+      {
+        "case_id": "HV02_composite_radiation",
+        "radiation_enabled": true,
+        "n_forecast_timepoints": 11,
+        "n_scalar_predictions": 33,
+        "rmse_k": 0.1435971415605291,
+        "mae_k": 0.09926849652203543,
+        "max_abs_error_k": 0.3439330486594443,
+        "prior_rmse_k": 0.8009057774841265,
+        "rmse_improvement_percent": 82.07065729858901,
+        "rms_error_over_mesh_difference": 0.2906041377091513,
+        "max_abs_error_over_mesh_difference": 0.6987098567168852,
+        "fraction_abs_error_within_mesh_difference": 1.0,
+        "chip_peak_error_k": 0.26801640734382204,
+        "max_hotspot_underprediction_k": 0.07380005838258086
+      }
+    ],
+    "phases": [
+      {
+        "case_id": "HV01_composite_conjugate",
+        "phase": "initialization",
+        "response_time_start_exclusive_s": 0.0,
+        "response_time_end_inclusive_s": 60.0,
+        "n_timepoints": 3,
+        "rmse_k": 1.3322724983502533e-06,
+        "mae_k": 1.2358009900342242e-06,
+        "max_abs_error_k": 1.9023085471303602e-06
+      },
+      {
+        "case_id": "HV01_composite_conjugate",
+        "phase": "power_excitation",
+        "response_time_start_exclusive_s": 60.0,
+        "response_time_end_inclusive_s": 120.0,
+        "n_timepoints": 3,
+        "rmse_k": 0.037196460724694756,
+        "mae_k": 0.031257837823466396,
+        "max_abs_error_k": 0.06707861921531943
+      },
+      {
+        "case_id": "HV01_composite_conjugate",
+        "phase": "airflow_excitation",
+        "response_time_start_exclusive_s": 120.0,
+        "response_time_end_inclusive_s": 160.0,
+        "n_timepoints": 2,
+        "rmse_k": 0.04040390794371821,
+        "mae_k": 0.03261956597122998,
+        "max_abs_error_k": 0.07520099695964433
+      },
+      {
+        "case_id": "HV01_composite_conjugate",
+        "phase": "coupled_hot_low_flow",
+        "response_time_start_exclusive_s": 160.0,
+        "response_time_end_inclusive_s": 220.0,
+        "n_timepoints": 3,
+        "rmse_k": 0.0764667182347218,
+        "mae_k": 0.07109298975896018,
+        "max_abs_error_k": 0.11209492593053483
+      },
+      {
+        "case_id": "HV02_composite_radiation",
+        "phase": "initialization",
+        "response_time_start_exclusive_s": 0.0,
+        "response_time_end_inclusive_s": 60.0,
+        "n_timepoints": 3,
+        "rmse_k": 0.00016437277139891608,
+        "mae_k": 0.0001528319655971839,
+        "max_abs_error_k": 0.00022790563390984175
+      },
+      {
+        "case_id": "HV02_composite_radiation",
+        "phase": "power_excitation",
+        "response_time_start_exclusive_s": 60.0,
+        "response_time_end_inclusive_s": 120.0,
+        "n_timepoints": 3,
+        "rmse_k": 0.053311978618045285,
+        "mae_k": 0.04556742543151652,
+        "max_abs_error_k": 0.09018046375040001
+      },
+      {
+        "case_id": "HV02_composite_radiation",
+        "phase": "airflow_excitation",
+        "response_time_start_exclusive_s": 120.0,
+        "response_time_end_inclusive_s": 160.0,
+        "n_timepoints": 2,
+        "rmse_k": 0.11363706987682369,
+        "mae_k": 0.10719131865981169,
+        "max_abs_error_k": 0.17237676130521606
+      },
+      {
+        "case_id": "HV02_composite_radiation",
+        "phase": "coupled_hot_low_flow",
+        "response_time_start_exclusive_s": 160.0,
+        "response_time_end_inclusive_s": 220.0,
+        "n_timepoints": 3,
+        "rmse_k": 0.25329046577647046,
+        "mae_k": 0.2468033507438084,
+        "max_abs_error_k": 0.3439330486594443
+      }
+    ],
+    "mean_case_rmse_k": 0.09561470292925037,
+    "worst_case": "HV02_composite_radiation",
+    "worst_case_rmse_k": 0.1435971415605291,
+    "mean_prior_rmse_k": 0.8889186806972937,
+    "model_adequacy_status": "not_resolved_beyond_mesh_difference"
+  },
+  "radiation_pair": {
+    "sensors": [
+      {
+        "sensor": "chip",
+        "truth_terminal_radiation_delta_k": -0.3813336700000036,
+        "predicted_terminal_pair_delta_k": -0.0012223367256467554,
+        "max_abs_truth_radiation_delta_k": 0.3813336700000036,
+        "max_abs_predicted_pair_delta_k": 0.0018545699999776843,
+        "pair_delta_rmse_k": 0.17543881072319006,
+        "pair_delta_max_abs_error_k": 0.38011133327435687,
+        "mesh_difference_k": 0.4962085957,
+        "radiation_effect_over_mesh_difference": 0.7684946881302154,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.0032054256463814063,
+        "terminal_direction_matches": true
+      },
+      {
+        "sensor": "sink_base",
+        "truth_terminal_radiation_delta_k": -0.38320177000000655,
+        "predicted_terminal_pair_delta_k": -0.0012218971622530717,
+        "max_abs_truth_radiation_delta_k": 0.38320177000000655,
+        "max_abs_predicted_pair_delta_k": 0.0018544999999754452,
+        "pair_delta_rmse_k": 0.17674002990746357,
+        "pair_delta_max_abs_error_k": 0.3819798728377535,
+        "mesh_difference_k": 0.4954013419,
+        "radiation_effect_over_mesh_difference": 0.7735178280509347,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.0031886521877314156,
+        "terminal_direction_matches": true
+      },
+      {
+        "sensor": "fins",
+        "truth_terminal_radiation_delta_k": -0.3927567699999983,
+        "predicted_terminal_pair_delta_k": -0.0012171294307563585,
+        "max_abs_truth_radiation_delta_k": 0.3927567699999983,
+        "max_abs_predicted_pair_delta_k": 0.0018464200000565256,
+        "pair_delta_rmse_k": 0.18383782511232333,
+        "pair_delta_max_abs_error_k": 0.39153964056924195,
+        "mesh_difference_k": 0.4922401557,
+        "radiation_effect_over_mesh_difference": 0.7978966475042465,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.003098939404039716,
+        "terminal_direction_matches": true
+      }
+    ],
+    "max_abs_truth_effect_k": 0.3927567699999983,
+    "max_effect_over_mesh_difference": 0.7978966475042465,
+    "interpretation": "directional screening only"
+  }
+}

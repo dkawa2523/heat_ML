@@ -1,7 +1,7 @@
 # thermal-cell-practical
 
 少数の温度センサーと運転指令から、熱系を同定・予測・監視するための汎用的な
-集中定数熱基盤です。物理単位のまま動く対称RCモデルを一つだけ持ち、学習、
+集中定数熱基盤です。物理単位のまま動く熱ネットワークモデルを一つだけ持ち、学習、
 open-loop forecast、実測monitorが同じ状態方程式を使用します。
 
 ## 目的
@@ -9,7 +9,8 @@ open-loop forecast、実測monitorが同じ状態方程式を使用します。
 - 複数のCAEまたは実験過渡データから、熱伝導、熱源、境界熱伝達、アクチュエータ
   応答遅れを同定する。
 - 未知運転条件・時間変化レシピに対して、安定した温度軌道を予測する。
-- 実測中はKalman observerで内部温度状態とセンサーバイアスを因果的に推定する。
+- 実測中はKalman observerで内部温度、既知熱源経路上の未知発熱、識別可能なセンサーバイアスを
+  因果的に推定する。
 - センサー数と熱状態数を分離し、欠測、隠れノード、可変時間刻みに対応する。
 
 ## モデル
@@ -17,19 +18,31 @@ open-loop forecast、実測monitorが同じ状態方程式を使用します。
 ノード温度 `T` に対して、次の物理構造を使用します。
 
 ```text
-C dT/dt = -L(G) T
-          + Σ source_gain · max(actuator - threshold, 0) · source_weights
-          + Σ boundary_h · boundary_weights · (boundary_temperature - T)
+C dT/dt = -L(G_edge(a)) T
+          + Σ q_source(a) · source_weights
+          + Σ G_boundary(a) · boundary_weights · (reservoir_temperature - T)
+          + source_weights^T · unknown_heat
 
 tau da/dt = command - actuator
 measurement = H T + sensor_bias + noise
 ```
 
-- 各edgeは一つの正のconductanceを共有するため、熱流は常に相反・対称です。
-- heat capacity、conductance、source gain、boundary conductance、tauは正値制約を保ちます。
-- `exact`積分は行列指数を使い、ゼロ固有値を持つ閉じた熱回路でも逆行列を使いません。
+- 各edgeは一つの正のconductanceを共有するため、入力依存でも熱流は常に相反・対称です。
+- edge conductance、source heat rate、boundary conductanceは同じscalar lawを使います。lawは
+  `constant`、しきい値付き`positive_part`、正値・単調な`power_law`の3種類です。
+- heat capacity、scalar lawの係数、tauは正値制約を保ちます。特定の冷却方式や現行benchmarkを
+  coreの型として持ちません。
+- reservoir温度を決めるcontrolとconductanceを決めるcontrolは独立です。
+- `exact`積分は温度と一次遅れactuatorを一つの連続系として行列指数で進めます。
+  source thresholdを横切る区間は交差時刻で分割し、ゼロ固有値を持つ系でも逆行列を使いません。
 - 可変`dt`を各区間で直接使用します。固定刻みへのresampleは不要です。
 - 指令値は明示的なactuator stateを通るため、学習と推論で同じ遅れを使います。
+- monitorの未知発熱は既存sourceの空間分布を通って温度へ伝播し、sensor biasとは
+  別状態として推定されます。
+- sensor biasは、基準を指定しなければ零平均、`monitor.observer.bias_reference`へ校正済みsensorを
+  指定すればそのsensorを0とするgaugeで推定し、出力にもgaugeを明記します。
+- gross innovationは検出用のraw NISへ残したまま、Kalman更新では観測noiseを連続的に膨らませ、
+  単一sensor faultが物理温度を瞬時に引っ張る影響を抑えます。
 
 詳細は [product_architecture.md](docs/product_architecture.md) を参照してください。
 
@@ -39,11 +52,11 @@ measurement = H T + sensor_bias + noise
 src/celltemp/
   domain/       Trajectory、ThermalSystemSpec
   io/           CSV/DataFrame変換、system YAML読込
-  engine/       対称RC、安定積分、Kalman observer
-  learning/     軌道分割、multiple-shooting全軌道学習
+  engine/       熱ネットワーク、安定積分、Kalman observer
+  learning/     軌道分割、case-balanced軌道学習
   workflows/    train、forecast、monitor
   artifact.py   model.pt + system.yaml + metadata.json
-  inference.py  ライブラリ用forecast / monitor API
+  inference.py  状態初期化 / forecast / monitor API
   cli.py        3つの公開コマンド
 examples/topcell_quickstart/
   config.yaml   学習・予測・監視で共有する設定
@@ -83,12 +96,15 @@ time,tc_core,tc_shell,heater,coolant
 同じ列規約を用途に応じて次のように使います。
 
 - train: 学習に使うsensor温度を各時刻へ記録する。
-- forecast: 先頭行に初期sensor温度、全行に将来commandを記録する。2行目以降の温度は空欄にする。
+- forecast: 先頭から連続する観測履歴と全行のcommandを記録し、履歴後のsensor温度を空欄にする。
+  先頭1行だけを観測する従来形は最小の履歴としてそのまま使える。
 - monitor: 実測sensor温度と適用commandを各時刻へ記録する。個別の欠測は空欄でよい。
 
 `data.directory`またはruntimeの`input_dir`が処理単位であり、ファイルstemが`case_id`です。
-forecastは将来の実測値を入力へ混ぜないよう、2行目以降にsensor値があるCSVを拒否し、
-初期観測とcommand履歴だけでopen-loop積分します。
+forecastでは、各履歴行に少なくとも1つのsensor観測を置き、最初の全sensor空欄行以後を
+将来区間とします。空欄行より後に観測が再登場するCSVは将来値混入として拒否します。履歴を
+因果的にobserverへ通し、最後のposterior node温度とeffective actuatorからopen-loop積分します。
+出力はそのforecast originから始まるため、履歴を予測誤差へ混ぜません。
 
 通常のrandom splitでは、同一control履歴を持つtrajectoryを自動的に同じsplitへまとめます。
 意図的な外挿評価だけ、任意の`case_id,split`表と`split.method: explicit`を使用します。
@@ -96,35 +112,58 @@ forecastは将来の実測値を入力へ混ぜないよう、2行目以降にse
 `dt: null`にすれば可変刻みを許可します。trainで温度欠測を読む場合は
 `allow_missing_temperatures: true`を設定します。forecastとmonitorは空欄を自動的に欠測maskとして
 扱います。どのworkflowも初期状態を決めるため、先頭行には少なくとも1つのsensor温度が
-必要です。学習trajectoryには、先頭より後にも少なくとも1つの観測が必要です。
+必要です。forecast履歴ではsensor単位の欠測を許しますが、全sensor空欄の行がforecast境界です。
+学習trajectoryには、先頭より後にも少なくとも1つの観測が必要です。
 
 ## system.yaml
 
 熱系の構造は一つのYAMLに集約します。
 
 ```yaml
+version: 3
 nodes:
-  - {name: shell, heat_capacity: 2.0}
-  - {name: core, heat_capacity: 5.0}
+  - {name: wafer, heat_capacity: 2.0}
+  - {name: chuck, heat_capacity: 5.0}
 actuators:
   - {name: heater, tau: 3.0}
+  - {name: clamp_pressure, tau: 0.0, learnable: false}
+  - {name: coolant_temperature, tau: 0.0, learnable: false}
+  - {name: coolant_flow, tau: 0.0, learnable: false}
 edges:
-  - {nodes: [shell, core], conductance: 0.4}
+  - nodes: [wafer, chuck]
+    conductance:
+      {type: power_law, control: clamp_pressure, reference: 1.0,
+       offset: 0.1, scale: 0.3, exponent: 0.8}
 sources:
   - name: heater_power
-    actuator: heater
-    node_weights: {core: 1.0}
-    gain: 0.2
+    node_weights: {chuck: 1.0}
+    heat_rate:
+      {type: positive_part, control: heater, gain: 0.2, threshold: 0.0}
 boundaries:
-  - name: ambient
-    temperature_intercept: 25.0
-    node_weights: {shell: 1.0}
-    conductance: 0.05
+  - name: coolant
+    node_weights: {chuck: 1.0}
+    reservoir_temperature:
+      {control: coolant_temperature, intercept: 0.0, slope: 1.0}
+    conductance:
+      type: power_law
+      control: coolant_flow
+      reference: 1.0
+      offset: 0.01
+      scale: 0.04
+      exponent: 0.8
+      offset_learnable: false
+      scale_learnable: true
+      exponent_learnable: false
 sensors:
-  - {name: tc_core, node: core}
+  - {name: wafer_tc, node: wafer}
 ```
 
-`node_weights`はnode名で指定でき、記載しないnodeは0です。sensor名とnode名は異なって
+scalar lawは配置先によってW/KのconductanceまたはWのheat rateになります。固定値は
+`{type: constant, value: 0.05}`です。`exact`を使う入力依存conductanceとsourceのpower-law
+controlは、区間内一定となる`tau: 0`が必要です。遅れを含む場合は`implicit`が中点の実効入力で
+係数を組み立てます。positive-part sourceは一次遅れとthreshold crossingもexact積分できます。
+`node_weights`はnode名で指定でき、
+記載しないnodeは0です。sensor名とnode名は異なって
 よく、測定されないnodeも状態として保持できます。CSVのsensor列とcontrol列の名前・順序も
 この定義から取得するため、`config.yaml`へ重複記載しません。
 
@@ -160,6 +199,15 @@ py -3 -m celltemp.cli forecast --config examples/topcell_quickstart/config.yaml
 py -3 -m celltemp.cli monitor --config examples/topcell_quickstart/config.yaml
 ```
 
+校正済みsensorを絶対biasの基準にする場合だけ、monitor設定へ名前を追加します。そのsensorには
+monitorログ内で少なくとも1つの観測が必要です。
+
+```yaml
+monitor:
+  observer:
+    bias_reference: tc_reference
+```
+
 すべての設定は`key=value`で上書きできます。
 
 ```powershell
@@ -184,7 +232,7 @@ from celltemp.inference import forecast
 from celltemp.io import trajectory_from_frame
 
 artifact = load_artifact(
-    "examples/topcell_quickstart/work/outputs/runs/thermal_rc_demo/artifact"
+    "examples/topcell_quickstart/work/outputs/runs/thermal_network_demo/artifact"
 )
 frame = pd.read_csv("request.csv")
 request = trajectory_from_frame(
@@ -220,12 +268,13 @@ config.yaml
 ```
 
 splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温度だけ異なる軌道は分離しません。
-学習は短い区間を多数開始点から連続伝播
-するmultiple shooting、選択は完全なvalidation軌道RMSEで行います。
+学習は各epochで全caseを一度ずつ扱い、caseごとの全軌道Huber lossを均等に平均します。
+長大ログで計算量を制限するときだけ`training.horizon`へ区間数を指定し、観測可能な開始点から
+window rolloutを行います。model選択は常に完全なvalidation軌道のcase平均RMSEです。
 
 ## TopCell外部benchmark
 
-学習用228軌道と、学習探索先に含まれない外部forecast 11ケース・monitor 5ケースを分離して
+学習用228軌道と、学習探索先に含まれない外部forecast 12ケース・monitor 5ケースを分離して
 います。ケースの目的、合否条件、最新の基準結果は
 [TopCell benchmark](benchmarks/topcell/README.md)に集約しています。
 
@@ -246,13 +295,18 @@ py -3 quality.py pr
 単体試験はエネルギー保存、受動系の上下限、可変刻みsemigroup、actuator解析解、
 勾配、欠測observer、artifact round-tripを検証します。integration試験は
 `train -> forecast -> monitor`を公開APIで通し、別名sensorから未観測nodeを持つartifactの
-forecastと、将来実測を誤って混入した入力を既存出力を壊さず拒否できることも確認します。
+forecast、観測履歴からのhidden state推定、およびforecast境界後の実測を混入した入力を
+既存出力を壊さず拒否できることも確認します。
 
 ## 現時点の境界
 
-- 状態方程式は温度について線形、入力についてthreshold付きaffineです。相変化、放射の
-  `T^4`、温度依存物性が主要な系では、物理項を追加する必要があります。
+- 状態方程式は温度について線形で、区間ごとの入力から正値の係数を組み立てます。edge、source、
+  boundaryは共通scalar lawを使います。相変化、放射の`T^4`、
+  温度依存物性が主要な系では、温度依存の物理項を追加する必要があります。
 - heat capacityを含む全係数を同時に自由化すると尺度不定になるため、現在はcapacityを
   engineering priorとして固定しています。
 - monitorは観測更新に必要なfilter共分散を持ちます。forecastの予測区間は、係数同定の
   uncertaintyを含めて検証できるまでは出力しません。
+- 外部基準なしでは全sensor共通offsetと一様な物理温度ずれを分離できません。この場合の
+  `sensor_bias`は零平均です。校正済みsensorがある場合だけ`bias_reference`へ名前を指定し、
+  そのsensorのbiasを0として他sensorの絶対offsetを推定できます。

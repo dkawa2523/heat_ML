@@ -1,0 +1,6 @@
+radiation_case_id,base_case_id,rows,chip_delta_final_c,chip_delta_min_c,chip_delta_max_c,chip_peak_delta_final_c,radiative_heat_rate_max_abs_w,radiative_heat_rate_final_w,pair,abs_terminal_chip_delta_k
+NR01_power_levels,NT01_power_levels,91,-5.0164994,-5.0164994,0.04760838,-5.0128925,1.879230114,-1.879230114,NR01_power_levels / NT01_power_levels,5.0164994
+NR02_power_ramp,NT05_power_ramp,91,-4.6488025,-4.6488025,-0.01510035,-4.65449656,1.319474416,-1.109640029,NR02_power_ramp / NT05_power_ramp,4.6488025
+NR03_combined_levels,NT06_combined_levels,91,-4.04969427,-4.04969427,-0.01510035,-4.05298185,1.308541118,-0.9242592853,NR03_combined_levels / NT06_combined_levels,4.04969427
+NR04_hot_low_flow_corner,NF04_hot_low_flow_corner,91,-12.4525303,-12.4525303,-0.030459,-12.4520923,3.062464701,-3.062464701,NR04_hot_low_flow_corner / NF04_hot_low_flow_corner,12.4525303
+NR05_stationary_hot_start,NF09_stationary_hot_start,91,-15.14810202,-32.7157373,-15.14810202,-15.17310702,4.436084473,-1.966056524,NR05_stationary_hot_start / NF09_stationary_hot_start,15.14810202

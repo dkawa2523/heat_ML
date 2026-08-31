@@ -6,7 +6,7 @@ import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from celltemp.domain import ActuatorSpec, EdgeSpec, ThermalSystemSpec
+from celltemp.domain import ActuatorSpec, ConstantLawSpec, EdgeSpec, ThermalSystemSpec
 from celltemp.engine import ThermalRCModel, ThermalState
 
 
@@ -15,7 +15,7 @@ def _closed_pair() -> ThermalRCModel:
         ThermalSystemSpec(
             node_names=("a", "b"),
             heat_capacity=(1.5, 3.0),
-            edges=(EdgeSpec("a", "b", 0.4, learnable=False),),
+            edges=(EdgeSpec("a", "b", ConstantLawSpec(0.4, learnable=False)),),
             actuators=(ActuatorSpec("unused", tau=0.0),),
         )
     )

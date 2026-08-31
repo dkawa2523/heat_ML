@@ -1,0 +1,7 @@
+metric,definition,interpretation
+温度RMSE,初期行を除く評価時刻×3領域平均温度の誤差二乗平均平方根,open-loop温度軌跡の代表誤差。hotspot誤差とは別。
+最大絶対誤差,評価時刻・対象sensor全体での |予測−CAE| 最大値,局所的な最悪予測ずれ。ただしCAE離散化誤差を含む。
+prior RMSE,同定前の初期parameterモデルを同じ軌跡へ適用したRMSE,学習による改善を示す比較基準で、ゼロ予測との比較ではない。
+NIS / 検出遅延,innovation共分散で正規化した二乗残差と、注入開始から最初のalertまでの時間,監視器の異常検出性能。物理外乱とsensor biasの帰属も別途確認。
+隣接mesh差,同一問題のlocal-mediumとlocal-fine間の評価量絶対差,統計的信頼区間ではなく、離散化不確かさの保守的proxy。
+放射pair差,同一時刻・同一3入力で radiation − no-radiation を取った温度差,放射省略の方向と大きさをscreening。pair差自体のmesh収束が必要。

@@ -1,0 +1,3 @@
+layer,case_id,role,problem,evaluation_target,result,source_path
+局所メッシュ,MC01_nominal,メッシュ収束,12 W; Tin 25 °C; v 0.10 m/s; 放射なし; 4 mesh profile,定格熱抵抗、fin間流路、圧力損失の離散化感度,"medium→fine ΔTchip,avg 0.496 K; Δdp 0.62%; strict 未達 / benchmark 合格",data/nonlinear_high_fidelity/mesh_convergence_deltas.csv
+局所メッシュ,MC02_hot_low_flow_radiation,メッシュ収束,12 W; Tin 40 °C; v 0.05 m/s; 放射あり; 4 mesh profile,高温・低流量・弱対流・放射条件での離散化感度,"medium→fine ΔTchip,avg 0.154 K; Δdp 0.90%; strict 合格 / benchmark 合格",data/nonlinear_high_fidelity/mesh_convergence_deltas.csv

@@ -1,0 +1,3 @@
+case_id,time,chip,sink_base,fins,chip_power,coolant_temperature,inlet_air_velocity,uncertainty_chip,uncertainty_sink_base,uncertainty_fins,run_id,sample_id
+MC01_nominal,0,,,,12,25,0.1,,,,,
+MC02_hot_low_flow_radiation,0,,,,12,40,0.05,,,,,

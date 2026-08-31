@@ -1,0 +1,38 @@
+version: 3
+
+# Heat capacities are fixed engineering values obtained from the final COMSOL
+# domain volumes and the constant material properties used by the generator.
+# Units are J/K; conductances are W/K.
+nodes:
+  - {name: chip, heat_capacity: 10.43392}
+  - {name: sink_base, heat_capacity: 24.3}
+  - {name: fins, heat_capacity: 46.17}
+
+# Both inputs are physical quantities already applied by COMSOL. There is no
+# invented actuator lag or scaling to identify.
+actuators:
+  - {name: chip_power, tau: 0.0, learnable: false}
+  - {name: coolant_temperature, tau: 0.0, learnable: false}
+
+edges:
+  - {nodes: [chip, sink_base], conductance: {type: constant, value: 40.0, learnable: true}}
+  - {nodes: [sink_base, fins], conductance: {type: constant, value: 12.0, learnable: true}}
+
+sources:
+  - name: chip_dissipation
+    node_weights: {chip: 1.0}
+    heat_rate: {type: positive_part, control: chip_power, gain: 1.0, threshold: 0.0, learnable: false}
+
+# Base and fins share one effective coolant boundary. Their known prior hA ratio
+# (0.04:0.40) is retained in the node weights, while identification learns only
+# the observable total conductance instead of two nearly collinear parameters.
+boundaries:
+  - name: coolant_convection
+    node_weights: {sink_base: 0.090909090909, fins: 0.909090909091}
+    reservoir_temperature: {control: coolant_temperature, intercept: 0.0, slope: 1.0}
+    conductance: {type: constant, value: 0.44, learnable: true}
+
+sensors:
+  - {name: chip, node: chip}
+  - {name: sink_base, node: sink_base}
+  - {name: fins, node: fins}

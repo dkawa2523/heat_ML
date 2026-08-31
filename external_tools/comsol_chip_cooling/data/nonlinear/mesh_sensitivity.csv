@@ -1,0 +1,4 @@
+case_id,mesh_size_level,rows,chip_final_c,chip_max_final_c,outlet_air_final_c,pressure_drop_final_pa,energy_residual_max_abs_w,finer_mesh_size_level,chip_rmse_to_finer_c,chip_max_abs_to_finer_c,chip_final_delta_finer_minus_current_c,pressure_drop_rmse_to_finer_pa,pressure_drop_final_delta_finer_minus_current_pa
+NT01_power_levels,9,91,70.12131324,70.35445857,38.82196661,0.01851497257,0.006731136208,8,0.7152758448,1.509869033,1.509869033,0.001657318726,-0.001766111692
+NT01_power_levels,8,91,71.63118228,71.78835586,38.3042762,0.01674886087,0.03400882815,7,1.108623882,2.511086861,2.511086861,0.002159375403,-0.002211971225
+NT01_power_levels,7,91,74.14226914,74.31889454,37.63103116,0.01453688965,0.02597580457,,,,,,

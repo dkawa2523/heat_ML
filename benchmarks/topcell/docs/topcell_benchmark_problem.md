@@ -29,8 +29,8 @@ early selection用であり、最終的な汎化根拠には使用しません�
 
 ## 3. 外部forecastケース
 
-各CSVの通常sensor列は初期観測だけを持ち、以後は空欄です。`truth_*`列は評価器だけが使用し、
-modelやforecast workflowには渡りません。
+各CSVの通常sensor列は初期観測、または先頭から連続する因果的な観測履歴を持ち、以後は
+空欄です。`truth_*`列は評価器だけが使用し、modelやforecast workflowには渡りません。
 
 | ID | group | 学習との差 | このケースで分かること | 一次指標 |
 |---|---|---|---|---|
@@ -45,6 +45,7 @@ modelやforecast workflowには渡りません。
 | F09 | initialization | 初期sensorが4点中2点だけ | 初期状態復元不足の影響 | RMSE、観測sensor数 |
 | F10 | sampling | 0.5–1.5秒の非均一刻み | resampleなし可変`dt`積分 | 全軌道RMSE、有限性 |
 | F11 | model gap | 温度とともに増える熱損失 | 線形RCの適用限界を露出できるか | core群に対する誤差増幅 |
+| F12 | initialization | F09と同じ2 sensorを20秒観測 | 履歴からhidden温度を推定してhandoffできるか | origin以後RMSE、F09比 |
 
 F11は低RMSEを要求しません。むしろmatched-physicsケースと同程度に見える場合、benchmarkの
 非線形差が弱すぎるか、評価にリークがあると判断します。
@@ -55,18 +56,18 @@ monitor CSVは実測相当sensor列、command、評価専用`truth_* / truth_bia
 
 | ID | group | 注入する事象 | このケースで分かること | 一次指標 |
 |---|---|---|---|---|
-| M01 | baseline | sensor noise 0.15 Kのみ | 正常時innovationの基準幅 | residual RMSE |
-| M02 | bias tracking | 初期0から緩やかなsensor drift | 物理温度とslow driftの分離 | filtered vs raw truth RMSE |
-| M03 | fault detection | CP sensorへ+3 Kのstep offset | bias適応前の故障検出 | normalized residual、遅れ |
-| M04 | missing data | Center/edgeの時間窓欠測 | 残sensorと熱結合による継続 | finite state、truth RMSE |
-| M05 | disturbance detection | commandにないCP/Center熱負荷 | sensor故障でない物理外乱の検出 | normalized residual、遅れ |
+| M01 | baseline | sensor noise 0.15 Kのみ | 正常時innovationの基準幅 | innovation RMSE、NIS |
+| M02 | bias tracking | 初期0から緩やかなsensor drift | sensor間のslow drift分離 | zero-mean sensor bias RMSE |
+| M03 | fault detection | CP sensorへ+3 Kのstep offset | 突発異常の検出とsensor局在 | NIS遅れ、first-alert sensor |
+| M04 | missing data | Center/edgeの時間窓欠測 | 残sensorと熱結合による継続 | finite posterior、truth RMSE |
+| M05 | disturbance detection | commandにないCP/Center熱負荷 | sensor故障でない物理外乱の帰属 | NIS遅れ、unknown heat |
 
-絶対sensor offsetは、開始時に独立な基準温度がなければ`physical temperature + bias`から一意に
-分離できません。そのためM02は初期biasを0とし、その後の変化を評価します。実機で絶対biasが
-必要なら、校正点、冗長sensor、既知平衡条件のいずれかが必要です。
+このbenchmarkには校正済みsensorがないため、sensor biasは零平均gaugeです。M02は初期biasを0とし、
+truth biasから共通成分を除いてその後の変化を評価します。絶対biasが必要な設備では、校正済み
+sensorを`bias_reference`へ明示します。
 
-M05ではfiltered temperatureがtruthへ一致することを要求しません。モデルに存在しない熱源を
-既知状態へ吸収するより、normalized innovationで異常を検出することが正しい目的です。
+M05ではNISによる検出に加え、既知source分布上のunknown heatが増え、sensor biasへ外乱が
+流出しないことを評価します。
 
 ## 5. Truthとmodel mismatch
 
@@ -82,7 +83,7 @@ brine boundary h = 0.030
 ambient boundary h = 0.004
 ```
 
-truth generatorは区間内actuator midpointとforward Euler、modelは解析actuator更新とexact thermal
+truth generatorは区間内actuator midpointとforward Euler、modelは温度・actuator結合系のexact
 integrationを使うため、完全に同一の離散モデルではありません。F11だけはambient conductanceを
 温度依存にし、現在のmodel classでは表現できない構造差を意図的に加えます。
 
@@ -90,10 +91,11 @@ integrationを使うため、完全に同一の離散モデルではありませ
 
 `evaluate_benchmark.py`は以下を判定します。
 
-- F01–F10がすべて有限。
-- F01–F10のcase平均RMSEが`1.0 K`未満。
-- F01–F10のworst-case RMSEが`1.5 K`未満。
-- F01–F10の平均RMSEが未学習engineering priorを下回る。
+- F01–F10およびF12がすべて有限。
+- F01–F10およびF12のcase平均RMSEが`1.0 K`未満。
+- F01–F10およびF12のworst-case RMSEが`1.5 K`未満。
+- F01–F10およびF12の平均RMSEが未学習engineering priorを下回る。
+- F12のorigin以後RMSEが、同じ初期状態・sensor組合せを時刻0だけ与えるF09の25%未満。
 - F11のRMSEが`max(0.5 K, core平均の2倍)`を上回り、model gapが可視化される。
 - M01 residual RMSEが`0.35 K`未満。
 - M02 filtered physical temperatureがraw measurementよりtruthへ近い。
@@ -112,7 +114,7 @@ parameter recoveryは副指標です。係数間に相関があっても外部�
 
 - 実機、実材料、実CAE solverに対する精度。
 - 放射、相変化、温度依存物性を含む非線形系の予測精度。
-- 外部基準なしの絶対sensor offset分離。
+- 外部基準なしの全sensor共通offset分離（原理的に識別不能）。
 - parameter uncertaintyを含む予測区間のcoverage。
 - 隠れnode topologyの同定性能。engineの観測写像・hidden-state更新はunit testで確認しているが、
   本benchmarkは4 sensor / 4 nodeの係数・予測・監視問題に限定する。

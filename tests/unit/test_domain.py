@@ -10,7 +10,11 @@ import pytest
 from celltemp.domain import (
     ActuatorSpec,
     BoundarySpec,
+    ConstantLawSpec,
     EdgeSpec,
+    PositivePartLawSpec,
+    PowerLawSpec,
+    ReservoirTemperatureSpec,
     SourceSpec,
     ThermalSystemSpec,
     Trajectory,
@@ -92,7 +96,10 @@ def test_observation_mapping_is_independent_of_state_nodes() -> None:
     spec = ThermalSystemSpec(
         node_names=("hot", "middle", "edge"),
         heat_capacity=(1.0, 2.0, 3.0),
-        edges=(EdgeSpec("hot", "middle", 0.5), EdgeSpec("middle", "edge", 0.25)),
+        edges=(
+            EdgeSpec("hot", "middle", ConstantLawSpec(0.5)),
+            EdgeSpec("middle", "edge", ConstantLawSpec(0.25)),
+        ),
         actuators=(ActuatorSpec("heater", tau=5.0),),
         sensor_names=("middle_sensor", "edge_sensor"),
         sensor_nodes=("middle", "edge"),
@@ -108,7 +115,10 @@ def test_duplicate_reverse_edge_is_rejected() -> None:
         ThermalSystemSpec(
             node_names=("a", "b"),
             heat_capacity=(1.0, 1.0),
-            edges=(EdgeSpec("a", "b", 1.0), EdgeSpec("b", "a", 1.0)),
+            edges=(
+                EdgeSpec("a", "b", ConstantLawSpec(1.0)),
+                EdgeSpec("b", "a", ConstantLawSpec(1.0)),
+            ),
             actuators=(),
         )
 
@@ -116,16 +126,22 @@ def test_duplicate_reverse_edge_is_rejected() -> None:
 @pytest.mark.parametrize(
     "factory",
     [
-        lambda: EdgeSpec("a", "a", 1.0),
-        lambda: EdgeSpec("a", "b", 0.0),
+        lambda: EdgeSpec("a", "a", ConstantLawSpec(1.0)),
+        lambda: ConstantLawSpec(0.0),
         lambda: ActuatorSpec("", 1.0),
         lambda: ActuatorSpec("power", -1.0),
-        lambda: SourceSpec("source", "power", (1.0,), -1.0),
-        lambda: SourceSpec("source", "power", (-1.0,), 1.0),
-        lambda: SourceSpec("source", "power", (1.0,), 0.0),
-        lambda: SourceSpec("source", "power", (1.0,), 1.0, threshold=np.inf),
-        lambda: BoundarySpec("ambient", (-1.0,), 1.0, 20.0),
-        lambda: BoundarySpec("ambient", (1.0,), 0.0, 20.0),
+        lambda: PositivePartLawSpec("power", -1.0),
+        lambda: SourceSpec("source", (-1.0,), PositivePartLawSpec("power", 1.0)),
+        lambda: PositivePartLawSpec("power", 0.0),
+        lambda: PositivePartLawSpec("power", 1.0, threshold=np.inf),
+        lambda: BoundarySpec(
+            "ambient",
+            (-1.0,),
+            ReservoirTemperatureSpec(20.0),
+            ConstantLawSpec(1.0),
+        ),
+        lambda: ReservoirTemperatureSpec(20.0, slope=1.0),
+        lambda: PowerLawSpec("flow", 0.0, 0.1, 1.0, 0.8),
     ],
 )
 def test_component_specs_reject_nonphysical_values(factory: Callable[[], object]) -> None:
@@ -137,25 +153,49 @@ def test_system_rejects_unknown_references_and_bad_capacity() -> None:
     with pytest.raises(ValueError, match="heat_capacity"):
         ThermalSystemSpec(("a",), (0.0,), (), ())
     with pytest.raises(ValueError, match="unknown node"):
-        ThermalSystemSpec(("a",), (1.0,), (EdgeSpec("a", "b", 1.0),), ())
+        ThermalSystemSpec(("a",), (1.0,), (EdgeSpec("a", "b", ConstantLawSpec(1.0)),), ())
     with pytest.raises(ValueError, match="unknown actuator"):
         ThermalSystemSpec(
             ("a",),
             (1.0,),
             (),
             (),
-            sources=(SourceSpec("heat", "missing", (1.0,), 1.0),),
+            sources=(SourceSpec("heat", (1.0,), PositivePartLawSpec("missing", 1.0)),),
         )
 
 
 def test_system_rejects_duplicate_source_names() -> None:
     actuator = ActuatorSpec("power", 0.0, learnable=False)
-    source = SourceSpec("heat", "power", (1.0,), 1.0)
+    source = SourceSpec("heat", (1.0,), PositivePartLawSpec("power", 1.0))
     with pytest.raises(ValueError, match="source names must be unique"):
         ThermalSystemSpec(("node",), (1.0,), (), (actuator,), sources=(source, source))
 
 
 def test_system_rejects_duplicate_boundary_names() -> None:
-    boundary = BoundarySpec("ambient", (1.0,), 1.0, 20.0)
+    boundary = BoundarySpec(
+        "ambient",
+        (1.0,),
+        ReservoirTemperatureSpec(20.0),
+        ConstantLawSpec(1.0),
+    )
     with pytest.raises(ValueError, match="boundary names must be unique"):
         ThermalSystemSpec(("node",), (1.0,), (), (), boundaries=(boundary, boundary))
+
+
+def test_input_dependent_conductance_validates_only_domain_references() -> None:
+    boundary = BoundarySpec(
+        "cooling",
+        (1.0,),
+        ReservoirTemperatureSpec(20.0),
+        PowerLawSpec("flow", 1.0, 0.1, 0.5, 0.8),
+    )
+    with pytest.raises(ValueError, match="unknown actuator"):
+        ThermalSystemSpec(("node",), (1.0,), (), (), boundaries=(boundary,))
+    spec = ThermalSystemSpec(
+        ("node",),
+        (1.0,),
+        (),
+        (ActuatorSpec("flow", tau=1.0),),
+        boundaries=(boundary,),
+    )
+    assert spec.boundaries == (boundary,)

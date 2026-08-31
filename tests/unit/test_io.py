@@ -16,18 +16,46 @@ from celltemp.io import (
 
 def _system_mapping() -> dict:
     return {
+        "version": 3,
         "nodes": [
             {"name": "shell", "heat_capacity": 2.0},
             {"name": "core", "heat_capacity": 5.0},
         ],
-        "actuators": [{"name": "heater", "tau": 3.0}],
-        "edges": [{"nodes": ["shell", "core"], "conductance": 0.4}],
+        "actuators": [
+            {"name": "heater", "tau": 3.0},
+            {"name": "flow", "tau": 0.0, "learnable": False},
+        ],
+        "edges": [
+            {
+                "nodes": ["shell", "core"],
+                "conductance": {"type": "constant", "value": 0.4},
+            }
+        ],
         "sources": [
             {
                 "name": "heater_power",
-                "actuator": "heater",
                 "node_weights": {"core": 1.0},
-                "gain": 0.2,
+                "heat_rate": {
+                    "type": "positive_part",
+                    "control": "heater",
+                    "gain": 0.2,
+                },
+            }
+        ],
+        "boundaries": [
+            {
+                "name": "air",
+                "node_weights": {"shell": 1.0},
+                "reservoir_temperature": {"intercept": 20.0},
+                "conductance": {
+                    "type": "power_law",
+                    "control": "flow",
+                    "reference": 1.0,
+                    "offset": 0.1,
+                    "scale": 0.4,
+                    "exponent": 0.8,
+                    "exponent_learnable": True,
+                },
             }
         ],
         "sensors": [{"name": "tc_core", "node": "core"}],
@@ -82,8 +110,8 @@ def test_system_loader_rejects_unknown_weight_node_and_non_mapping_root(tmp_path
 
 
 def test_system_loader_rejects_unknown_schema_version() -> None:
-    mapping = {**_system_mapping(), "version": 2}
-    with pytest.raises(ValueError, match="unsupported system schema version 2"):
+    mapping = {**_system_mapping(), "version": 99}
+    with pytest.raises(ValueError, match="unsupported system schema version 99"):
         system_spec_from_mapping(mapping)
 
 
