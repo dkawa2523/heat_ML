@@ -22,6 +22,7 @@ class NonlinearCase:
     inlet_air_velocity: np.ndarray
     hidden_power: np.ndarray
     effective_air_velocity: np.ndarray
+    reference_case_id: str | None = None
 
     @property
     def radiation_enabled(self) -> bool:
@@ -395,6 +396,7 @@ def _radiation_cases(base: list[NonlinearCase]) -> list[NonlinearCase]:
             group="radiation",
             purpose=purpose,
             fidelity="conjugate_laminar_radiation",
+            reference_case_id=source_id,
         )
         for case_id, source_id, purpose in definitions
     ]
@@ -453,5 +455,6 @@ def high_fidelity_cases() -> list[NonlinearCase]:
         role="model_gap",
         purpose="Measure radiation-only model gap for the identical composite transient.",
         fidelity="conjugate_laminar_radiation",
+        reference_case_id=base.case_id,
     )
     return [base, radiation]

@@ -41,7 +41,7 @@ _DATA_OPTIONS = {
     "temp_min",
     "time_col",
 }
-_SPLIT_OPTIONS = {"group_by_controls", "method", "table", "train_ratio", "val_ratio"}
+_SPLIT_OPTIONS = {"method", "table", "train_ratio", "val_ratio"}
 
 
 def _rollout_errors(

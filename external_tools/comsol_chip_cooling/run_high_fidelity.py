@@ -6,9 +6,9 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+from comsol_runtime import select_comsol
 from nonlinear_cases import high_fidelity_cases
-from run import select_comsol
-from run_nonlinear import build_dataset, compile_runner
+from run_nonlinear import JAVA_SOURCE, build_dataset
 from summarize_high_fidelity import summarize
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -46,13 +46,12 @@ def main() -> int:
     evidence_root = args.evidence_root.resolve()
     if not args.allow_unqualified:
         _require_qualified(args.mesh_profile, evidence_root)
-    root, batch, compiler, source_model = select_comsol(args.comsol_root)
-    print(f"Using COMSOL: {root}", flush=True)
-    compile_runner(compiler)
+    runtime = select_comsol(args.comsol_root)
+    print(f"Using COMSOL: {runtime.root}", flush=True)
+    runtime.compile(JAVA_SOURCE)
     summary = build_dataset(
         high_fidelity_cases(),
-        batch=batch,
-        source_model=source_model,
+        runtime=runtime,
         data_root=args.data_root.resolve(),
         mesh_profile=args.mesh_profile,
         reuse_raw=args.reuse_raw,

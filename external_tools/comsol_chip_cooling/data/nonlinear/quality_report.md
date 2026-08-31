@@ -46,7 +46,7 @@
 実測値は平均0.0073 K、標準偏差0.1528 Kで、設定0.15 Kと整合しました。未指令発熱はNM02だけ、
 指令と実効流速の差はNM03だけに存在し、公開command自体には非公開異常を混入していません。
 
-## メッシュ感度
+## 旧global mesh確認と現在の扱い
 
 代表NT01の900秒時点は次のとおりです。COMSOLのmesh size levelは数値が小さいほど細かい設定です。
 
@@ -57,8 +57,9 @@
 | 7 | 74.142 degC | 0.014537 Pa |
 
 level 9→8のchip差は+1.510 K、level 8→7は+2.511 Kです。level 8→7の圧力差は13.2%低下し、
-収束傾向を確認できません。全ケースを単純に細分化するのではなく、fin間流路、wall boundary layer、
-chip/contact近傍のメッシュを設計して再収束確認することが、絶対値を使う前の必須作業です。
+収束傾向を確認できません。このglobal level比較を再生成する旧後処理は退役させ、現在の判定経路は
+fin間流路、wall boundary layer、chip/contact近傍を明示した`nonlinear_high_fidelity/`の局所mesh
+収束評価へ一本化しています。本表はmedium-fidelityデータをscreening用途に限定した根拠として残します。
 
 ## 放射model-gap
 

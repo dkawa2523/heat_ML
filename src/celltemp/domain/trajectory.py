@@ -106,6 +106,22 @@ class Trajectory:
         """The validated non-optional observation mask."""
         return cast(np.ndarray, self.observation_mask)
 
+    def require_layout(
+        self,
+        sensor_names: tuple[str, ...],
+        control_names: tuple[str, ...],
+    ) -> None:
+        """Require the same ordered sensor/control layout as a thermal system."""
+        if self.sensor_names != sensor_names:
+            raise ValueError(
+                f"trajectory sensors {self.sensor_names} do not match system sensors {sensor_names}"
+            )
+        if self.control_names != control_names:
+            raise ValueError(
+                f"trajectory controls {self.control_names} do not match system controls "
+                f"{control_names}"
+            )
+
     @classmethod
     def from_sampled_controls(
         cls,

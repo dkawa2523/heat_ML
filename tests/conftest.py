@@ -170,7 +170,6 @@ def train_config() -> dict:
         },
         "split": {
             "method": "random",
-            "group_by_controls": True,
             "train_ratio": 0.70,
             "val_ratio": 0.15,
         },

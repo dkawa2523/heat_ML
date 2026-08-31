@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import argparse
 import base64
-import os
-import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
 from cases import Case, all_cases
+from comsol_runtime import ComsolRuntime, select_comsol
 from dataset import (
     forecast_frame,
     monitor_frames,
@@ -26,76 +25,7 @@ TOOL_ROOT = Path(__file__).resolve().parent
 JAVA_SOURCE = TOOL_ROOT / "comsol" / "RunChipCoolingCase.java"
 JAVA_CLASS = JAVA_SOURCE.with_suffix(".class")
 WORK_ROOT = TOOL_ROOT / "work"
-APPLICATION_MODEL = Path(
-    "applications/Heat_Transfer_Module/Tutorials,_Forced_and_Natural_Convection/chip_cooling.mph"
-)
 MODEL_CASE = "T03_power_step_8w"
-
-
-def _candidate_roots(explicit: str | None) -> list[Path]:
-    candidates: list[Path] = []
-    for value in (explicit, os.getenv("COMSOL_ROOT")):
-        if value:
-            candidates.append(Path(value))
-    program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
-    install_parent = program_files / "COMSOL" / "COMSOL64"
-    candidates.extend([install_parent / "Multiphysics_copy1", install_parent / "Multiphysics"])
-    if install_parent.is_dir():
-        candidates.extend(sorted(install_parent.glob("Multiphysics*"), reverse=True))
-    unique: list[Path] = []
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        if resolved not in unique:
-            unique.append(resolved)
-    return unique
-
-
-def _executables(root: Path) -> tuple[Path, Path, Path]:
-    binary = root / "bin" / "win64"
-    return binary / "comsolbatch.exe", binary / "comsolcompile.exe", root / APPLICATION_MODEL
-
-
-def select_comsol(explicit: str | None) -> tuple[Path, Path, Path, Path]:
-    """Select an installation that can check out the required Heat Transfer license."""
-    failures: list[str] = []
-    for root in _candidate_roots(explicit):
-        batch, compiler, source_model = _executables(root)
-        if not (batch.is_file() and compiler.is_file() and source_model.is_file()):
-            continue
-        result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-            [str(batch), "-checklicense", str(source_model)],
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        output = f"{result.stdout}\n{result.stderr}"
-        if result.returncode == 0 and "HEATTRANSFER" in output and "Error" not in output:
-            return root, batch, compiler, source_model
-        failures.append(f"{root}: {output.strip()[-300:]}")
-    detail = "\n".join(failures) if failures else "no complete COMSOL installation found"
-    raise RuntimeError(f"No usable COMSOL Heat Transfer license was found.\n{detail}")
-
-
-def compile_runner(compiler: Path) -> None:
-    result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-        [str(compiler), str(JAVA_SOURCE)],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    output = f"{result.stdout}\n{result.stderr}"
-    failed = (
-        result.returncode != 0
-        or not JAVA_CLASS.is_file()
-        or "Failed to compile" in output
-        or "Compilation error" in output
-    )
-    if failed:
-        raise RuntimeError(f"COMSOL Java compilation failed:\n{result.stdout}\n{result.stderr}")
 
 
 def _case_paths(case: Case) -> tuple[Path, Path, Path]:
@@ -109,8 +39,7 @@ def _case_paths(case: Case) -> tuple[Path, Path, Path]:
 def solve_case(
     case: Case,
     *,
-    batch: Path,
-    source_model: Path,
+    runtime: ComsolRuntime,
     reuse_raw: bool,
 ) -> pd.DataFrame:
     schedule_path, raw_path, log_path = _case_paths(case)
@@ -129,32 +58,13 @@ def solve_case(
         model_path = WORK_ROOT / "models" / "electronic_chip_cooling_dataset.mph"
         model_path.parent.mkdir(parents=True, exist_ok=True)
         model_output = str(model_path)
-    command = [
-        str(batch),
-        "-inputfile",
-        str(JAVA_CLASS),
-        str(source_model),
-        encoded,
-        str(raw_path),
-        model_output,
-        "-nosave",
-    ]
-    result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+    runtime.run_java(
+        JAVA_CLASS,
+        [runtime.source_model, encoded, raw_path, model_output],
+        log_path=log_path,
+        expected_output=raw_path,
+        label=f"case {case.case_id}",
     )
-    output = f"{result.stdout}\n{result.stderr}"
-    log_path.write_text(output, encoding="utf-8")
-    failed = (
-        result.returncode != 0 or "Error running java class" in output or not raw_path.is_file()
-    )
-    if failed:
-        tail = "\n".join(output.splitlines()[-80:])
-        raise RuntimeError(f"COMSOL case {case.case_id} failed. See {log_path}.\n{tail}")
     return parse_comsol_table(raw_path, case)
 
 
@@ -188,8 +98,7 @@ def _write_checked(
 def build_dataset(
     cases: list[Case],
     *,
-    batch: Path,
-    source_model: Path,
+    runtime: ComsolRuntime,
     data_root: Path,
     reuse_raw: bool,
     overwrite: bool,
@@ -198,7 +107,7 @@ def build_dataset(
     monitor_truth: dict[str, pd.DataFrame] = {}
     for index, case in enumerate(cases, start=1):
         print(f"[{index:02d}/{len(cases):02d}] {case.case_id}: {case.purpose}", flush=True)
-        raw = solve_case(case, batch=batch, source_model=source_model, reuse_raw=reuse_raw)
+        raw = solve_case(case, runtime=runtime, reuse_raw=reuse_raw)
         truth = truth_frame(raw, case)
         if case.role == "train":
             summary = _write_checked(
@@ -277,14 +186,13 @@ def main(argv: list[str] | None = None) -> int:
         missing = requested - {case.case_id for case in selected}
         if missing:
             raise ValueError(f"unknown case IDs: {sorted(missing)}")
-    root, batch, compiler, source_model = select_comsol(args.comsol_root)
-    print(f"Using COMSOL: {root}", flush=True)
-    print(f"Source model: {source_model}", flush=True)
-    compile_runner(compiler)
+    runtime = select_comsol(args.comsol_root)
+    print(f"Using COMSOL: {runtime.root}", flush=True)
+    print(f"Source model: {runtime.source_model}", flush=True)
+    runtime.compile(JAVA_SOURCE)
     summary = build_dataset(
         selected,
-        batch=batch,
-        source_model=source_model,
+        runtime=runtime,
         data_root=args.data_root.resolve(),
         reuse_raw=args.reuse_raw,
         overwrite=args.overwrite,

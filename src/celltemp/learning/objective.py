@@ -9,23 +9,10 @@ from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 
 
-def _check_names(model: ThermalRCModel, trajectory: Trajectory) -> None:
-    if trajectory.sensor_names != model.spec.sensor_names:
-        raise ValueError(
-            f"trajectory sensors {trajectory.sensor_names} do not match "
-            f"system sensors {model.spec.sensor_names}"
-        )
-    if trajectory.control_names != model.spec.control_names:
-        raise ValueError(
-            f"trajectory controls {trajectory.control_names} do not match "
-            f"system controls {model.spec.control_names}"
-        )
-
-
 def trajectory_tensors(
     model: ThermalRCModel, trajectory: Trajectory
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    _check_names(model, trajectory)
+    trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
     device = model.capacity.device
     dtype = model.capacity.dtype
     temperature = torch.tensor(trajectory.temperature.copy(), dtype=dtype, device=device)

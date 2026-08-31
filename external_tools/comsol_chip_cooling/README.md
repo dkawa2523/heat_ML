@@ -92,8 +92,7 @@ data/nonlinear/
   eval/monitor/            3 physical-disturbance cases
   eval/model_gap/          5 paired radiation cases
   qa_summary.csv           generated QA evidence
-  mesh_sensitivity.csv     NT01のmesh 7/8/9比較
-  radiation_pairs.csv      放射あり/なしのpaired差分
+  radiation_pairs.csv      全ケース生成時に更新する放射あり/なしのpaired差分
   quality_report.md        品質判定と利用可能範囲
 data/nonlinear_high_fidelity/
   mesh/                    global/local meshの構造と品質

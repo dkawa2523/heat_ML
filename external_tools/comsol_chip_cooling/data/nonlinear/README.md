@@ -10,7 +10,6 @@ eval/forecast/           9 open-loop trajectories
 eval/monitor/            3 causal-monitor trajectories
 eval/model_gap/          5 radiation trajectories
 qa_summary.csv           1 row per trajectory
-mesh_sensitivity.csv     NT01 at mesh levels 7, 8, and 9
 radiation_pairs.csv      paired radiation-minus-base effects
 quality_report.md        dataset-level QA findings and use boundary
 ```
@@ -34,6 +33,7 @@ trainingは全観測を持ちます。forecastとmodel-gapは初期行だけ観�
 `[t[k], t[k+1])`へ適用するleft zero-order holdです。公開データはmesh level 8で、mesh independenceは
 成立していません。本データはモデル評価・screening用であり、製品の設計保証値には使いません。
 
-局所meshによる収束評価と実験受入境界は、別用途として
+旧global mesh level比較は局所解像度を評価できないため公開後処理から退役させました。現在のmesh収束
+評価と実験受入境界は、別用途として
 [`../../docs/high_fidelity_validation.md`](../../docs/high_fidelity_validation.md)および
 `../nonlinear_high_fidelity/`へ分離しています。元の27 trajectoryを高忠実度に見せかけて置換しません。

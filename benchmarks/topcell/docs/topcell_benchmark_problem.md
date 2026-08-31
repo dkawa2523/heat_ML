@@ -25,7 +25,7 @@ benchmarkは次を別々に評価します。
 
 複合recipe、短周期pulse、範囲外level、sensor faultは学習へ入れません。学習run内のrandom splitは
 early selection用であり、最終的な汎化根拠には使用しません。同じcommand履歴で初期温度だけが
-異なる軌道は`group_by_controls`により同じ内部splitへ入ります。
+異なる軌道は常に同じ内部splitへ入ります。漏洩防止を無効化する設定はありません。
 
 ## 3. 外部forecastケース
 

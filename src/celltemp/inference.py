@@ -45,13 +45,6 @@ def _model_tensor(model: ThermalRCModel, values: np.ndarray) -> torch.Tensor:
     )
 
 
-def _validate_names(model: ThermalRCModel, trajectory: Trajectory) -> None:
-    if trajectory.sensor_names != model.spec.sensor_names:
-        raise ValueError("trajectory sensors do not match the system definition")
-    if trajectory.control_names != model.spec.control_names:
-        raise ValueError("trajectory controls do not match the system definition")
-
-
 def sensor_bias_in_gauge(
     sensor_bias: np.ndarray,
     sensor_names: tuple[str, ...],
@@ -126,7 +119,7 @@ def estimate_state(
     deliberately contains only node temperature and effective actuator; transient
     disturbance and sensor-bias estimates are not assumptions about the future.
     """
-    _validate_names(model, trajectory)
+    trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
     final_index = len(trajectory.time) - 1 if through_index is None else through_index
     if not 0 <= final_index < len(trajectory.time):
         raise ValueError("through_index is outside the trajectory")
@@ -158,7 +151,6 @@ def forecast(
     observer: KalmanObserver | None = None,
 ) -> ForecastResult:
     """Estimate the history endpoint, then roll out the unobserved future open-loop."""
-    _validate_names(model, trajectory)
     origin = forecast_origin_index(trajectory.mask)
     initial_state = estimate_state(
         model,
@@ -201,7 +193,7 @@ def monitor(
     a calibrated sensor name fixes that sensor's bias to zero and anchors all
     remaining sensor offsets to it.
     """
-    _validate_names(model, trajectory)
+    trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
     observed = _model_tensor(model, trajectory.temperature)
     commands = _model_tensor(model, trajectory.commands)
     dt = _model_tensor(model, trajectory.dt)

@@ -315,6 +315,69 @@ def validate_dataset_frame(frame: pd.DataFrame, role: str, case_id: str) -> dict
     }
 
 
+def published_path(data_root: Path, case: NonlinearCase) -> Path:
+    """Return the self-contained CSV location for one published case."""
+    directories = {
+        "train": data_root / "train",
+        "forecast": data_root / "eval" / "forecast",
+        "monitor": data_root / "eval" / "monitor",
+        "model_gap": data_root / "eval" / "model_gap",
+    }
+    try:
+        return directories[case.role] / f"{case.case_id}.csv"
+    except KeyError as error:
+        raise ValueError(f"unsupported nonlinear dataset role: {case.role}") from error
+
+
+def _published_truth(frame: pd.DataFrame, sensor: str) -> pd.Series:
+    column = f"truth_{sensor}"
+    return frame[column] if column in frame else frame[sensor]
+
+
+def radiation_pair_summary(cases: list[NonlinearCase], data_root: Path) -> pd.DataFrame:
+    """Summarize each radiation case against the base case recorded in its definition."""
+    by_id = {case.case_id: case for case in cases}
+    controls = ["time", *CONTROLS]
+    rows: list[dict[str, float | int | str]] = []
+    for radiation_case in cases:
+        base_id = radiation_case.reference_case_id
+        if base_id is None:
+            continue
+        if base_id not in by_id:
+            raise ValueError(f"{radiation_case.case_id}: unknown reference case {base_id}")
+        base_case = by_id[base_id]
+        radiation = pd.read_csv(published_path(data_root, radiation_case))
+        base = pd.read_csv(published_path(data_root, base_case))
+        if len(radiation) != len(base) or not np.allclose(
+            radiation[controls].to_numpy(dtype=np.float64),
+            base[controls].to_numpy(dtype=np.float64),
+            atol=1e-12,
+            equal_nan=True,
+        ):
+            raise ValueError(f"{radiation_case.case_id}: radiation/base controls do not match")
+
+        chip_delta = _published_truth(radiation, "chip") - _published_truth(base, "chip")
+        peak_delta = radiation["truth_chip_max"] - base["truth_chip_max"]
+        rows.append(
+            {
+                "radiation_case_id": radiation_case.case_id,
+                "base_case_id": base_id,
+                "rows": len(radiation),
+                "chip_delta_final_c": float(chip_delta.iloc[-1]),
+                "chip_delta_min_c": float(chip_delta.min()),
+                "chip_delta_max_c": float(chip_delta.max()),
+                "chip_peak_delta_final_c": float(peak_delta.iloc[-1]),
+                "radiative_heat_rate_max_abs_w": float(
+                    radiation["truth_radiative_heat_rate"].abs().max()
+                ),
+                "radiative_heat_rate_final_w": float(
+                    radiation["truth_radiative_heat_rate"].iloc[-1]
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def write_csv(frame: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False, float_format="%.10g")

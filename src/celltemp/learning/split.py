@@ -19,11 +19,8 @@ def _control_key(trajectory: Trajectory) -> tuple[tuple[int, ...], bytes, bytes]
     return commands.shape, dt.tobytes(), commands.tobytes()
 
 
-def _groups(
-    trajectories: Sequence[Trajectory], *, group_by_controls: bool
-) -> list[list[Trajectory]]:
-    if not group_by_controls:
-        return [[trajectory] for trajectory in trajectories]
+def _control_groups(trajectories: Sequence[Trajectory]) -> list[list[Trajectory]]:
+    """Keep repeated runs of one recipe in the same evaluation partition."""
     grouped: dict[tuple[tuple[int, ...], bytes, bytes], list[Trajectory]] = {}
     for trajectory in trajectories:
         grouped.setdefault(_control_key(trajectory), []).append(trajectory)
@@ -33,10 +30,7 @@ def _groups(
 def _random_split(
     trajectories: Sequence[Trajectory], split_cfg: Mapping[str, object], seed: int
 ) -> Split:
-    groups = _groups(
-        trajectories,
-        group_by_controls=bool(split_cfg.get("group_by_controls", True)),
-    )
+    groups = _control_groups(trajectories)
     order = np.arange(len(groups))
     np.random.default_rng(seed).shuffle(order)
     shuffled = [groups[index] for index in order]

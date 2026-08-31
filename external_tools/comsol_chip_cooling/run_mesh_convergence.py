@@ -9,13 +9,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from comsol_runtime import select_comsol
 from nonlinear_cases import NonlinearCase, mesh_convergence_cases
 from nonlinear_dataset import truth_frame
-from run import select_comsol
 from run_nonlinear import (
+    JAVA_SOURCE,
     MESH_PROFILES,
     _case_paths,
-    compile_runner,
     inspect_mesh,
     solve_stationary_case,
 )
@@ -215,16 +215,15 @@ def main() -> int:
         if missing:
             raise ValueError(f"unknown mesh-convergence case IDs: {sorted(missing)}")
 
-    _, batch, compiler, source_model = select_comsol(args.comsol_root)
-    compile_runner(compiler)
+    runtime = select_comsol(args.comsol_root)
+    runtime.compile(JAVA_SOURCE)
     data_root = args.data_root.resolve()
     rows: list[dict[str, object]] = []
     for profile in profiles:
         mesh_path = data_root / "mesh" / f"{profile}.csv"
         if args.overwrite_mesh or not mesh_path.is_file():
             inspect_mesh(
-                batch=batch,
-                source_model=source_model,
+                runtime=runtime,
                 mesh_profile=profile,
                 data_root=data_root,
             )
@@ -232,8 +231,7 @@ def main() -> int:
             print(f"{profile}: {case.case_id}", flush=True)
             raw = solve_stationary_case(
                 case,
-                batch=batch,
-                source_model=source_model,
+                runtime=runtime,
                 mesh_profile=profile,
                 reuse_raw=args.reuse_raw,
             )

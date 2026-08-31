@@ -17,7 +17,6 @@ data:
 
 split:
   method: random
-  group_by_controls: true
   train_ratio: 0.75
   val_ratio: 0.125
 

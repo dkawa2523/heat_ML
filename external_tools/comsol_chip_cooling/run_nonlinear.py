@@ -12,19 +12,21 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from comsol_runtime import ComsolRuntime, select_comsol
 from nonlinear_cases import NonlinearCase, all_nonlinear_cases
 from nonlinear_dataset import (
     forecast_frame,
     monitor_frame,
     parse_comsol_table,
     parse_stationary_comsol_table,
+    published_path,
+    radiation_pair_summary,
     schedule_frame,
     training_frame,
     truth_frame,
     validate_dataset_frame,
     write_csv,
 )
-from run import select_comsol
 
 TOOL_ROOT = Path(__file__).resolve().parent
 JAVA_SOURCE = TOOL_ROOT / "comsol" / "RunChipCoolingNonlinearCase.java"
@@ -44,26 +46,6 @@ MESH_PROFILES = tuple(
 )
 
 
-def compile_runner(compiler: Path) -> None:
-    result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-        [str(compiler), str(JAVA_SOURCE)],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    output = f"{result.stdout}\n{result.stderr}"
-    failed = (
-        result.returncode != 0
-        or not JAVA_CLASS.is_file()
-        or "Failed to compile" in output
-        or "Compilation error" in output
-    )
-    if failed:
-        raise RuntimeError(f"COMSOL Java compilation failed:\n{result.stdout}\n{result.stderr}")
-
-
 def _mesh_root(mesh_profile: str) -> Path:
     suffix = mesh_profile.removeprefix("global-").replace("-", "_")
     return WORK_ROOT / f"mesh_{suffix}"
@@ -81,8 +63,7 @@ def _case_paths(case: NonlinearCase, mesh_profile: str) -> tuple[Path, Path, Pat
 def solve_case(
     case: NonlinearCase,
     *,
-    batch: Path,
-    source_model: Path,
+    runtime: ComsolRuntime,
     mesh_profile: str,
     reuse_raw: bool,
 ) -> pd.DataFrame:
@@ -102,41 +83,20 @@ def solve_case(
         model_path = _mesh_root(mesh_profile) / "models" / SAVED_MODEL_CASES[case.case_id]
         model_path.parent.mkdir(parents=True, exist_ok=True)
         model_output = str(model_path)
-    command = [
-        str(batch),
-        "-inputfile",
-        str(JAVA_CLASS),
-        str(source_model),
-        encoded,
-        str(raw_path),
-        model_output,
-        mesh_profile,
-        "-nosave",
-    ]
-    result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+    runtime.run_java(
+        JAVA_CLASS,
+        [runtime.source_model, encoded, raw_path, model_output, mesh_profile],
+        log_path=log_path,
+        expected_output=raw_path,
+        label=f"case {case.case_id}",
     )
-    output = f"{result.stdout}\n{result.stderr}"
-    log_path.write_text(output, encoding="utf-8")
-    failed = (
-        result.returncode != 0 or "Error running java class" in output or not raw_path.is_file()
-    )
-    if failed:
-        tail = "\n".join(output.splitlines()[-100:])
-        raise RuntimeError(f"COMSOL case {case.case_id} failed. See {log_path}.\n{tail}")
     return parse_comsol_table(raw_path, case)
 
 
 def solve_stationary_case(
     case: NonlinearCase,
     *,
-    batch: Path,
-    source_model: Path,
+    runtime: ComsolRuntime,
     mesh_profile: str,
     reuse_raw: bool,
 ) -> pd.DataFrame:
@@ -152,57 +112,24 @@ def solve_stationary_case(
         raw_path.unlink()
 
     encoded = base64.b64encode(schedule.to_csv(index=False).encode("utf-8")).decode("ascii")
-    command = [
-        str(batch),
-        "-inputfile",
-        str(JAVA_CLASS),
-        "steady-only",
-        str(source_model),
-        encoded,
-        str(raw_path),
-        mesh_profile,
-        "-nosave",
-    ]
-    result = subprocess.run(  # noqa: S603 - resolved trusted local executable
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+    runtime.run_java(
+        JAVA_CLASS,
+        ["steady-only", runtime.source_model, encoded, raw_path, mesh_profile],
+        log_path=log_path,
+        expected_output=raw_path,
+        label=f"stationary case {case.case_id}",
     )
-    output = f"{result.stdout}\n{result.stderr}"
-    log_path.write_text(output, encoding="utf-8")
-    failed = (
-        result.returncode != 0 or "Error running java class" in output or not raw_path.is_file()
-    )
-    if failed:
-        tail = "\n".join(output.splitlines()[-100:])
-        raise RuntimeError(f"COMSOL case {case.case_id} failed. See {log_path}.\n{tail}")
     return parse_stationary_comsol_table(raw_path, case)
-
-
-def _target_path(data_root: Path, role: str, case_id: str) -> Path:
-    destinations = {
-        "train": data_root / "train",
-        "forecast": data_root / "eval" / "forecast",
-        "monitor": data_root / "eval" / "monitor",
-        "model_gap": data_root / "eval" / "model_gap",
-    }
-    try:
-        return destinations[role] / f"{case_id}.csv"
-    except KeyError as error:
-        raise ValueError(f"unsupported nonlinear dataset role: {role}") from error
 
 
 def prune_obsolete_case_files(cases: list[NonlinearCase], *, data_root: Path) -> list[Path]:
     """Remove obsolete published CSVs without deleting reusable COMSOL evidence."""
     removed: list[Path] = []
     for case in cases:
-        _target_path(data_root, case.role, case.case_id).parent.mkdir(parents=True, exist_ok=True)
+        published_path(data_root, case).parent.mkdir(parents=True, exist_ok=True)
     expected_by_directory: dict[Path, set[str]] = {}
     for case in cases:
-        directory = _target_path(data_root, case.role, case.case_id).parent
+        directory = published_path(data_root, case).parent
         expected_by_directory.setdefault(directory, set()).add(case.case_id)
     for directory, expected_ids in expected_by_directory.items():
         for path in directory.glob("*.csv"):
@@ -226,8 +153,7 @@ def _publish_frame(truth: pd.DataFrame, case: NonlinearCase) -> pd.DataFrame:
 def build_dataset(
     cases: list[NonlinearCase],
     *,
-    batch: Path,
-    source_model: Path,
+    runtime: ComsolRuntime,
     data_root: Path,
     mesh_profile: str,
     reuse_raw: bool,
@@ -241,14 +167,13 @@ def build_dataset(
         )
         raw = solve_case(
             case,
-            batch=batch,
-            source_model=source_model,
+            runtime=runtime,
             mesh_profile=mesh_profile,
             reuse_raw=reuse_raw,
         )
         truth = truth_frame(raw, case, mesh_profile=mesh_profile)
         published = _publish_frame(truth, case)
-        target = _target_path(data_root, case.role, case.case_id)
+        target = published_path(data_root, case)
         if target.exists() and not overwrite:
             raise FileExistsError(f"Refusing to replace {target}; pass --overwrite")
         summary = validate_dataset_frame(published, case.role, case.case_id)
@@ -265,16 +190,16 @@ def build_dataset(
     return pd.DataFrame(summaries)
 
 
-def inspect_mesh(*, batch: Path, source_model: Path, mesh_profile: str, data_root: Path) -> Path:
+def inspect_mesh(*, runtime: ComsolRuntime, mesh_profile: str, data_root: Path) -> Path:
     """Build one mesh and publish the COMSOL-reported statistics as CSV."""
     log_path = _mesh_root(mesh_profile) / "mesh_build.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        str(batch),
+        str(runtime.batch),
         "-inputfile",
         str(JAVA_CLASS),
         "mesh-only",
-        str(source_model),
+        str(runtime.source_model),
         mesh_profile,
         mesh_profile,
         "-",
@@ -372,15 +297,14 @@ def main(argv: list[str] | None = None) -> int:
         if missing:
             raise ValueError(f"unknown nonlinear case IDs: {sorted(missing)}")
 
-    root, batch, compiler, source_model = select_comsol(args.comsol_root)
-    print(f"Using COMSOL: {root}", flush=True)
-    print(f"Source model: {source_model}", flush=True)
-    compile_runner(compiler)
+    runtime = select_comsol(args.comsol_root)
+    print(f"Using COMSOL: {runtime.root}", flush=True)
+    print(f"Source model: {runtime.source_model}", flush=True)
+    runtime.compile(JAVA_SOURCE)
     data_root = args.data_root.resolve()
     if args.mesh_only:
         target = inspect_mesh(
-            batch=batch,
-            source_model=source_model,
+            runtime=runtime,
             mesh_profile=mesh_profile,
             data_root=data_root,
         )
@@ -392,8 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Removed {len(removed)} obsolete generated case files", flush=True)
     summary = build_dataset(
         selected,
-        batch=batch,
-        source_model=source_model,
+        runtime=runtime,
         data_root=data_root,
         mesh_profile=mesh_profile,
         reuse_raw=args.reuse_raw,
@@ -402,6 +325,10 @@ def main(argv: list[str] | None = None) -> int:
     summary_path = data_root / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(summary_path, index=False)
+    if not args.case_ids:
+        radiation_path = data_root / "radiation_pairs.csv"
+        write_csv(radiation_pair_summary(selected, data_root), radiation_path)
+        print(f"Radiation pair summary: {radiation_path}")
     print(f"Created {len(summary)} nonlinear datasets under {data_root}")
     print(f"QA summary: {summary_path}")
     return 0
