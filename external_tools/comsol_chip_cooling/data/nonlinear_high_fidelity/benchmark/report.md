@@ -10,18 +10,20 @@
 **0.0956 K**、worstは
 **0.1436 K**でした。判定は
 **not_resolved_beyond_mesh_difference**です。入口流速は評価境界に保持されていますが、
-共通power-law scalar lawを持つboundary conductanceへ結合されています (`True`)。残差は、固定係数ではなく
+共通power-law scalar lawを持つboundary conductanceへ結合されています
+(`True`)。残差は、固定係数ではなく
 この最小流速依存モデルで共役流れをどこまで集約できるかを示します。
 
 ## 同定データ内のscreening
 
-| split | n_cases | mean_case_rmse | worst_case_rmse |
+| split | n_cases | mean_case_causal_rmse | worst_case_causal_rmse |
 |---|---|---|---|
 | train | 8 | 0.2146 | 0.3600 |
 | val | 1 | 0.3127 | 0.3127 |
 | test | 1 | 0.4048 | 0.4048 |
 
-holdout `NT09_cold_high_flow` のRMSEは **0.4048 K**でした。
+holdout `NT09_cold_high_flow` の因果RMSEは
+**0.4048 K**でした。
 これはcold/high-flowの組合せ汎化に対する最小thermal networkのscreening evidenceです。
 ただし、この10本はglobal-8 meshであり設計精度の絶対誤差判定には使いません。
 
@@ -29,10 +31,10 @@ holdout `NT09_cold_high_flow` のRMSEは **0.4048 K**でした。
 
 | case_id | rmse_k | prior_rmse_k | rms_error_over_mesh_difference | max_abs_error_k | max_abs_error_over_mesh_difference | max_hotspot_underprediction_k |
 |---|---|---|---|---|---|---|
-| HV01_composite_conjugate | 0.0476 | 0.9769 | 0.0961 | 0.1121 | 0.2259 | 0.2374 |
-| HV02_composite_radiation | 0.1436 | 0.8009 | 0.2906 | 0.3439 | 0.6987 | 0.0738 |
+| HV01_composite_conjugate | 0.0477 | 0.9769 | 0.0962 | 0.1122 | 0.2261 | 0.2375 |
+| HV02_composite_radiation | 0.1436 | 0.8009 | 0.2906 | 0.3440 | 0.6988 | 0.0739 |
 
-case RMSEは保守的な隣接mesh差内ですが、最大点誤差は **0.3439 K**、
+case RMSEは保守的な隣接mesh差内ですが、最大点誤差は **0.3440 K**、
 mesh差に対する最大比は **0.699**でした。したがって平均精度はmesh不確かさから
 分離できず、最大点誤差も保守的なmesh差を下回り、現データではモデル差を数値差から分離できません。これは製品合否閾値ではありません。
 
@@ -40,12 +42,12 @@ mesh差に対する最大比は **0.699**でした。したがって平均精度
 
 | case_id | sensor | rmse_k | bias_k | mesh_difference_k | rmse_over_mesh_difference | max_abs_error_over_mesh_difference |
 |---|---|---|---|---|---|---|
-| HV01_composite_conjugate | chip | 0.0611 | -0.0292 | 0.4962 | 0.1230 | 0.2259 |
+| HV01_composite_conjugate | chip | 0.0611 | -0.0293 | 0.4962 | 0.1231 | 0.2261 |
 | HV01_composite_conjugate | sink_base | 0.0481 | -0.0137 | 0.4954 | 0.0972 | 0.1716 |
 | HV01_composite_conjugate | fins | 0.0276 | -0.0023 | 0.4922 | 0.0561 | 0.1123 |
-| HV02_composite_radiation | chip | 0.1197 | 0.0814 | 0.4962 | 0.2412 | 0.5401 |
-| HV02_composite_radiation | sink_base | 0.1388 | 0.0984 | 0.4954 | 0.2801 | 0.5994 |
-| HV02_composite_radiation | fins | 0.1682 | 0.1181 | 0.4922 | 0.3417 | 0.6987 |
+| HV02_composite_radiation | chip | 0.1196 | 0.0813 | 0.4962 | 0.2410 | 0.5399 |
+| HV02_composite_radiation | sink_base | 0.1387 | 0.0984 | 0.4954 | 0.2801 | 0.5994 |
+| HV02_composite_radiation | fins | 0.1682 | 0.1181 | 0.4922 | 0.3417 | 0.6988 |
 
 ## 応答区間別
 
@@ -53,12 +55,12 @@ mesh差に対する最大比は **0.699**でした。したがって平均精度
 |---|---|---|---|---|
 | HV01_composite_conjugate | initialization | 3 | 0.0000 | 0.0000 |
 | HV01_composite_conjugate | power_excitation | 3 | 0.0372 | 0.0671 |
-| HV01_composite_conjugate | airflow_excitation | 2 | 0.0404 | 0.0752 |
-| HV01_composite_conjugate | coupled_hot_low_flow | 3 | 0.0765 | 0.1121 |
+| HV01_composite_conjugate | airflow_excitation | 2 | 0.0404 | 0.0753 |
+| HV01_composite_conjugate | coupled_hot_low_flow | 3 | 0.0765 | 0.1122 |
 | HV02_composite_radiation | initialization | 3 | 0.0002 | 0.0002 |
 | HV02_composite_radiation | power_excitation | 3 | 0.0533 | 0.0902 |
 | HV02_composite_radiation | airflow_excitation | 2 | 0.1136 | 0.1724 |
-| HV02_composite_radiation | coupled_hot_low_flow | 3 | 0.2533 | 0.3439 |
+| HV02_composite_radiation | coupled_hot_low_flow | 3 | 0.2533 | 0.3440 |
 
 区間はleft-ZOHに合わせ、行のcommandが次の区間を駆動した後の応答時刻で集計しています。初期化から
 power、airflow、hot/low-flow複合条件へ進むにつれて、モデル誤差が増える箇所を分離しています。
@@ -83,9 +85,10 @@ power、airflow、hot/low-flow複合条件へ進むにつれて、モデル誤�
 - local-medium meshはbenchmark用途には合格: `True`
 - 厳格mesh収束: `False`
 - 独立時間刻み収束: `False`
+- 同一境界の実験比較実施: `False`
 - 同一境界の実験妥当化: `False`
 
 本結果はmodel-form screeningには利用できますが、絶対温度保証、hotspot安全判定、製品設計認証には
 利用できません。本結果だけを根拠に空気状態や放射項をcoreへ追加しません。次の基盤評価は、目的対象である
-半導体製造装置のwafer/chuck・stage・coolant・process入力を同じ外部評価境界で扱うCAE／実験datasetで
+半導体製造装置のwafer/chuck・stage・coolant・process入力を同じ外部評価境界で扱うCAE/実験datasetで
 行います。本ケース側では過渡時間刻み収束と実測値による妥当化が未完です。

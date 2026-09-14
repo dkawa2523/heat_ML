@@ -22,6 +22,24 @@ from celltemp.domain import (
 )
 
 
+def _mapping(value: object, owner: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{owner} must be a mapping")
+    return value
+
+
+def _reject_unknown(value: Mapping[str, Any], allowed: set[str], owner: str) -> None:
+    unknown = set(value) - allowed
+    if unknown:
+        raise ValueError(f"unknown {owner} options: {sorted(map(str, unknown))}")
+
+
+def _boolean(value: object, owner: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{owner} must be boolean")
+    return value
+
+
 def _node_weights(
     value: Mapping[str, float] | Sequence[float], node_names: tuple[str, ...]
 ) -> tuple[float, ...]:
@@ -34,44 +52,171 @@ def _node_weights(
 
 
 def _reservoir_temperature(value: object) -> ReservoirTemperatureSpec:
-    if not isinstance(value, Mapping):
-        raise ValueError("boundary reservoir_temperature must be a mapping")
-    control = value.get("control")
+    values = _mapping(value, "boundary reservoir_temperature")
+    _reject_unknown(values, {"control", "intercept", "slope"}, "reservoir_temperature")
+    control = values.get("control")
     return ReservoirTemperatureSpec(
-        intercept=float(value["intercept"]),
+        intercept=float(values["intercept"]),
         control=None if control is None else str(control),
-        slope=float(value.get("slope", 0.0)),
+        slope=float(values.get("slope", 0.0)),
     )
 
 
 def _scalar_law(value: object, owner: str) -> ScalarLawSpec:
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{owner} must be a scalar-law mapping")
-    law_type = str(value.get("type", ""))
+    values = _mapping(value, owner)
+    law_type = str(values.get("type", ""))
     if law_type == "constant":
+        _reject_unknown(values, {"type", "value", "learnable"}, owner)
         return ConstantLawSpec(
-            value=float(value["value"]),
-            learnable=bool(value.get("learnable", True)),
+            value=float(values["value"]),
+            learnable=_boolean(values.get("learnable", True), f"{owner}.learnable"),
         )
     if law_type == "positive_part":
+        _reject_unknown(
+            values,
+            {"type", "control", "gain", "threshold", "learnable"},
+            owner,
+        )
         return PositivePartLawSpec(
-            control=str(value["control"]),
-            gain=float(value["gain"]),
-            threshold=float(value.get("threshold", 0.0)),
-            learnable=bool(value.get("learnable", True)),
+            control=str(values["control"]),
+            gain=float(values["gain"]),
+            threshold=float(values.get("threshold", 0.0)),
+            learnable=_boolean(values.get("learnable", True), f"{owner}.learnable"),
         )
     if law_type == "power_law":
+        _reject_unknown(
+            values,
+            {
+                "type",
+                "control",
+                "reference",
+                "offset",
+                "scale",
+                "exponent",
+                "offset_learnable",
+                "scale_learnable",
+                "exponent_learnable",
+            },
+            owner,
+        )
         return PowerLawSpec(
-            control=str(value["control"]),
-            reference=float(value["reference"]),
-            offset=float(value["offset"]),
-            scale=float(value["scale"]),
-            exponent=float(value["exponent"]),
-            offset_learnable=bool(value.get("offset_learnable", False)),
-            scale_learnable=bool(value.get("scale_learnable", True)),
-            exponent_learnable=bool(value.get("exponent_learnable", False)),
+            control=str(values["control"]),
+            reference=float(values["reference"]),
+            offset=float(values["offset"]),
+            scale=float(values["scale"]),
+            exponent=float(values["exponent"]),
+            offset_learnable=_boolean(
+                values.get("offset_learnable", False), f"{owner}.offset_learnable"
+            ),
+            scale_learnable=_boolean(
+                values.get("scale_learnable", True), f"{owner}.scale_learnable"
+            ),
+            exponent_learnable=_boolean(
+                values.get("exponent_learnable", False), f"{owner}.exponent_learnable"
+            ),
         )
     raise ValueError(f"unsupported scalar law type {law_type!r} for {owner}")
+
+
+def _actuator(value: object) -> ActuatorSpec:
+    values = _mapping(value, "actuator")
+    _reject_unknown(values, {"name", "tau", "learnable"}, "actuator")
+    learnable = values.get("learnable")
+    return ActuatorSpec(
+        name=str(values["name"]),
+        tau=float(values.get("tau", 0.0)),
+        learnable=(None if learnable is None else _boolean(learnable, "actuator.learnable")),
+    )
+
+
+def _edge(value: object) -> EdgeSpec:
+    values = _mapping(value, "edge")
+    _reject_unknown(values, {"nodes", "conductance"}, "edge")
+    endpoints = values["nodes"]
+    if isinstance(endpoints, (str, bytes)) or not isinstance(endpoints, Sequence):
+        raise ValueError("edge.nodes must be a two-item sequence")
+    if len(endpoints) != 2:
+        raise ValueError("edge.nodes must contain exactly two nodes")
+    return EdgeSpec(
+        node_a=str(endpoints[0]),
+        node_b=str(endpoints[1]),
+        conductance=_scalar_law(values["conductance"], "edge conductance"),
+    )
+
+
+def _source(value: object, node_names: tuple[str, ...]) -> SourceSpec:
+    values = _mapping(value, "source")
+    _reject_unknown(values, {"name", "node_weights", "heat_rate"}, "source")
+    return SourceSpec(
+        name=str(values["name"]),
+        node_weights=_node_weights(values["node_weights"], node_names),
+        heat_rate=_scalar_law(values["heat_rate"], "source heat_rate"),
+    )
+
+
+def _boundary(value: object, node_names: tuple[str, ...]) -> BoundarySpec:
+    values = _mapping(value, "boundary")
+    _reject_unknown(
+        values,
+        {"name", "node_weights", "reservoir_temperature", "conductance"},
+        "boundary",
+    )
+    return BoundarySpec(
+        name=str(values["name"]),
+        node_weights=_node_weights(values["node_weights"], node_names),
+        reservoir_temperature=_reservoir_temperature(values["reservoir_temperature"]),
+        conductance=_scalar_law(values["conductance"], "boundary conductance"),
+    )
+
+
+def _sensor_item(
+    value: object,
+    node_names: tuple[str, ...],
+) -> tuple[str, str | None, tuple[float, ...] | None]:
+    if not isinstance(value, Mapping):
+        name = str(value)
+        return name, name, None
+    _reject_unknown(value, {"name", "node", "node_weights"}, "sensor")
+    name = str(value["name"])
+    if "node" in value and "node_weights" in value:
+        raise ValueError("sensor must use either node or node_weights")
+    if "node_weights" in value:
+        return name, None, _node_weights(value["node_weights"], node_names)
+    return name, str(value.get("node", name)), None
+
+
+def _sensor_layout(
+    values: object,
+    node_names: tuple[str, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[tuple[float, ...], ...]]:
+    if not values:
+        return (), (), ()
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise ValueError("sensors must be a sequence")
+
+    names: list[str] = []
+    nodes: list[str | None] = []
+    weights: list[tuple[float, ...] | None] = []
+    for value in values:
+        name, node, weight = _sensor_item(value, node_names)
+        names.append(name)
+        nodes.append(node)
+        weights.append(weight)
+    if not any(weight is not None for weight in weights):
+        return tuple(names), tuple(str(node) for node in nodes), ()
+
+    node_index = {name: index for index, name in enumerate(node_names)}
+    dense_weights: list[tuple[float, ...]] = []
+    for node, weight in zip(nodes, weights, strict=True):
+        if weight is not None:
+            dense_weights.append(weight)
+            continue
+        row = [0.0] * len(node_names)
+        if node not in node_index:
+            raise ValueError(f"sensor mapping refers to unknown node {node}")
+        row[node_index[str(node)]] = 1.0
+        dense_weights.append(tuple(row))
+    return tuple(names), (), tuple(dense_weights)
 
 
 def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
@@ -80,62 +225,28 @@ def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
     Node weights may be a dense list or a mapping keyed by node name.  The latter
     keeps hand-written system files readable and independent of node ordering.
     """
+    _reject_unknown(
+        data,
+        {"version", "nodes", "actuators", "edges", "sources", "boundaries", "sensors"},
+        "system",
+    )
     version = int(data.get("version", 3))
     if version != 3:
         raise ValueError(f"unsupported system schema version {version}")
 
-    nodes = tuple(data.get("nodes", ()))
+    nodes = tuple(_mapping(item, "node") for item in data.get("nodes", ()))
     if not nodes:
         raise ValueError("system definition requires a non-empty 'nodes' list")
+    for node in nodes:
+        _reject_unknown(node, {"name", "heat_capacity"}, "node")
     node_names = tuple(str(node["name"]) for node in nodes)
     capacity = tuple(float(node["heat_capacity"]) for node in nodes)
 
-    actuators = tuple(
-        ActuatorSpec(
-            name=str(item["name"]),
-            tau=float(item.get("tau", 0.0)),
-            learnable=bool(item.get("learnable", True)),
-        )
-        for item in data.get("actuators", ())
-    )
-    edges = tuple(
-        EdgeSpec(
-            node_a=str(item["nodes"][0]),
-            node_b=str(item["nodes"][1]),
-            conductance=_scalar_law(item["conductance"], "edge conductance"),
-        )
-        for item in data.get("edges", ())
-    )
-    sources = tuple(
-        SourceSpec(
-            name=str(item["name"]),
-            node_weights=_node_weights(item["node_weights"], node_names),
-            heat_rate=_scalar_law(item["heat_rate"], "source heat_rate"),
-        )
-        for item in data.get("sources", ())
-    )
-    boundaries = tuple(
-        BoundarySpec(
-            name=str(item["name"]),
-            node_weights=_node_weights(item["node_weights"], node_names),
-            reservoir_temperature=_reservoir_temperature(item["reservoir_temperature"]),
-            conductance=_scalar_law(item["conductance"], "boundary conductance"),
-        )
-        for item in data.get("boundaries", ())
-    )
-
-    sensor_items = tuple(data.get("sensors", ()))
-    if sensor_items:
-        sensor_names = tuple(
-            str(item["name"]) if isinstance(item, Mapping) else str(item) for item in sensor_items
-        )
-        sensor_nodes = tuple(
-            str(item.get("node", item["name"])) if isinstance(item, Mapping) else str(item)
-            for item in sensor_items
-        )
-    else:
-        sensor_names = ()
-        sensor_nodes = ()
+    actuators = tuple(_actuator(item) for item in data.get("actuators", ()))
+    edges = tuple(_edge(item) for item in data.get("edges", ()))
+    sources = tuple(_source(item, node_names) for item in data.get("sources", ()))
+    boundaries = tuple(_boundary(item, node_names) for item in data.get("boundaries", ()))
+    sensor_names, sensor_nodes, sensor_weights = _sensor_layout(data.get("sensors", ()), node_names)
 
     return ThermalSystemSpec(
         node_names=node_names,
@@ -146,6 +257,7 @@ def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
         boundaries=boundaries,
         sensor_names=sensor_names,
         sensor_nodes=sensor_nodes,
+        sensor_weights=sensor_weights,
     )
 
 
@@ -189,7 +301,7 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
             for name, capacity in zip(spec.node_names, spec.heat_capacity)
         ],
         "actuators": [
-            {"name": item.name, "tau": item.tau, "learnable": item.learnable}
+            {"name": item.name, "tau": item.tau, "learnable": bool(item.learnable)}
             for item in spec.actuators
         ],
         "edges": [
@@ -220,9 +332,17 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
             }
             for item in spec.boundaries
         ],
-        "sensors": [
-            {"name": name, "node": node} for name, node in zip(spec.sensor_names, spec.sensor_nodes)
-        ],
+        "sensors": (
+            [
+                {"name": name, "node_weights": weights(row)}
+                for name, row in zip(spec.sensor_names, spec.sensor_weights, strict=True)
+            ]
+            if spec.sensor_weights
+            else [
+                {"name": name, "node": node}
+                for name, node in zip(spec.sensor_names, spec.sensor_nodes, strict=True)
+            ]
+        ),
     }
 
 

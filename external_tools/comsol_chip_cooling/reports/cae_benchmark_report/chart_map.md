@@ -1,6 +1,6 @@
 # Chart map and report QA notes
 
-Generated: 2026-08-31T01:13:27+00:00
+Generated: 2026-09-14T22:08:06+00:00
 
 Audience: technical. Delivery mode: portable HTML from canonical artifact.json.
 

@@ -18,12 +18,16 @@ jobs:
   pr:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install
@@ -36,7 +40,9 @@ jobs:
         run: python quality.py pr
 
       - name: product benchmark
+        if: matrix.python-version == '3.10'
         run: python benchmarks/topcell/run.py
 
       - name: dependency audit
+        if: matrix.python-version == '3.10'
         run: python -m pip_audit . --progress-spinner off --desc off

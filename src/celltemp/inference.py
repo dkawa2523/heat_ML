@@ -2,20 +2,91 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
 from celltemp.domain import Trajectory
-from celltemp.engine import KalmanObserver, ThermalRCModel, ThermalState
+from celltemp.engine import KalmanObserver, ObserverState, ThermalRCModel, ThermalState
+
+_DEFAULT_DISTURBANCE_PROCESS_STD = 0.02
+_DEFAULT_BIAS_PROCESS_STD = 0.005
+_DEFAULT_SENSOR_STD = 0.15
+_DEFAULT_INNOVATION_GATE_SIGMA = 4.0
+_DEFAULT_BIAS_REFERENCE: str | None = None
+
+_MONITOR_OBSERVER_DEFAULTS: dict[str, float | str | None] = {
+    "disturbance_process_std": _DEFAULT_DISTURBANCE_PROCESS_STD,
+    "bias_process_std": _DEFAULT_BIAS_PROCESS_STD,
+    "sensor_std": _DEFAULT_SENSOR_STD,
+    "innovation_gate_sigma": _DEFAULT_INNOVATION_GATE_SIGMA,
+    "initial_temperature_std": 1.0,
+    "initial_disturbance_std": 0.5,
+    "initial_bias_std": 0.5,
+    "bias_reference": _DEFAULT_BIAS_REFERENCE,
+}
+_FORECAST_OBSERVER_DEFAULTS: dict[str, float | str | None] = {
+    **_MONITOR_OBSERVER_DEFAULTS,
+    "bias_process_std": 0.0,
+    "initial_temperature_std": 100.0,
+    "initial_disturbance_std": 0.0,
+    "initial_bias_std": 0.0,
+}
+_FORECAST_OBSERVER_OPTIONS = {
+    "disturbance_process_std",
+    "initial_temperature_std",
+    "innovation_gate_sigma",
+    "sensor_std",
+}
+
+
+def resolve_observer_settings(
+    mode: str,
+    overrides: Mapping[str, object] | None = None,
+) -> dict[str, float | str | None]:
+    """Resolve one explicit observer profile for a deployment workflow."""
+    if mode == "forecast":
+        defaults = _FORECAST_OBSERVER_DEFAULTS
+        allowed = _FORECAST_OBSERVER_OPTIONS
+    elif mode == "monitor":
+        defaults = _MONITOR_OBSERVER_DEFAULTS
+        allowed = set(defaults)
+    else:
+        raise ValueError(f"unknown observer mode: {mode}")
+    supplied = dict(overrides or {})
+    unknown = sorted(set(supplied) - allowed)
+    if unknown:
+        raise ValueError(f"unknown {mode}.observer options: {unknown}")
+    resolved = dict(defaults)
+    for name, value in supplied.items():
+        if name == "bias_reference":
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"{mode}.observer.bias_reference must be a sensor name or null")
+            resolved[name] = value
+        else:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{mode}.observer.{name} must be numeric")
+            resolved[name] = float(value)
+    return resolved
+
+
+def build_observer(
+    model: ThermalRCModel,
+    settings: Mapping[str, float | str | None],
+) -> KalmanObserver:
+    """Construct an observer from resolved, serializable settings."""
+    return KalmanObserver(model, **dict(settings))  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
 class ForecastResult:
     time: np.ndarray
     sensor_temperature: np.ndarray
+    sensor_temperature_std: np.ndarray
     node_temperature: np.ndarray
+    node_temperature_std: np.ndarray
     actuator: np.ndarray
     forecast_origin_index: int
 
@@ -43,6 +114,21 @@ def _model_tensor(model: ThermalRCModel, values: np.ndarray) -> torch.Tensor:
     return torch.tensor(
         np.asarray(values).copy(), dtype=model.capacity.dtype, device=model.capacity.device
     )
+
+
+def _resolved_initial_actuator(
+    model: ThermalRCModel,
+    trajectory: Trajectory,
+    commands: torch.Tensor,
+    override: np.ndarray | None,
+) -> torch.Tensor:
+    values = override if override is not None else trajectory.initial_actuator
+    if values is None:
+        return commands[0]
+    actuator = _model_tensor(model, values)
+    if actuator.shape != (model.n_controls,) or not bool(torch.isfinite(actuator).all()):
+        raise ValueError("initial_actuator must contain one finite value per control")
+    return actuator
 
 
 def sensor_bias_in_gauge(
@@ -94,14 +180,40 @@ def _default_state_estimator(model: ThermalRCModel) -> KalmanObserver:
     monitoring quantity, so it is disabled here; small heat-process freedom keeps
     the state estimate usable with mildly imperfect physical models.
     """
-    return KalmanObserver(
-        model,
-        disturbance_process_std=0.02,
-        bias_process_std=0.0,
-        initial_temperature_std=100.0,
-        initial_disturbance_std=0.0,
-        initial_bias_std=0.0,
-    )
+    return build_observer(model, resolve_observer_settings("forecast"))
+
+
+@torch.no_grad()
+def _estimate_observer_state(
+    model: ThermalRCModel,
+    trajectory: Trajectory,
+    *,
+    through_index: int | None = None,
+    initial_actuator: np.ndarray | None = None,
+    observer: KalmanObserver | None = None,
+) -> ObserverState:
+    """Causally estimate the complete observer state through one trajectory row."""
+    trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
+    final_index = len(trajectory.time) - 1 if through_index is None else through_index
+    if not 0 <= final_index < len(trajectory.time):
+        raise ValueError("through_index is outside the trajectory")
+
+    observed = _model_tensor(model, trajectory.temperature)
+    commands = _model_tensor(model, trajectory.commands)
+    dt = _model_tensor(model, trajectory.dt)
+    mask = torch.tensor(trajectory.mask.copy(), dtype=torch.bool, device=model.capacity.device)
+    estimator = _default_state_estimator(model) if observer is None else observer
+    actuator = _resolved_initial_actuator(model, trajectory, commands, initial_actuator)
+    state = estimator.initialize_posterior(observed[0], mask=mask[0], actuator=actuator)
+    for index in range(final_index):
+        state, _ = estimator.step(
+            state,
+            commands[index],
+            observed[index + 1],
+            dt[index],
+            mask[index + 1],
+        )
+    return state
 
 
 @torch.no_grad()
@@ -119,26 +231,13 @@ def estimate_state(
     deliberately contains only node temperature and effective actuator; transient
     disturbance and sensor-bias estimates are not assumptions about the future.
     """
-    trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
-    final_index = len(trajectory.time) - 1 if through_index is None else through_index
-    if not 0 <= final_index < len(trajectory.time):
-        raise ValueError("through_index is outside the trajectory")
-
-    observed = _model_tensor(model, trajectory.temperature)
-    commands = _model_tensor(model, trajectory.commands)
-    dt = _model_tensor(model, trajectory.dt)
-    mask = torch.tensor(trajectory.mask.copy(), dtype=torch.bool, device=model.capacity.device)
-    estimator = _default_state_estimator(model) if observer is None else observer
-    actuator = commands[0] if initial_actuator is None else _model_tensor(model, initial_actuator)
-    state = estimator.initialize(observed[0], mask=mask[0], actuator=actuator)
-    for index in range(final_index):
-        state, _ = estimator.step(
-            state,
-            commands[index],
-            observed[index + 1],
-            dt[index],
-            mask[index + 1],
-        )
+    state = _estimate_observer_state(
+        model,
+        trajectory,
+        through_index=through_index,
+        initial_actuator=initial_actuator,
+        observer=observer,
+    )
     return ThermalState(state.temperature, state.actuator)
 
 
@@ -152,26 +251,52 @@ def forecast(
 ) -> ForecastResult:
     """Estimate the history endpoint, then roll out the unobserved future open-loop."""
     origin = forecast_origin_index(trajectory.mask)
-    initial_state = estimate_state(
+    estimator = _default_state_estimator(model) if observer is None else observer
+    posterior = _estimate_observer_state(
         model,
         trajectory,
         through_index=origin,
         initial_actuator=initial_actuator,
-        observer=observer,
+        observer=estimator,
     )
     commands = _model_tensor(model, trajectory.commands[origin:])
     dt = _model_tensor(model, trajectory.dt[origin:])
-    states, actuators = model.forward_trajectory(
-        initial_state.temperature,
-        commands,
-        dt,
-        initial_state.actuator,
+    # Unknown heat and bias estimates explain the observed past but are not assumed
+    # to continue. Their covariance is retained so the forecast interval still
+    # reflects uncertainty about uncommanded heat and the estimated physical state.
+    state = ObserverState(
+        posterior.temperature,
+        posterior.actuator,
+        torch.zeros_like(posterior.heat_disturbance),
+        torch.zeros_like(posterior.bias_state),
+        posterior.covariance,
     )
+    states = [state.temperature]
+    actuators = [state.actuator]
+    node_stds: list[torch.Tensor] = []
+    sensor_stds: list[torch.Tensor] = []
+
+    def append_uncertainty(item: ObserverState) -> None:
+        physical_covariance = item.covariance[: model.n_nodes, : model.n_nodes]
+        node_stds.append(torch.sqrt(torch.clamp(torch.diag(physical_covariance), min=0.0)))
+        sensor_covariance = model.observation @ physical_covariance @ model.observation.T
+        sensor_stds.append(torch.sqrt(torch.clamp(torch.diag(sensor_covariance), min=0.0)))
+
+    append_uncertainty(state)
+    for index in range(len(commands)):
+        state = estimator.predict(state, commands[index], dt[index])
+        states.append(state.temperature)
+        actuators.append(state.actuator)
+        append_uncertainty(state)
+
+    temperatures = torch.stack(states)
     return ForecastResult(
         time=trajectory.time[origin:].copy(),
-        sensor_temperature=model.observe(states).cpu().numpy(),
-        node_temperature=states.cpu().numpy(),
-        actuator=actuators.cpu().numpy(),
+        sensor_temperature=model.observe(temperatures).cpu().numpy(),
+        sensor_temperature_std=torch.stack(sensor_stds).cpu().numpy(),
+        node_temperature=temperatures.cpu().numpy(),
+        node_temperature_std=torch.stack(node_stds).cpu().numpy(),
+        actuator=torch.stack(actuators).cpu().numpy(),
         forecast_origin_index=origin,
     )
 
@@ -181,11 +306,13 @@ def monitor(
     model: ThermalRCModel,
     trajectory: Trajectory,
     *,
-    disturbance_process_std: float = 0.02,
-    bias_process_std: float = 0.005,
-    sensor_std: float = 0.15,
-    innovation_gate_sigma: float = 4.0,
-    bias_reference: str | None = None,
+    initial_actuator: np.ndarray | None = None,
+    observer: KalmanObserver | None = None,
+    disturbance_process_std: float = _DEFAULT_DISTURBANCE_PROCESS_STD,
+    bias_process_std: float = _DEFAULT_BIAS_PROCESS_STD,
+    sensor_std: float = _DEFAULT_SENSOR_STD,
+    innovation_gate_sigma: float = _DEFAULT_INNOVATION_GATE_SIGMA,
+    bias_reference: str | None = _DEFAULT_BIAS_REFERENCE,
 ) -> MonitorResult:
     """Estimate physical temperature, unknown node heat, and sensor bias causally.
 
@@ -198,19 +325,29 @@ def monitor(
     commands = _model_tensor(model, trajectory.commands)
     dt = _model_tensor(model, trajectory.dt)
     mask = torch.tensor(trajectory.mask.copy(), dtype=torch.bool, device=model.capacity.device)
-    observer = KalmanObserver(
-        model,
-        disturbance_process_std=disturbance_process_std,
-        bias_process_std=bias_process_std,
-        sensor_std=sensor_std,
-        innovation_gate_sigma=innovation_gate_sigma,
-        bias_reference=bias_reference,
-    )
-    if bias_reference is not None:
-        reference_index = trajectory.sensor_names.index(bias_reference)
+    observer_overrides: dict[str, object] = {
+        "disturbance_process_std": disturbance_process_std,
+        "bias_process_std": bias_process_std,
+        "sensor_std": sensor_std,
+        "innovation_gate_sigma": innovation_gate_sigma,
+        "bias_reference": bias_reference,
+    }
+    if observer is not None:
+        conflicts = sorted(
+            name
+            for name, value in observer_overrides.items()
+            if value != _MONITOR_OBSERVER_DEFAULTS[name]
+        )
+        if conflicts:
+            raise ValueError(f"observer conflicts with explicit monitor settings: {conflicts}")
+    else:
+        observer = build_observer(model, resolve_observer_settings("monitor", observer_overrides))
+    if observer.bias_reference is not None:
+        reference_index = trajectory.sensor_names.index(observer.bias_reference)
         if not trajectory.mask[:, reference_index].any():
             raise ValueError("bias reference sensor has no observations")
-    state = observer.initialize(observed[0], mask=mask[0], actuator=commands[0])
+    actuator = _resolved_initial_actuator(model, trajectory, commands, initial_actuator)
+    state = observer.initialize_posterior(observed[0], mask=mask[0], actuator=actuator)
 
     nan_sensor = torch.full_like(observed[0], torch.nan)
     nan_covariance = torch.full(

@@ -38,13 +38,14 @@ measurement = H T + sensor_bias + noise
 - 可変`dt`を各区間で直接使用します。固定刻みへのresampleは不要です。
 - 指令値は明示的なactuator stateを通るため、学習と推論で同じ遅れを使います。
 - monitorの未知発熱は既存sourceの空間分布を通って温度へ伝播し、sensor biasとは
-  別状態として推定されます。
+  別状態として推定されます。sourceがない系だけ各nodeの単位基底を使用します。
 - sensor biasは、基準を指定しなければ零平均、`monitor.observer.bias_reference`へ校正済みsensorを
   指定すればそのsensorを0とするgaugeで推定し、出力にもgaugeを明記します。
 - gross innovationは検出用のraw NISへ残したまま、Kalman更新では観測noiseを連続的に膨らませ、
   単一sensor faultが物理温度を瞬時に引っ張る影響を抑えます。
 
-詳細は [product_architecture.md](docs/product_architecture.md) を参照してください。
+詳細は [product_architecture.md](docs/product_architecture.md)、単位とweightの規約は
+[units_and_conventions.md](docs/units_and_conventions.md) を参照してください。
 
 ## 構成
 
@@ -66,6 +67,12 @@ benchmarks/topcell/
   run.py        生成・学習・外部評価を一括実行
   config.yaml   benchmark唯一の設定
   work/         再生成可能な入力と出力（Git管理外）
+external_tools/comsol_chip_cooling/
+  docs/         CAE問題設定と検証境界
+  data/         公開可能な正本データと評価結果
+  reports/      正本データから再構築する技術レポート入力
+docs/           モデル、単位、品質、拡張方針
+tests/          単体・property・workflow integration試験
 ```
 
 ## 入力規約
@@ -100,13 +107,18 @@ time,tc_core,tc_shell,heater,coolant
   先頭1行だけを観測する従来形は最小の履歴としてそのまま使える。
 - monitor: 実測sensor温度と適用commandを各時刻へ記録する。個別の欠測は空欄でよい。
 
+ログ開始時にactuatorが最初のcommandへ整定していない場合だけ、必要なcontrolに
+`initial_effective_<control>`列を追加し、先頭行へ開始直前の実効値を記録します。列がなければ
+従来どおり最初のcommandを初期値とします。この任意列はtrain、forecast、monitorで共通です。
+
 `data.directory`またはruntimeの`input_dir`が処理単位であり、ファイルstemが`case_id`です。
 forecastでは、各履歴行に少なくとも1つのsensor観測を置き、最初の全sensor空欄行以後を
 将来区間とします。空欄行より後に観測が再登場するCSVは将来値混入として拒否します。履歴を
 因果的にobserverへ通し、最後のposterior node温度とeffective actuatorからopen-loop積分します。
 出力はそのforecast originから始まるため、履歴を予測誤差へ混ぜません。
 
-通常のrandom splitでは、同一control履歴を持つtrajectoryを自動的に同じsplitへまとめます。
+通常のrandom splitでは、同一control履歴を持つtrajectoryを数値丸め誤差を許容して同じsplitへまとめます。
+許容値は必要な場合だけ`split.recipe_rtol`と`split.recipe_atol`で変更できます。
 意図的な外挿評価だけ、任意の`case_id,split`表と`split.method: explicit`を使用します。
 
 `dt: null`にすれば可変刻みを許可します。trainで温度欠測を読む場合は
@@ -114,6 +126,12 @@ forecastでは、各履歴行に少なくとも1つのsensor観測を置き、�
 扱います。どのworkflowも初期状態を決めるため、先頭行には少なくとも1つのsensor温度が
 必要です。forecast履歴ではsensor単位の欠測を許しますが、全sensor空欄の行がforecast境界です。
 学習trajectoryには、先頭より後にも少なくとも1つの観測が必要です。
+学習時に直接観測されないnodeの開始温度は、選択した軌道区間への応答からcaseごとのnuisance
+stateとして解析的に推定します。物理係数へ誤った初期温度を吸収させず、artifactへcase固有状態も
+持ち込みません。弱観測modeが非現実的な初期温度を取らないよう、観測温度を中心とする
+`training.initial_temperature_prior_std`（既定50 K）を使います。出力では、この初期状態推定を
+含む`conditional_rmse`と、先頭行の観測だけから積分する`causal_rmse`を明確に分けます。
+best modelの選択には、deploymentと同じく将来観測を初期化へ使わない後者を使用します。
 
 ## system.yaml
 
@@ -166,15 +184,25 @@ controlは、区間内一定となる`tau: 0`が必要です。遅れを含む�
 記載しないnodeは0です。sensor名とnode名は異なって
 よく、測定されないnodeも状態として保持できます。CSVのsensor列とcontrol列の名前・順序も
 この定義から取得するため、`config.yaml`へ重複記載しません。
+sensorが面積平均や体積平均を表す場合は、単一`node`の代わりに合計1の`node_weights`を指定できます。
+一部が直接sensorへ現れない初期状態は、観測行列のnull空間だけを軌道応答から推定します。
+`tau`が正のactuatorは`learnable`省略時に学習対象、`tau: 0`は固定の直接入力です。ゼロを
+学習priorとして指定することはできません。未知key、文字列化したboolean、空のheat pathは
+入力誤記として読込時に拒否します。
 
 ## 実行
 
 以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
-Python 3.10以上の環境へ依存関係をインストールします。
+Python 3.10以上の環境へ依存関係をインストールします。再現可能な開発・benchmark環境には
+repositoryの`uv.lock`を使用します。
 
 ```powershell
-py -3 -m pip install -e ".[dev]"
+uv sync --extra dev --locked
 ```
+
+通常のPython packageとしては`py -3 -m pip install -e ".[dev]"`でも導入できます。`uv.lock`は
+ローカル・CAE benchmarkの固定環境、CIのpip installは宣言した依存範囲と対応Python版の互換性を
+検出する役割です。配布名は`thermal-cell-practical`、import packageとCLI名は`celltemp`です。
 
 quickstartは1つの設定を3 workflowで共有します。相対パスは常にその設定ファイルのある
 ディレクトリから解決され、実行時のカレントディレクトリには依存しません。相対`output_dir`は
@@ -208,13 +236,31 @@ monitor:
     bias_reference: tc_reference
 ```
 
+forecastの履歴状態推定も、必要な場合だけ同じ場所で測定noiseと初期状態priorを調整できます。
+実際に使った値、artifact識別情報、入力ハッシュは出力先の`run_manifest.json`へ保存されます。
+
+```yaml
+forecast:
+  observer:
+    sensor_std: 0.15
+    initial_temperature_std: 100.0
+    disturbance_process_std: 0.02
+```
+
+forecast出力は温度平均に加え、履歴末端の状態共分散と設定したprocess noiseを伝播した標準偏差・
+95%区間を持ちます。これは状態・未指令熱の不確かさであり、係数、将来入力、model-formの不確かさは
+含みません。区間はGaussian observer仮定に基づく状態区間で、経験的coverageの保証ではありません。
+`disturbance_process_std`は保持データの残差に合わせて調整します。`forecast_summary.csv`と
+`forecast_coverage.csv`には、将来command、予測sensor温度、時間刻み、予測時間、control slewが
+artifactの学習範囲内かも保存され、範囲外caseはCLIにも警告されます。
+
 すべての設定は`key=value`で上書きできます。
 
 ```powershell
 py -3 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
 ```
 
-未知の設定名はtypoとして拒否されます。
+未知の設定名は`config.yaml`と`system.yaml`の両方でtypoとして拒否されます。
 
 forecast/monitorが読むartifactは、既定では
 `project.output_dir/project.run_name/artifact`です。学習runと異なるartifactを使う場合だけ、
@@ -257,20 +303,21 @@ prediction = forecast(artifact.model, request)
 artifact/
   model.pt              state_dictのみ。任意コードをpickleしない
   system.yaml           topologyとengineering prior
-  metadata.json         fitted physical parameters、範囲、評価値
+  metadata.json         fitted physical parameters、範囲、評価値、構成ファイルhash
 metrics_by_case.csv     case-balanced train/val/test評価
 metrics_by_sensor.csv   センサー別評価
 metrics_summary.json    平均・中央値・worst-case
 training_history.csv
 split.csv
 test_predictions/
-config.yaml
+config.snapshot.yaml      監査用snapshot。元の基準directoryはartifact metadataに保存
 ```
 
 splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温度だけ異なる軌道は分離しません。
 学習は各epochで全caseを一度ずつ扱い、caseごとの全軌道Huber lossを均等に平均します。
 長大ログで計算量を制限するときだけ`training.horizon`へ区間数を指定し、観測可能な開始点から
-window rolloutを行います。model選択は常に完全なvalidation軌道のcase平均RMSEです。
+window rolloutを行います。model選択は完全なvalidation軌道を先頭観測だけから予測したcase平均
+`causal_rmse`です。`mean_case_conditional_rmse`も併記し、係数fitと初期化感度を分けて確認できます。
 
 ## TopCell外部benchmark
 
@@ -305,8 +352,10 @@ forecast、観測履歴からのhidden state推定、およびforecast境界後�
   温度依存物性が主要な系では、温度依存の物理項を追加する必要があります。
 - heat capacityを含む全係数を同時に自由化すると尺度不定になるため、現在はcapacityを
   engineering priorとして固定しています。
-- monitorは観測更新に必要なfilter共分散を持ちます。forecastの予測区間は、係数同定の
-  uncertaintyを含めて検証できるまでは出力しません。
+- forecastの95%区間は状態推定と未指令熱process noiseだけを伝播します。係数、将来入力、放射などの
+  model-form uncertaintyは含まず、経験的に校正済みの予測区間でもありません。
+  `run_manifest.json`にも区間の意味を明記します。予測温度が学習温度域を外れた場合は、入力範囲内でも
+  coverage警告を出します。
 - 外部基準なしでは全sensor共通offsetと一様な物理温度ずれを分離できません。この場合の
   `sensor_bias`は零平均です。校正済みsensorがある場合だけ`bias_reference`へ名前を指定し、
   そのsensorのbiasを0として他sensorの絶対offsetを推定できます。

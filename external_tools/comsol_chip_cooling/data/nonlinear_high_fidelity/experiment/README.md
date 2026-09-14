@@ -48,3 +48,5 @@ uv run python external_tools/comsol_chip_cooling/validate_experiment.py `
 
 現時点では一致する実測CSVが提供・公開されていないため、実験妥当化は未実施です。このディレクトリの
 templateにある時刻・入力は試験条件ですが、空欄の温度・不確かさは実測データではありません。
+比較scriptの完走はデータ整列と誤差算出の完了だけを表します。用途別の事前受入基準が別途承認されるまで、
+出力する`validation_status.json`の`acceptance_passed`は`null`のままです。

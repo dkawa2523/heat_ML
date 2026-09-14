@@ -197,6 +197,14 @@ class ScalarLawSet(nn.Module):
             self.log_exponent_multiplier,
         )
 
+    def learnable_log_parameter_values(self) -> tuple[torch.Tensor, ...]:
+        """Return only multiplier entries that affect a physical coefficient."""
+        return (
+            self.log_offset_multiplier[self.offset_learn_mask],
+            self.log_scale_multiplier[self.scale_learn_mask],
+            self.log_exponent_multiplier[self.exponent_learn_mask],
+        )
+
     def fitted(self) -> list[dict[str, Any]]:
         """Describe fitted laws without exposing their runtime representation."""
         offsets = self.offset().detach().cpu().tolist()

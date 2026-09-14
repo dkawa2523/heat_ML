@@ -53,7 +53,14 @@ def reject_unknown_keys(values: object, allowed: Collection[str], section: str) 
         raise ValueError(f"{section} must be a mapping")
     unknown = set(values) - set(allowed)
     if unknown:
-        raise ValueError(f"unknown {section} options: {sorted(unknown)}")
+        raise ValueError(f"unknown {section} options: {sorted(map(str, unknown))}")
+
+
+def require_bool(value: object, option: str) -> bool:
+    """Return a real YAML boolean without accepting truthy strings or numbers."""
+    if not isinstance(value, bool):
+        raise ValueError(f"{option} must be boolean")
+    return value
 
 
 def validate_config_root(cfg: object) -> None:

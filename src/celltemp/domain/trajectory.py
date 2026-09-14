@@ -60,6 +60,7 @@ class Trajectory:
     control_names: tuple[str, ...]
     observation_mask: np.ndarray | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    initial_actuator: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         time = np.array(self.time, dtype=np.float64, copy=True)
@@ -69,6 +70,11 @@ class Trajectory:
             np.isfinite(temperature)
             if self.observation_mask is None
             else np.array(self.observation_mask, dtype=bool, copy=True)
+        )
+        initial_actuator = (
+            None
+            if self.initial_actuator is None
+            else np.array(self.initial_actuator, dtype=np.float64, copy=True)
         )
 
         if not self.case_id.strip():
@@ -85,9 +91,16 @@ class Trajectory:
             raise ValueError("sensor_names must be unique")
         if len(set(self.control_names)) != len(self.control_names):
             raise ValueError("control_names must be unique")
+        if initial_actuator is not None:
+            if initial_actuator.shape != (len(self.control_names),):
+                raise ValueError("initial_actuator must have one value per control")
+            if not np.isfinite(initial_actuator).all():
+                raise ValueError("initial_actuator must contain finite values")
 
         for array in (time, temperature, commands, mask):
             array.setflags(write=False)
+        if initial_actuator is not None:
+            initial_actuator.setflags(write=False)
         object.__setattr__(self, "time", time)
         object.__setattr__(self, "temperature", temperature)
         object.__setattr__(self, "commands", commands)
@@ -95,6 +108,7 @@ class Trajectory:
         object.__setattr__(self, "sensor_names", tuple(self.sensor_names))
         object.__setattr__(self, "control_names", tuple(self.control_names))
         object.__setattr__(self, "metadata", dict(self.metadata))
+        object.__setattr__(self, "initial_actuator", initial_actuator)
 
     @property
     def dt(self) -> np.ndarray:
@@ -135,6 +149,7 @@ class Trajectory:
         convention: str = "left",
         observation_mask: np.ndarray | None = None,
         metadata: Mapping[str, Any] | None = None,
+        initial_actuator: np.ndarray | None = None,
     ) -> Trajectory:
         """Build a trajectory from a table that stores controls at every timestamp.
 
@@ -164,4 +179,5 @@ class Trajectory:
             control_names=tuple(control_names),
             observation_mask=observation_mask,
             metadata=metadata or {},
+            initial_actuator=initial_actuator,
         )

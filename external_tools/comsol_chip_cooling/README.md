@@ -65,7 +65,10 @@ runnerは次を自動で行います。
 温度依存air、任意の表面間放射を解きます。通常ケースは10秒、短pulseだけ1秒間隔です。
 
 installationを明示する場合は `--comsol-root`、COMSOLのraw結果から変換だけを再開する場合は
-`--reuse-raw` を使えます。単一ケースは `--case T03_power_step_8w` のように指定します。
+`--reuse-raw` を使えます。選択した全raw tableが揃っていれば、この再変換にはCOMSOL installationや
+license checkoutは不要です。不足するtableが1つでもあれば通常どおりCOMSOLを選択します。単一ケースは
+`--case T03_power_step_8w` のように指定します。solve中は既存rawを保持し、生成物の構文と入力一致を
+確認してから置換します。
 
 ## 出力
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from celltemp.workflows.common import output_target, staged_output_directory
+from celltemp.workflows.common import output_target, project_run_path, staged_output_directory
 
 
 def test_output_target_requires_an_explicit_absolute_path_outside_project(
@@ -22,6 +22,30 @@ def test_output_target_requires_an_explicit_absolute_path_outside_project(
         output_target({"output_dir": "../external-results"}, project)
     with pytest.raises(ValueError, match="root or an ancestor"):
         output_target({"output_dir": str(tmp_path)}, project)
+
+
+def test_project_run_path_cannot_hide_relative_escape(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    configured = project_run_path({"output_dir": "../external-results", "run_name": "run"})
+    with pytest.raises(ValueError, match="relative output_dir"):
+        output_target({"output_dir": configured}, project)
+
+    with pytest.raises(ValueError, match="single directory name"):
+        project_run_path({"output_dir": str(tmp_path), "run_name": "../external-results"})
+
+
+def test_output_target_rejects_string_boolean(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="overwrite must be boolean"):
+        output_target({"output_dir": "results", "overwrite": "false"}, tmp_path)
+    with pytest.raises(ValueError, match=r"project\.overwrite_run must be boolean"):
+        output_target(
+            {
+                "output_dir": "results",
+                "project": {"overwrite_run": "false"},
+            },
+            tmp_path,
+        )
 
 
 def test_staged_output_replaces_only_after_success(tmp_path: Path) -> None:

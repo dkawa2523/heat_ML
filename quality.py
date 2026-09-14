@@ -52,17 +52,20 @@ def run(tool: str, *args: str, timeout: int = 3600) -> subprocess.CompletedProce
         "PYTHONUTF8": "1",
         "PYTHONPATH": source_path if not python_path else source_path + os.pathsep + python_path,
     }
-    return subprocess.run(
-        command,
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        env=environment,
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            command,
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=environment,
+            check=False,
+        )
+    except OSError as error:
+        return subprocess.CompletedProcess(command, 127, "", f"cannot run {tool}: {error}")
 
 
 def report(name: str, result: subprocess.CompletedProcess[str]) -> bool:

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-30T22:59:44.089781+00:00",
+  "generated_at": "2026-09-14T21:55:47.897045+00:00",
   "objective": "External open-loop evaluation of the flow-dependent three-node thermal network against local-mesh conjugate-flow CAE, with radiation as a paired model gap.",
   "data_quality": {
     "dynamic_reference_matches_hv02": true,
@@ -8,6 +8,7 @@
     "mesh_qualified": false,
     "benchmark_qualified": true,
     "temporal_qualified": false,
+    "experiment_compared": false,
     "experiment_validated": false,
     "mesh_difference_k": {
       "chip": 0.4962085957,
@@ -39,7 +40,7 @@
           "node_b": "sink_base",
           "conductance": {
             "type": "constant",
-            "value": 39.94871139275545
+            "value": 39.96068852870492
           }
         },
         {
@@ -47,7 +48,7 @@
           "node_b": "fins",
           "conductance": {
             "type": "constant",
-            "value": 9.65886632531643
+            "value": 9.659281943282522
           }
         }
       ],
@@ -84,8 +85,8 @@
             "control": "inlet_air_velocity",
             "reference": 0.1,
             "offset": 0.04,
-            "scale": 0.1375754706541659,
-            "exponent": 0.9432967673337441
+            "scale": 0.13757525348904123,
+            "exponent": 0.9432966113831553
           }
         }
       ]
@@ -171,28 +172,34 @@
       }
     ],
     "best_epoch": 200,
-    "best_validation_rmse_k": 0.3126877359777144,
+    "best_causal_validation_rmse_k": 0.3126871875351152,
     "metrics": {
       "train": {
         "n_cases": 8,
-        "mean_case_rmse": 0.214619274135676,
-        "median_case_rmse": 0.22642389807836383,
-        "worst_case_rmse": 0.3600077395124808,
-        "mean_case_mae": 0.17313649049112642
+        "mean_case_conditional_rmse": 0.21461343122502877,
+        "median_case_conditional_rmse": 0.22641533457632668,
+        "worst_case_conditional_rmse": 0.3600029109186094,
+        "mean_case_conditional_mae": 0.1731266366701124,
+        "mean_case_causal_rmse": 0.21461343122502877,
+        "worst_case_causal_rmse": 0.3600029109186094
       },
       "val": {
         "n_cases": 1,
-        "mean_case_rmse": 0.3126877359777144,
-        "median_case_rmse": 0.3126877359777144,
-        "worst_case_rmse": 0.3126877359777144,
-        "mean_case_mae": 0.2491079871664093
+        "mean_case_conditional_rmse": 0.3126871875351152,
+        "median_case_conditional_rmse": 0.3126871875351152,
+        "worst_case_conditional_rmse": 0.3126871875351152,
+        "mean_case_conditional_mae": 0.24909776147124005,
+        "mean_case_causal_rmse": 0.3126871875351152,
+        "worst_case_causal_rmse": 0.3126871875351152
       },
       "test": {
         "n_cases": 1,
-        "mean_case_rmse": 0.4047951117287358,
-        "median_case_rmse": 0.4047951117287358,
-        "worst_case_rmse": 0.4047951117287358,
-        "mean_case_mae": 0.3690957059892836
+        "mean_case_conditional_rmse": 0.4047870455985973,
+        "median_case_conditional_rmse": 0.4047870455985973,
+        "worst_case_conditional_rmse": 0.4047870455985973,
+        "mean_case_conditional_mae": 0.3690815167955365,
+        "mean_case_causal_rmse": 0.4047870455985973,
+        "worst_case_causal_rmse": 0.4047870455985973
       }
     }
   },
@@ -203,32 +210,32 @@
         "radiation_enabled": false,
         "n_forecast_timepoints": 11,
         "n_scalar_predictions": 33,
-        "rmse_k": 0.04763226429797162,
-        "mae_k": 0.03384502928115544,
-        "max_abs_error_k": 0.11209492593053483,
-        "prior_rmse_k": 0.976931583910461,
-        "rmse_improvement_percent": 95.124298867756,
-        "rms_error_over_mesh_difference": 0.09613260182219956,
-        "max_abs_error_over_mesh_difference": 0.22590282978150117,
+        "rmse_k": 0.047652987041397636,
+        "mae_k": 0.0338537946880777,
+        "max_abs_error_k": 0.11218511468921832,
+        "prior_rmse_k": 0.9769315839109348,
+        "rmse_improvement_percent": 95.12217766052468,
+        "rms_error_over_mesh_difference": 0.09617430080991968,
+        "max_abs_error_over_mesh_difference": 0.22608458551782867,
         "fraction_abs_error_within_mesh_difference": 1.0,
-        "chip_peak_error_k": -0.11209492593053483,
-        "max_hotspot_underprediction_k": 0.2373619159305349
+        "chip_peak_error_k": -0.11218511468921832,
+        "max_hotspot_underprediction_k": 0.2374521046892184
       },
       {
         "case_id": "HV02_composite_radiation",
         "radiation_enabled": true,
         "n_forecast_timepoints": 11,
         "n_scalar_predictions": 33,
-        "rmse_k": 0.1435971415605291,
-        "mae_k": 0.09926849652203543,
-        "max_abs_error_k": 0.3439330486594443,
-        "prior_rmse_k": 0.8009057774841265,
-        "rmse_improvement_percent": 82.07065729858901,
-        "rms_error_over_mesh_difference": 0.2906041377091513,
-        "max_abs_error_over_mesh_difference": 0.6987098567168852,
+        "rmse_k": 0.14358424397816533,
+        "mae_k": 0.09925211002959611,
+        "max_abs_error_k": 0.3439540198743103,
+        "prior_rmse_k": 0.8009057774845975,
+        "rmse_improvement_percent": 82.07226767309383,
+        "rms_error_over_mesh_difference": 0.29057842885914364,
+        "max_abs_error_over_mesh_difference": 0.6987524603416061,
         "fraction_abs_error_within_mesh_difference": 1.0,
-        "chip_peak_error_k": 0.26801640734382204,
-        "max_hotspot_underprediction_k": 0.07380005838258086
+        "chip_peak_error_k": 0.2679262182872293,
+        "max_hotspot_underprediction_k": 0.07388942859004288
       }
     ],
     "phases": [
@@ -238,9 +245,9 @@
         "response_time_start_exclusive_s": 0.0,
         "response_time_end_inclusive_s": 60.0,
         "n_timepoints": 3,
-        "rmse_k": 1.3322724983502533e-06,
-        "mae_k": 1.2358009900342242e-06,
-        "max_abs_error_k": 1.9023085471303602e-06
+        "rmse_k": 1.332272601819503e-06,
+        "mae_k": 1.235801357147971e-06,
+        "max_abs_error_k": 1.9023053283717672e-06
       },
       {
         "case_id": "HV01_composite_conjugate",
@@ -248,9 +255,9 @@
         "response_time_start_exclusive_s": 60.0,
         "response_time_end_inclusive_s": 120.0,
         "n_timepoints": 3,
-        "rmse_k": 0.037196460724694756,
-        "mae_k": 0.031257837823466396,
-        "max_abs_error_k": 0.06707861921531943
+        "rmse_k": 0.03718044533045291,
+        "mae_k": 0.03124138439346227,
+        "max_abs_error_k": 0.06706955312692031
       },
       {
         "case_id": "HV01_composite_conjugate",
@@ -258,9 +265,9 @@
         "response_time_start_exclusive_s": 120.0,
         "response_time_end_inclusive_s": 160.0,
         "n_timepoints": 2,
-        "rmse_k": 0.04040390794371821,
-        "mae_k": 0.03261956597122998,
-        "max_abs_error_k": 0.07520099695964433
+        "rmse_k": 0.040446658909823505,
+        "mae_k": 0.032652826763863864,
+        "max_abs_error_k": 0.07529101443322617
       },
       {
         "case_id": "HV01_composite_conjugate",
@@ -268,9 +275,9 @@
         "response_time_start_exclusive_s": 160.0,
         "response_time_end_inclusive_s": 220.0,
         "n_timepoints": 3,
-        "rmse_k": 0.0764667182347218,
-        "mae_k": 0.07109298975896018,
-        "max_abs_error_k": 0.11209492593053483
+        "rmse_k": 0.07650677078854146,
+        "mae_k": 0.0711194091522229,
+        "max_abs_error_k": 0.11218511468921832
       },
       {
         "case_id": "HV02_composite_radiation",
@@ -278,9 +285,9 @@
         "response_time_start_exclusive_s": 0.0,
         "response_time_end_inclusive_s": 60.0,
         "n_timepoints": 3,
-        "rmse_k": 0.00016437277139891608,
-        "mae_k": 0.0001528319655971839,
-        "max_abs_error_k": 0.00022790563390984175
+        "rmse_k": 0.00016437275074049302,
+        "mae_k": 0.0001528319727211643,
+        "max_abs_error_k": 0.00022790517238746588
       },
       {
         "case_id": "HV02_composite_radiation",
@@ -288,9 +295,9 @@
         "response_time_start_exclusive_s": 60.0,
         "response_time_end_inclusive_s": 120.0,
         "n_timepoints": 3,
-        "rmse_k": 0.053311978618045285,
-        "mae_k": 0.04556742543151652,
-        "max_abs_error_k": 0.09018046375040001
+        "rmse_k": 0.05329856583215581,
+        "mae_k": 0.045550971791441616,
+        "max_abs_error_k": 0.09017139743798808
       },
       {
         "case_id": "HV02_composite_radiation",
@@ -298,9 +305,9 @@
         "response_time_start_exclusive_s": 120.0,
         "response_time_end_inclusive_s": 160.0,
         "n_timepoints": 2,
-        "rmse_k": 0.11363706987682369,
-        "mae_k": 0.10719131865981169,
-        "max_abs_error_k": 0.17237676130521606
+        "rmse_k": 0.11362462355363272,
+        "mae_k": 0.10716550314674222,
+        "max_abs_error_k": 0.17239895096863478
       },
       {
         "case_id": "HV02_composite_radiation",
@@ -308,15 +315,15 @@
         "response_time_start_exclusive_s": 160.0,
         "response_time_end_inclusive_s": 220.0,
         "n_timepoints": 3,
-        "rmse_k": 0.25329046577647046,
-        "mae_k": 0.2468033507438084,
-        "max_abs_error_k": 0.3439330486594443
+        "rmse_k": 0.2532702007321347,
+        "mae_k": 0.24677693091319478,
+        "max_abs_error_k": 0.3439540198743103
       }
     ],
-    "mean_case_rmse_k": 0.09561470292925037,
+    "mean_case_rmse_k": 0.09561861550978148,
     "worst_case": "HV02_composite_radiation",
-    "worst_case_rmse_k": 0.1435971415605291,
-    "mean_prior_rmse_k": 0.8889186806972937,
+    "worst_case_rmse_k": 0.14358424397816533,
+    "mean_prior_rmse_k": 0.8889186806977661,
     "model_adequacy_status": "not_resolved_beyond_mesh_difference"
   },
   "radiation_pair": {
@@ -324,40 +331,40 @@
       {
         "sensor": "chip",
         "truth_terminal_radiation_delta_k": -0.3813336700000036,
-        "predicted_terminal_pair_delta_k": -0.0012223367256467554,
+        "predicted_terminal_pair_delta_k": -0.0012223370235560083,
         "max_abs_truth_radiation_delta_k": 0.3813336700000036,
-        "max_abs_predicted_pair_delta_k": 0.0018545699999776843,
-        "pair_delta_rmse_k": 0.17543881072319006,
-        "pair_delta_max_abs_error_k": 0.38011133327435687,
+        "max_abs_predicted_pair_delta_k": 0.0018545700000025533,
+        "pair_delta_rmse_k": 0.17543881056931915,
+        "pair_delta_max_abs_error_k": 0.3801113329764476,
         "mesh_difference_k": 0.4962085957,
         "radiation_effect_over_mesh_difference": 0.7684946881302154,
-        "terminal_predicted_to_truth_delta_ratio_abs": 0.0032054256463814063,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.0032054264276112744,
         "terminal_direction_matches": true
       },
       {
         "sensor": "sink_base",
         "truth_terminal_radiation_delta_k": -0.38320177000000655,
-        "predicted_terminal_pair_delta_k": -0.0012218971622530717,
+        "predicted_terminal_pair_delta_k": -0.0012218975921882702,
         "max_abs_truth_radiation_delta_k": 0.38320177000000655,
-        "max_abs_predicted_pair_delta_k": 0.0018544999999754452,
-        "pair_delta_rmse_k": 0.17674002990746357,
-        "pair_delta_max_abs_error_k": 0.3819798728377535,
+        "max_abs_predicted_pair_delta_k": 0.0018545000000003142,
+        "pair_delta_rmse_k": 0.17674002965969923,
+        "pair_delta_max_abs_error_k": 0.3819798724078183,
         "mesh_difference_k": 0.4954013419,
         "radiation_effect_over_mesh_difference": 0.7735178280509347,
-        "terminal_predicted_to_truth_delta_ratio_abs": 0.0031886521877314156,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.0031886533096865638,
         "terminal_direction_matches": true
       },
       {
         "sensor": "fins",
         "truth_terminal_radiation_delta_k": -0.3927567699999983,
-        "predicted_terminal_pair_delta_k": -0.0012171294307563585,
+        "predicted_terminal_pair_delta_k": -0.001217130068404515,
         "max_abs_truth_radiation_delta_k": 0.3927567699999983,
-        "max_abs_predicted_pair_delta_k": 0.0018464200000565256,
-        "pair_delta_rmse_k": 0.18383782511232333,
-        "pair_delta_max_abs_error_k": 0.39153964056924195,
+        "max_abs_predicted_pair_delta_k": 0.0018464199999996822,
+        "pair_delta_rmse_k": 0.1838378247041826,
+        "pair_delta_max_abs_error_k": 0.3915396399315938,
         "mesh_difference_k": 0.4922401557,
         "radiation_effect_over_mesh_difference": 0.7978966475042465,
-        "terminal_predicted_to_truth_delta_ratio_abs": 0.003098939404039716,
+        "terminal_predicted_to_truth_delta_ratio_abs": 0.0030989410275589144,
         "terminal_direction_matches": true
       }
     ],

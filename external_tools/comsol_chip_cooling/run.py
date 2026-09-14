@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 from cases import Case, all_cases
-from comsol_runtime import ComsolRuntime, select_comsol
+from comsol_runtime import ComsolRuntime, provenance_path, select_comsol
 from dataset import (
     forecast_frame,
     monitor_frames,
@@ -39,7 +39,7 @@ def _case_paths(case: Case) -> tuple[Path, Path, Path]:
 def solve_case(
     case: Case,
     *,
-    runtime: ComsolRuntime,
+    runtime: ComsolRuntime | None,
     reuse_raw: bool,
 ) -> pd.DataFrame:
     schedule_path, raw_path, log_path = _case_paths(case)
@@ -49,8 +49,8 @@ def solve_case(
     schedule.to_csv(schedule_path, index=False, float_format="%.10g")
     if reuse_raw and raw_path.is_file():
         return parse_comsol_table(raw_path, case)
-    if raw_path.exists():
-        raw_path.unlink()
+    if runtime is None:
+        raise RuntimeError(f"{case.case_id}: reusable raw table is unavailable")
 
     encoded = base64.b64encode(schedule.to_csv(index=False).encode("utf-8")).decode("ascii")
     model_output = "-"
@@ -58,14 +58,21 @@ def solve_case(
         model_path = WORK_ROOT / "models" / "electronic_chip_cooling_dataset.mph"
         model_path.parent.mkdir(parents=True, exist_ok=True)
         model_output = str(model_path)
-    runtime.run_java(
-        JAVA_CLASS,
-        [runtime.source_model, encoded, raw_path, model_output],
-        log_path=log_path,
-        expected_output=raw_path,
-        label=f"case {case.case_id}",
-    )
-    return parse_comsol_table(raw_path, case)
+    pending_path = raw_path.with_suffix(f"{raw_path.suffix}.pending")
+    pending_path.unlink(missing_ok=True)
+    try:
+        runtime.run_java(
+            JAVA_CLASS,
+            [runtime.source_model, encoded, pending_path, model_output],
+            log_path=log_path,
+            expected_output=pending_path,
+            label=f"case {case.case_id}",
+        )
+        parsed = parse_comsol_table(pending_path, case)
+        pending_path.replace(raw_path)
+        return parsed
+    finally:
+        pending_path.unlink(missing_ok=True)
 
 
 def _target_path(data_root: Path, role: str, case_id: str) -> Path:
@@ -90,15 +97,15 @@ def _write_checked(
     if target.exists() and not overwrite:
         raise FileExistsError(f"Refusing to replace {target}; pass --overwrite")
     summary = validate_dataset_frame(frame, role, case_id)
+    summary["path"] = provenance_path(target, TOOL_ROOT)
     write_csv(frame, target)
-    summary["path"] = target.relative_to(TOOL_ROOT).as_posix()
     return summary
 
 
 def build_dataset(
     cases: list[Case],
     *,
-    runtime: ComsolRuntime,
+    runtime: ComsolRuntime | None,
     data_root: Path,
     reuse_raw: bool,
     overwrite: bool,
@@ -186,10 +193,15 @@ def main(argv: list[str] | None = None) -> int:
         missing = requested - {case.case_id for case in selected}
         if missing:
             raise ValueError(f"unknown case IDs: {sorted(missing)}")
-    runtime = select_comsol(args.comsol_root)
-    print(f"Using COMSOL: {runtime.root}", flush=True)
-    print(f"Source model: {runtime.source_model}", flush=True)
-    runtime.compile(JAVA_SOURCE)
+    reusable = args.reuse_raw and all(_case_paths(case)[1].is_file() for case in selected)
+    runtime: ComsolRuntime | None = None
+    if reusable:
+        print("Reusing existing verified raw COMSOL tables", flush=True)
+    else:
+        runtime = select_comsol(args.comsol_root)
+        print(f"Using COMSOL: {runtime.root}", flush=True)
+        print(f"Source model: {runtime.source_model}", flush=True)
+        runtime.compile(JAVA_SOURCE)
     summary = build_dataset(
         selected,
         runtime=runtime,
@@ -199,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     summary_path = args.data_root.resolve() / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    summary.to_csv(summary_path, index=False)
+    write_csv(summary, summary_path)
     print(f"Created {len(summary)} published datasets under {args.data_root.resolve()}")
     print(f"QA summary: {summary_path}")
     return 0

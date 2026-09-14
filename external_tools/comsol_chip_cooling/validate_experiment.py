@@ -132,6 +132,7 @@ def main() -> int:
     metrics.to_csv(args.output / "validation_metrics.csv", index=False, float_format="%.10g")
     status = {
         "status": "evaluated",
+        "acceptance_passed": None,
         "boundary_key": list(KEY),
         "rows": len(cae),
         "cases": int(cae["case_id"].nunique()),

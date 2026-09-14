@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -13,8 +14,10 @@ from celltemp.engine import ThermalRCModel
 
 from .objective import (
     actuator_before_interval,
+    initial_observation_rmse,
     masked_huber_loss,
-    trajectory_rmse,
+    profiled_initial_temperature,
+    trajectory_initial_actuator,
     trajectory_tensors,
 )
 
@@ -28,6 +31,7 @@ class TrainingConfig:
     horizon: int | None = None
     learning_rate: float = 0.03
     huber_delta: float = 1.0
+    initial_temperature_prior_std: float = 50.0
     prior_weight: float = 1e-4
     gradient_clip: float = 10.0
     validation_every: int = 5
@@ -40,22 +44,32 @@ class TrainingConfig:
             "batch_size": self.batch_size,
             "learning_rate": self.learning_rate,
             "huber_delta": self.huber_delta,
+            "initial_temperature_prior_std": self.initial_temperature_prior_std,
             "validation_every": self.validation_every,
             "patience": self.patience,
         }
-        invalid = [name for name, value in positive.items() if value <= 0]
+        invalid = [
+            name for name, value in positive.items() if not math.isfinite(value) or value <= 0
+        ]
         if invalid:
-            raise ValueError(f"training values must be positive: {invalid}")
-        if self.horizon is not None and self.horizon <= 0:
-            raise ValueError("training horizon must be positive or null")
-        if self.prior_weight < 0.0 or self.gradient_clip < 0.0:
-            raise ValueError("prior_weight and gradient_clip must be non-negative")
+            raise ValueError(f"training values must be positive and finite: {invalid}")
+        if self.horizon is not None and (not math.isfinite(self.horizon) or self.horizon <= 0):
+            raise ValueError("training horizon must be positive and finite or null")
+        non_negative = {
+            "prior_weight": self.prior_weight,
+            "gradient_clip": self.gradient_clip,
+        }
+        invalid = [
+            name for name, value in non_negative.items() if not math.isfinite(value) or value < 0
+        ]
+        if invalid:
+            raise ValueError(f"training values must be non-negative and finite: {invalid}")
 
 
 @dataclass(frozen=True)
 class TrainingResult:
     best_epoch: int
-    best_validation_rmse: float
+    best_causal_validation_rmse: float
     history: tuple[dict[str, float], ...]
 
 
@@ -64,8 +78,11 @@ def _log_multipliers(model: ThermalRCModel) -> tuple[torch.Tensor, ...]:
 
 
 def _parameter_prior(model: ThermalRCModel) -> torch.Tensor:
-    nonempty = [item.square().mean() for item in _log_multipliers(model) if item.numel()]
-    return torch.stack(nonempty).mean() if nonempty else model.capacity.new_zeros(())
+    learned = [item for item in model.learnable_log_parameter_values() if item.numel()]
+    if learned:
+        return torch.cat(learned).square().mean()
+    raw = _log_multipliers(model)
+    return sum((item.sum() * 0.0 for item in raw), model.capacity.new_zeros(()))
 
 
 def _valid_starts(trajectory: Trajectory, horizon: int) -> np.ndarray:
@@ -110,6 +127,7 @@ def _rollout_case_losses(
     selected: list[tuple[Trajectory, int, int]],
     *,
     huber_delta: float,
+    initial_temperature_prior_std: float,
 ) -> torch.Tensor:
     """Roll out equal-length groups and return one equally weighted loss per case."""
     by_length: dict[int, list[tuple[Trajectory, int, int]]] = {}
@@ -126,8 +144,23 @@ def _rollout_case_losses(
         masks: list[torch.Tensor] = []
         for trajectory, start, stop in group:
             observed, commands, dt, mask = trajectory_tensors(model, trajectory)
-            initial_temperatures.append(model.initialize_temperature(observed[start], mask[start]))
-            initial_actuators.append(actuator_before_interval(model, commands, dt, start))
+            starting_actuator = trajectory_initial_actuator(model, trajectory, commands)
+            initial_temperatures.append(
+                profiled_initial_temperature(
+                    model,
+                    observed,
+                    commands,
+                    dt,
+                    mask,
+                    start=start,
+                    stop=stop,
+                    prior_std=initial_temperature_prior_std,
+                    initial_actuator=starting_actuator,
+                )
+            )
+            initial_actuators.append(
+                actuator_before_interval(model, commands, dt, start, starting_actuator)
+            )
             command_windows.append(commands[start:stop])
             dt_windows.append(dt[start:stop])
             targets.append(observed[start + 1 : stop + 1])
@@ -147,8 +180,12 @@ def _rollout_case_losses(
     return torch.stack(case_losses)
 
 
-def _validation_rmse(model: ThermalRCModel, trajectories: list[Trajectory]) -> float:
-    values = [trajectory_rmse(model, trajectory) for trajectory in trajectories]
+def _causal_validation_rmse(
+    model: ThermalRCModel,
+    trajectories: list[Trajectory],
+) -> float:
+    """Select deployed parameters using a future-blind initialization metric."""
+    values = [initial_observation_rmse(model, trajectory) for trajectory in trajectories]
     return float(np.mean(values))
 
 
@@ -165,6 +202,17 @@ def _validate_observations(trajectories: list[Trajectory]) -> None:
         raise ValueError(
             f"training trajectories need an observation after the initial row: {missing_targets}"
         )
+
+
+def _checked_backward(loss: torch.Tensor, model: ThermalRCModel, epoch: int) -> None:
+    if not bool(torch.isfinite(loss)):
+        raise FloatingPointError(f"non-finite training loss at epoch {epoch}")
+    loss.backward()
+    if any(
+        parameter.grad is not None and not bool(torch.isfinite(parameter.grad).all())
+        for parameter in model.parameters()
+    ):
+        raise FloatingPointError(f"non-finite training gradient at epoch {epoch}")
 
 
 def fit_thermal_model(
@@ -205,10 +253,11 @@ def fit_thermal_model(
                 model,
                 selected,
                 huber_delta=config.huber_delta,
+                initial_temperature_prior_std=config.initial_temperature_prior_std,
             )
             data_loss = case_losses.mean()
             loss = data_loss + config.prior_weight * _parameter_prior(model)
-            loss.backward()
+            _checked_backward(loss, model, epoch)
             if config.gradient_clip:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip)
             optimizer.step()
@@ -223,10 +272,15 @@ def fit_thermal_model(
         )
         if should_validate:
             model.eval()
-            validation_rmse = _validation_rmse(model, validation)
-            row["validation_rmse"] = validation_rmse
-            if validation_rmse < best_validation:
-                best_validation = validation_rmse
+            causal_validation_rmse = _causal_validation_rmse(
+                model,
+                validation,
+            )
+            if not math.isfinite(causal_validation_rmse):
+                raise FloatingPointError(f"non-finite validation RMSE at epoch {epoch}")
+            row["causal_validation_rmse"] = causal_validation_rmse
+            if causal_validation_rmse < best_validation:
+                best_validation = causal_validation_rmse
                 best_epoch = epoch
                 best_state = copy.deepcopy(model.state_dict())
                 stale_checks = 0
@@ -239,6 +293,6 @@ def fit_thermal_model(
     model.load_state_dict(best_state)
     return TrainingResult(
         best_epoch=best_epoch,
-        best_validation_rmse=best_validation,
+        best_causal_validation_rmse=best_validation,
         history=tuple(history),
     )

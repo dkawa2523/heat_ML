@@ -111,12 +111,14 @@ def _validate_pair(frames: dict[str, pd.DataFrame]) -> bool:
     )
 
 
-def _experiment_validated(root: Path) -> bool:
+def _experiment_status(root: Path) -> tuple[bool, bool]:
     path = root / "data/nonlinear_high_fidelity/experiment/result/validation_status.json"
     if not path.exists():
-        return False
+        return False, False
     status = json.loads(path.read_text(encoding="utf-8"))
-    return status.get("status") == "evaluated"
+    compared = status.get("status") == "evaluated"
+    accepted = compared and status.get("acceptance_passed") is True
+    return compared, accepted
 
 
 def _reference_quality(root: Path, frames: dict[str, pd.DataFrame]) -> dict[str, Any]:
@@ -137,13 +139,15 @@ def _reference_quality(root: Path, frames: dict[str, pd.DataFrame]) -> dict[str,
     uncertainty = {
         sensor: float(reference[f"mesh_uncertainty_{sensor}"].max()) for sensor in SENSORS
     }
+    experiment_compared, experiment_validated = _experiment_status(root)
     return {
         "dynamic_reference_matches_hv02": reference_matches,
         "mesh_profile": str(reference["mesh_profile"].iat[0]),
         "mesh_qualified": bool(reference["mesh_qualified"].all()),
         "benchmark_qualified": bool(reference["benchmark_qualified"].all()),
         "temporal_qualified": bool(reference["temporal_qualified"].all()),
-        "experiment_validated": _experiment_validated(root),
+        "experiment_compared": experiment_compared,
+        "experiment_validated": experiment_validated,
         "mesh_difference_k": uncertainty,
     }
 
@@ -466,7 +470,9 @@ def _summary(
             "data": "data/nonlinear/train/*.csv",
             "split_assignment": _records(split[["case_id", "split"]]),
             "best_epoch": artifact.metadata["training"]["best_epoch"],
-            "best_validation_rmse_k": artifact.metadata["training"]["best_validation_rmse"],
+            "best_causal_validation_rmse_k": artifact.metadata["training"][
+                "best_causal_validation_rmse"
+            ],
             "metrics": training_metrics,
         },
         "evaluation": {
@@ -563,7 +569,7 @@ def _report(
                 for split, metrics in summary["training"]["metrics"].items()
             ]
         ),
-        ["split", "n_cases", "mean_case_rmse", "worst_case_rmse"],
+        ["split", "n_cases", "mean_case_causal_rmse", "worst_case_causal_rmse"],
     )
     heldout_case = next(
         row["case_id"] for row in summary["training"]["split_assignment"] if row["split"] == "test"
@@ -595,7 +601,8 @@ def _report(
 
 {training_table}
 
-holdout `{heldout_case}` のRMSEは **{training["test"]["mean_case_rmse"]:.4f} K**でした。
+holdout `{heldout_case}` の因果RMSEは
+**{training["test"]["mean_case_causal_rmse"]:.4f} K**でした。
 これはcold/high-flowの組合せ汎化に対する最小thermal networkのscreening evidenceです。
 ただし、この10本はglobal-8 meshであり設計精度の絶対誤差判定には使いません。
 
@@ -634,6 +641,7 @@ power、airflow、hot/low-flow複合条件へ進むにつれて、モデル誤�
 - local-medium meshはbenchmark用途には合格: `{quality["benchmark_qualified"]}`
 - 厳格mesh収束: `{quality["mesh_qualified"]}`
 - 独立時間刻み収束: `{quality["temporal_qualified"]}`
+- 同一境界の実験比較実施: `{quality["experiment_compared"]}`
 - 同一境界の実験妥当化: `{quality["experiment_validated"]}`
 
 本結果はmodel-form screeningには利用できますが、絶対温度保証、hotspot安全判定、製品設計認証には
@@ -692,20 +700,37 @@ def run_benchmark(config_path: Path, output: Path) -> dict[str, Any]:
         predictions,
     )
     with staged_output_directory(output.resolve(), overwrite=True) as target:
-        cases.to_csv(target / "case_metrics.csv", index=False, float_format="%.10g")
-        sensors.to_csv(target / "sensor_metrics.csv", index=False, float_format="%.10g")
-        phases.to_csv(target / "phase_metrics.csv", index=False, float_format="%.10g")
-        pair.to_csv(target / "radiation_pair_metrics.csv", index=False, float_format="%.10g")
+        cases.to_csv(
+            target / "case_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
+        )
+        sensors.to_csv(
+            target / "sensor_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
+        )
+        phases.to_csv(
+            target / "phase_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
+        )
+        pair.to_csv(
+            target / "radiation_pair_metrics.csv",
+            index=False,
+            float_format="%.10g",
+            lineterminator="\n",
+        )
         prediction_dir = target / "predictions"
         prediction_dir.mkdir()
         for case_id, frame in prediction_frames.items():
-            frame.to_csv(prediction_dir / f"{case_id}.csv", index=False, float_format="%.10g")
+            frame.to_csv(
+                prediction_dir / f"{case_id}.csv",
+                index=False,
+                float_format="%.10g",
+                lineterminator="\n",
+            )
         (target / "summary.json").write_text(
             json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False),
             encoding="utf-8",
+            newline="\n",
         )
         (target / "report.md").write_text(
-            _report(summary, cases, sensors, phases, pair), encoding="utf-8"
+            _report(summary, cases, sensors, phases, pair), encoding="utf-8", newline="\n"
         )
     return summary
 
@@ -732,7 +757,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(summary["workflow"], indent=2, ensure_ascii=False))
     print(json.dumps(summary["evaluation"], indent=2, ensure_ascii=False))
     print(f"saved benchmark: {args.output.resolve()}")
-    return 0
+    return 0 if summary["workflow"]["status"] == "pass" else 1
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "thermal-cell-practical"
 version = "1.0.0"
 description = "Physical-unit thermal network foundation for identification, forecasting, and monitoring"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "numpy>=1.24,<2.3",
@@ -32,6 +33,9 @@ celltemp = "celltemp.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+celltemp = ["py.typed"]
 
 # ---------------------------------------------------------------------------
 # format / lint

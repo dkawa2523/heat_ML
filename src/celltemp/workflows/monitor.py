@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 from celltemp.artifact import load_artifact
-from celltemp.config import project_root_from_config, reject_unknown_keys, validate_config_root
-from celltemp.inference import monitor
+from celltemp.config import project_root_from_config, validate_config_root
+from celltemp.inference import build_observer, monitor, resolve_observer_settings
 
 from .common import (
     load_runtime_trajectories,
@@ -17,6 +17,7 @@ from .common import (
     resolve_artifact_path,
     staged_output_directory,
     validate_runtime_options,
+    write_runtime_manifest,
 )
 
 
@@ -33,22 +34,12 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
         control_names=artifact.control_names,
     )
     target, overwrite = output_target(cfg, root, section="monitor")
-    observer_cfg = values.get("observer", {})
-    reject_unknown_keys(
-        observer_cfg,
-        {
-            "bias_reference",
-            "bias_process_std",
-            "disturbance_process_std",
-            "innovation_gate_sigma",
-            "sensor_std",
-        },
-        "monitor.observer",
-    )
+    resolved_observer = resolve_observer_settings("monitor", values.get("observer"))
+    state_estimator = build_observer(artifact.model, resolved_observer)
     summaries: list[dict[str, object]] = []
     with staged_output_directory(target, overwrite=overwrite) as out_dir:
         for trajectory in trajectories:
-            result = monitor(artifact.model, trajectory, **observer_cfg)
+            result = monitor(artifact.model, trajectory, observer=state_estimator)
             output = pd.DataFrame({"time": result.time})
             for sensor_index, sensor in enumerate(artifact.sensor_names):
                 output[f"measured_{sensor}"] = trajectory.temperature[:, sensor_index]
@@ -84,6 +75,9 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
                 {
                     "case_id": trajectory.case_id,
                     "bias_gauge": result.bias_gauge,
+                    "initial_actuator_source": (
+                        "csv" if trajectory.initial_actuator is not None else "first_command"
+                    ),
                     "innovation_rmse": (
                         float(np.sqrt(np.mean(innovation_values**2)))
                         if innovation_values.size
@@ -103,4 +97,15 @@ def run_monitor(cfg: dict, config_path: str | Path) -> Path:
                 }
             )
         pd.DataFrame(summaries).to_csv(out_dir / "monitor_summary.csv", index=False)
+        write_runtime_manifest(
+            out_dir / "run_manifest.json",
+            workflow="monitor",
+            config_path=config_path,
+            root=root,
+            artifact=artifact,
+            values=values,
+            trajectories=trajectories,
+            observer_settings=resolved_observer,
+            disturbance_basis=state_estimator.disturbance_basis,
+        )
     return target

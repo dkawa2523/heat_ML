@@ -130,13 +130,21 @@ def test_duplicate_reverse_edge_is_rejected() -> None:
         lambda: ConstantLawSpec(0.0),
         lambda: ActuatorSpec("", 1.0),
         lambda: ActuatorSpec("power", -1.0),
+        lambda: ActuatorSpec("power", 0.0, learnable=True),
         lambda: PositivePartLawSpec("power", -1.0),
         lambda: SourceSpec("source", (-1.0,), PositivePartLawSpec("power", 1.0)),
+        lambda: SourceSpec("source", (0.0,), PositivePartLawSpec("power", 1.0)),
         lambda: PositivePartLawSpec("power", 0.0),
         lambda: PositivePartLawSpec("power", 1.0, threshold=np.inf),
         lambda: BoundarySpec(
             "ambient",
             (-1.0,),
+            ReservoirTemperatureSpec(20.0),
+            ConstantLawSpec(1.0),
+        ),
+        lambda: BoundarySpec(
+            "ambient",
+            (0.0,),
             ReservoirTemperatureSpec(20.0),
             ConstantLawSpec(1.0),
         ),
@@ -164,11 +172,28 @@ def test_system_rejects_unknown_references_and_bad_capacity() -> None:
         )
 
 
+def test_actuator_tau_is_learned_only_when_a_positive_prior_exists() -> None:
+    assert ActuatorSpec("direct", 0.0).learnable is False
+    assert ActuatorSpec("lagged", 1.0).learnable is True
+
+
 def test_system_rejects_duplicate_source_names() -> None:
     actuator = ActuatorSpec("power", 0.0, learnable=False)
     source = SourceSpec("heat", (1.0,), PositivePartLawSpec("power", 1.0))
     with pytest.raises(ValueError, match="source names must be unique"):
         ThermalSystemSpec(("node",), (1.0,), (), (actuator,), sources=(source, source))
+
+
+def test_system_rejects_sensor_actuator_name_collision() -> None:
+    with pytest.raises(ValueError, match="sensor and actuator names must be distinct"):
+        ThermalSystemSpec(
+            ("node",),
+            (1.0,),
+            (),
+            (ActuatorSpec("value", 0.0),),
+            sensor_names=("value",),
+            sensor_nodes=("node",),
+        )
 
 
 def test_system_rejects_duplicate_boundary_names() -> None:

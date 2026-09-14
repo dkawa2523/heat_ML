@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import cast
 
@@ -11,26 +12,51 @@ from celltemp.domain import Trajectory
 
 Split = dict[str, list[Trajectory]]
 
-
-def _control_key(trajectory: Trajectory) -> tuple[tuple[int, ...], bytes, bytes]:
-    """Identify trajectories with the same time grid and applied command history."""
-    commands = np.ascontiguousarray(trajectory.commands, dtype=np.float64)
-    dt = np.ascontiguousarray(trajectory.dt, dtype=np.float64)
-    return commands.shape, dt.tobytes(), commands.tobytes()
+_DEFAULT_RECIPE_RTOL = 1e-9
+_DEFAULT_RECIPE_ATOL = 1e-9
 
 
-def _control_groups(trajectories: Sequence[Trajectory]) -> list[list[Trajectory]]:
-    """Keep repeated runs of one recipe in the same evaluation partition."""
-    grouped: dict[tuple[tuple[int, ...], bytes, bytes], list[Trajectory]] = {}
+def _same_recipe(
+    first: Trajectory,
+    second: Trajectory,
+    *,
+    rtol: float,
+    atol: float,
+) -> bool:
+    return (
+        first.commands.shape == second.commands.shape
+        and np.allclose(first.dt, second.dt, rtol=rtol, atol=atol)
+        and np.allclose(first.commands, second.commands, rtol=rtol, atol=atol)
+    )
+
+
+def _control_groups(
+    trajectories: Sequence[Trajectory], *, rtol: float, atol: float
+) -> list[list[Trajectory]]:
+    """Keep numerically equivalent command recipes in one evaluation partition."""
+    groups: list[list[Trajectory]] = []
     for trajectory in trajectories:
-        grouped.setdefault(_control_key(trajectory), []).append(trajectory)
-    return list(grouped.values())
+        matching = next(
+            (group for group in groups if _same_recipe(group[0], trajectory, rtol=rtol, atol=atol)),
+            None,
+        )
+        if matching is None:
+            groups.append([trajectory])
+        else:
+            matching.append(trajectory)
+    return groups
 
 
 def _random_split(
     trajectories: Sequence[Trajectory], split_cfg: Mapping[str, object], seed: int
 ) -> Split:
-    groups = _control_groups(trajectories)
+    recipe_rtol = float(cast(int | float | str, split_cfg.get("recipe_rtol", _DEFAULT_RECIPE_RTOL)))
+    recipe_atol = float(cast(int | float | str, split_cfg.get("recipe_atol", _DEFAULT_RECIPE_ATOL)))
+    if not math.isfinite(recipe_rtol) or recipe_rtol < 0.0:
+        raise ValueError("split.recipe_rtol must be non-negative and finite")
+    if not math.isfinite(recipe_atol) or recipe_atol < 0.0:
+        raise ValueError("split.recipe_atol must be non-negative and finite")
+    groups = _control_groups(trajectories, rtol=recipe_rtol, atol=recipe_atol)
     order = np.arange(len(groups))
     np.random.default_rng(seed).shuffle(order)
     shuffled = [groups[index] for index in order]

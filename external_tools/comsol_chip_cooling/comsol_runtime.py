@@ -13,6 +13,15 @@ APPLICATION_MODEL = Path(
 )
 
 
+def provenance_path(path: Path, root: Path) -> str:
+    """Use a portable relative path when possible, otherwise an absolute path."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 @dataclass(frozen=True)
 class ComsolRuntime:
     """Resolved local COMSOL executables and the immutable library source model."""

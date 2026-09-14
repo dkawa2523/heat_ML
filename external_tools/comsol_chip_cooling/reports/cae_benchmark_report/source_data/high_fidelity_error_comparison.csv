@@ -1,7 +1,7 @@
 case_id,case_label,metric,value_k,prior_rmse_k,rmse_improvement_percent
-HV01_composite_conjugate,HV01 共役熱流動,RMSE,0.0476322643,0.9769315839,95.12429887
-HV01_composite_conjugate,HV01 共役熱流動,最大絶対誤差,0.1120949259,0.9769315839,95.12429887
-HV01_composite_conjugate,HV01 共役熱流動,保守的隣接mesh差,0.49548502171185693,0.9769315839,95.12429887
-HV02_composite_radiation,HV02 + 放射,RMSE,0.1435971416,0.8009057775,82.0706573
-HV02_composite_radiation,HV02 + 放射,最大絶対誤差,0.3439330487,0.8009057775,82.0706573
-HV02_composite_radiation,HV02 + 放射,保守的隣接mesh差,0.4941331625093376,0.8009057775,82.0706573
+HV01_composite_conjugate,HV01 共役熱流動,RMSE,0.04765298704,0.9769315839,95.12217766
+HV01_composite_conjugate,HV01 共役熱流動,最大絶対誤差,0.1121851147,0.9769315839,95.12217766
+HV01_composite_conjugate,HV01 共役熱流動,保守的隣接mesh差,0.49548566133215016,0.9769315839,95.12217766
+HV02_composite_radiation,HV02 + 放射,RMSE,0.143584244,0.8009057775,82.07226767
+HV02_composite_radiation,HV02 + 放射,最大絶対誤差,0.3439540199,0.8009057775,82.07226767
+HV02_composite_radiation,HV02 + 放射,保守的隣接mesh差,0.4941324947744598,0.8009057775,82.07226767

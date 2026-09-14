@@ -24,3 +24,4 @@ benchmarks/*/work/
 external_tools/*/work/
 external_tools/**/*.class
 external_tools/**/*.class.status
+external_tools/comsol_chip_cooling/reports/cae_benchmark_report/report.html

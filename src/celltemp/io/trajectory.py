@@ -9,8 +9,29 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from celltemp.config import as_path
+from celltemp.config import as_path, require_bool
 from celltemp.domain import Trajectory
+
+_INITIAL_ACTUATOR_PREFIX = "initial_effective_"
+
+
+def _initial_actuator(
+    frame: pd.DataFrame,
+    control_names: tuple[str, ...],
+    default: np.ndarray,
+) -> np.ndarray | None:
+    """Read an optional effective actuator state from the first CSV row."""
+    columns = tuple(f"{_INITIAL_ACTUATOR_PREFIX}{name}" for name in control_names)
+    present = tuple(name in frame.columns for name in columns)
+    if not any(present):
+        return None
+    values = np.array(default, dtype=np.float64, copy=True)
+    for index, (column, exists) in enumerate(zip(columns, present, strict=True)):
+        if exists:
+            values[index] = float(frame.loc[frame.index[0], column])
+    if not np.isfinite(values).all():
+        raise ValueError("initial actuator values on the first row must be finite")
+    return values
 
 
 def trajectory_from_frame(
@@ -27,6 +48,8 @@ def trajectory_from_frame(
     sensor_names = tuple(sensor_cols)
     control_names = tuple(control_cols)
     required = [time_col, *sensor_names, *control_names]
+    if len(required) != len(set(required)):
+        raise ValueError("time, sensor, and control column names must be distinct")
     missing = [name for name in required if name not in frame.columns]
     if missing:
         raise ValueError(f"trajectory table is missing columns {missing}")
@@ -34,16 +57,21 @@ def trajectory_from_frame(
     temperature = frame[list(sensor_names)].to_numpy(dtype=np.float64)
     if np.isinf(temperature).any():
         raise ValueError("temperature observations may be missing, but not infinite")
+    sampled_controls = frame[list(control_names)].to_numpy(dtype=np.float64)
+    default_initial = (
+        sampled_controls[0] if control_convention.lower() == "left" else sampled_controls[1]
+    )
     return Trajectory.from_sampled_controls(
         case_id=case_id,
         time=frame[time_col].to_numpy(dtype=np.float64),
         temperature=temperature,
-        sampled_controls=frame[list(control_names)].to_numpy(dtype=np.float64),
+        sampled_controls=sampled_controls,
         sensor_names=sensor_names,
         control_names=control_names,
         convention=control_convention,
         observation_mask=np.isfinite(temperature),
         metadata=metadata,
+        initial_actuator=_initial_actuator(frame, control_names, default_initial),
     )
 
 
@@ -52,7 +80,11 @@ def _validate_loaded_trajectory(
     data_cfg: Mapping[str, Any],
     source: Path,
 ) -> None:
-    if not bool(data_cfg.get("allow_missing_temperatures", False)) and not trajectory.mask.all():
+    allow_missing = require_bool(
+        data_cfg.get("allow_missing_temperatures", False),
+        "data.allow_missing_temperatures",
+    )
+    if not allow_missing and not trajectory.mask.all():
         raise ValueError(f"{source.name}: missing temperature observations are not enabled")
     if not trajectory.mask[0].any():
         raise ValueError(f"{source.name}: the initial row needs at least one temperature")

@@ -107,7 +107,7 @@ class ThermalRCModel(nn.Module):
         self.register_buffer("tau_prior", _tensor([a.tau for a in spec.actuators], dtype=dtype))
         self.register_buffer(
             "tau_learn_mask",
-            _tensor([a.learnable and a.tau > 0.0 for a in spec.actuators], dtype=dtype),
+            _tensor([bool(a.learnable) for a in spec.actuators], dtype=dtype),
         )
         self.log_tau_multiplier = nn.Parameter(torch.zeros(len(spec.actuators), dtype=dtype))
 
@@ -198,6 +198,15 @@ class ThermalRCModel(nn.Module):
             *self.edge_laws.log_parameter_multipliers(),
             *self.source_laws.log_parameter_multipliers(),
             *self.boundary_laws.log_parameter_multipliers(),
+        )
+
+    def learnable_log_parameter_values(self) -> tuple[torch.Tensor, ...]:
+        """Return only log multipliers enabled by the system definition."""
+        return (
+            self.log_tau_multiplier[self.tau_learn_mask.to(dtype=torch.bool)],
+            *self.edge_laws.learnable_log_parameter_values(),
+            *self.source_laws.learnable_log_parameter_values(),
+            *self.boundary_laws.learnable_log_parameter_values(),
         )
 
     def boundary_conductance(self, actuator: torch.Tensor | None = None) -> torch.Tensor:

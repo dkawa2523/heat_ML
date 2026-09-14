@@ -454,6 +454,54 @@ def test_observer_updates_available_sensor_and_keeps_hidden_node() -> None:
     assert torch.isfinite(updated.covariance).all()
 
 
+def test_observer_initial_posterior_assimilates_first_measurement_covariance() -> None:
+    model = conduction_model()
+    observer = KalmanObserver(model, initial_temperature_std=10.0, sensor_std=0.1)
+    observation = torch.tensor([40.0, 50.0], dtype=DTYPE)
+    prior = observer.initialize(observation)
+    posterior = observer.initialize_posterior(observation)
+
+    torch.testing.assert_close(posterior.temperature, prior.temperature)
+    assert torch.all(
+        torch.diag(posterior.covariance)[: model.n_nodes]
+        < torch.diag(prior.covariance)[: model.n_nodes]
+    )
+
+
+@pytest.mark.parametrize(
+    ("sensor_std", "innovation_gate_sigma"),
+    [
+        (0.0, 0.15),
+        (float("nan"), 0.15),
+        (0.15, float("inf")),
+    ],
+)
+def test_observer_rejects_nonfinite_configuration(
+    sensor_std: float, innovation_gate_sigma: float
+) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        KalmanObserver(
+            conduction_model(),
+            sensor_std=sensor_std,
+            innovation_gate_sigma=innovation_gate_sigma,
+        )
+
+
+def test_observer_cache_depends_on_dynamics_not_source_command() -> None:
+    spec = ThermalSystemSpec(
+        node_names=("node",),
+        heat_capacity=(2.0,),
+        edges=(),
+        actuators=(ActuatorSpec("heater", tau=0.0),),
+        sources=(SourceSpec("heat", (1.0,), PositivePartLawSpec("heater", 1.0)),),
+    )
+    observer = KalmanObserver(ThermalRCModel(spec))
+    observer._operators(1.0, torch.tensor([0.0], dtype=DTYPE))
+    observer._operators(1.0, torch.tensor([100.0], dtype=DTYPE))
+
+    assert len(observer._operator_cache) == 1
+
+
 def test_observer_can_skip_a_completely_missing_measurement() -> None:
     model = conduction_model()
     observer = KalmanObserver(model)
@@ -546,6 +594,33 @@ def test_observer_process_covariance_matches_integrated_heat_random_walk() -> No
         dtype=DTYPE,
     )
     torch.testing.assert_close(predicted.covariance, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_implicit_observer_uses_matching_backward_euler_process_covariance() -> None:
+    spec = ThermalSystemSpec(
+        node_names=("node",),
+        heat_capacity=(1.0,),
+        edges=(),
+        actuators=(),
+        boundaries=(
+            BoundarySpec(
+                "ambient",
+                (1.0,),
+                ReservoirTemperatureSpec(0.0),
+                ConstantLawSpec(1.0, learnable=False),
+            ),
+        ),
+    )
+    observer = KalmanObserver(
+        ThermalRCModel(spec, integrator="implicit"),
+        disturbance_process_std=0.2,
+        bias_process_std=0.0,
+    )
+    transition, process_covariance = observer._operators(5.0, torch.empty(0, dtype=DTYPE))
+    density = observer._process_spectral_density()
+    expected = transition @ (density * 5.0) @ transition.T
+
+    torch.testing.assert_close(process_covariance, expected)
 
 
 def test_affine_integrators_support_batch_specific_timesteps() -> None:

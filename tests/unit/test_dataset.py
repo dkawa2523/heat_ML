@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from celltemp.domain import Trajectory
 from celltemp.io import load_split_assignments, load_trajectories
 from celltemp.learning import split_trajectories
 
@@ -129,6 +130,28 @@ def test_identical_control_histories_never_leak_between_splits(
     location = {trajectory.case_id: name for name, items in split.items() for trajectory in items}
     assert location[source.stem] == location[replica.stem]
     assert len(location) == len(trajectories)
+
+
+def test_numerically_equivalent_control_histories_stay_in_one_split(
+    cae_project: Path, data_cfg: dict
+) -> None:
+    trajectories = load_trajectories(data_cfg, cae_project)
+    source = trajectories[0]
+    perturbed_commands = source.commands.copy()
+    perturbed_commands[0, 0] += 1e-12
+    replica = Trajectory(
+        case_id="round-trip-perturbation",
+        time=source.time,
+        temperature=source.temperature,
+        commands=perturbed_commands,
+        sensor_names=source.sensor_names,
+        control_names=source.control_names,
+    )
+
+    split = split_trajectories([*trajectories, replica], {"method": "random"}, seed=7)
+    location = {trajectory.case_id: name for name, items in split.items() for trajectory in items}
+
+    assert location[source.case_id] == location[replica.case_id]
 
 
 def test_random_split_is_deterministic(cae_project: Path, data_cfg: dict) -> None:

@@ -1,9 +1,11 @@
+import hashlib
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
+import yaml
 
 from celltemp.artifact import load_artifact, save_artifact
 from celltemp.domain import (
@@ -11,12 +13,21 @@ from celltemp.domain import (
     BoundarySpec,
     ConstantLawSpec,
     EdgeSpec,
+    PositivePartLawSpec,
     ReservoirTemperatureSpec,
+    SourceSpec,
     ThermalSystemSpec,
     Trajectory,
 )
 from celltemp.engine import ThermalRCModel
-from celltemp.inference import estimate_state, forecast, monitor, sensor_bias_in_gauge
+from celltemp.inference import (
+    build_observer,
+    estimate_state,
+    forecast,
+    monitor,
+    resolve_observer_settings,
+    sensor_bias_in_gauge,
+)
 
 
 def _cooling_model() -> ThermalRCModel:
@@ -73,6 +84,54 @@ def test_forecast_uses_variable_time_intervals() -> None:
     result = forecast(model, request)
     expected = 10.0 + 20.0 * np.exp(-0.5 / 2.0 * request.time)
     np.testing.assert_allclose(result.sensor_temperature[:, 0], expected, atol=1e-10)
+    assert result.sensor_temperature_std.shape == result.sensor_temperature.shape
+    assert result.node_temperature_std.shape == result.node_temperature.shape
+    assert np.isfinite(result.sensor_temperature_std).all()
+    assert (result.sensor_temperature_std >= 0.0).all()
+
+
+def test_forecast_uses_optional_effective_initial_actuator() -> None:
+    spec = ThermalSystemSpec(
+        node_names=("body",),
+        heat_capacity=(1.0,),
+        edges=(),
+        actuators=(ActuatorSpec("heater", tau=2.0, learnable=False),),
+        sources=(
+            SourceSpec(
+                "heater",
+                (1.0,),
+                PositivePartLawSpec("heater", 1.0, learnable=False),
+            ),
+        ),
+    )
+    model = ThermalRCModel(spec)
+    temperature = np.array([[20.0], [np.nan], [np.nan]])
+    warm = forecast(
+        model,
+        Trajectory(
+            case_id="warm",
+            time=np.array([0.0, 1.0, 2.0]),
+            temperature=temperature,
+            commands=np.zeros((2, 1)),
+            sensor_names=("body",),
+            control_names=("heater",),
+            initial_actuator=np.array([10.0]),
+        ),
+    )
+    settled = forecast(
+        model,
+        Trajectory(
+            case_id="settled",
+            time=np.array([0.0, 1.0, 2.0]),
+            temperature=temperature,
+            commands=np.zeros((2, 1)),
+            sensor_names=("body",),
+            control_names=("heater",),
+        ),
+    )
+
+    assert warm.sensor_temperature[-1, 0] > 30.0
+    np.testing.assert_allclose(settled.sensor_temperature[:, 0], 20.0)
 
 
 def test_forecast_estimates_hidden_state_from_contiguous_history() -> None:
@@ -188,13 +247,18 @@ def test_monitor_uses_zero_mean_bias_gauge_without_a_reference() -> None:
         sensor_names=("left", "right"),
         control_names=("coolant",),
     )
-    result = monitor(
+    observer = build_observer(
         model,
-        trajectory,
-        disturbance_process_std=0.01,
-        sensor_std=0.05,
-        bias_process_std=0.03,
+        resolve_observer_settings(
+            "monitor",
+            {
+                "disturbance_process_std": 0.01,
+                "sensor_std": 0.05,
+                "bias_process_std": 0.03,
+            },
+        ),
     )
+    result = monitor(model, trajectory, observer=observer)
     np.testing.assert_allclose(result.sensor_bias.sum(axis=1), 0.0, atol=1e-12)
     assert result.sensor_bias[-1, 0] > 0.3
     assert result.sensor_bias[-1, 1] < -0.3
@@ -228,14 +292,19 @@ def test_monitor_reference_sensor_anchors_absolute_bias() -> None:
         control_names=request.control_names,
     )
 
-    result = monitor(
+    observer = build_observer(
         model,
-        trajectory,
-        bias_reference="left",
-        disturbance_process_std=0.01,
-        sensor_std=0.05,
-        bias_process_std=0.03,
+        resolve_observer_settings(
+            "monitor",
+            {
+                "bias_reference": "left",
+                "disturbance_process_std": 0.01,
+                "sensor_std": 0.05,
+                "bias_process_std": 0.03,
+            },
+        ),
     )
+    result = monitor(model, trajectory, observer=observer)
 
     np.testing.assert_array_equal(result.sensor_bias[:, 0], 0.0)
     assert result.sensor_bias[-1, 1] > 0.6
@@ -259,6 +328,7 @@ def test_artifact_round_trip_preserves_forecast(tmp_path: Path) -> None:
     assert loaded.metadata["purpose"] == "test"
     fitted_boundary = loaded.metadata["fitted_parameters"]["boundaries"][0]
     assert fitted_boundary["conductance"]["type"] == "constant"
+    assert set(loaded.metadata["file_sha256"]) == {"model.pt", "system.yaml"}
 
 
 def test_artifact_metadata_cannot_override_runtime_format(tmp_path: Path) -> None:
@@ -271,6 +341,51 @@ def test_artifact_metadata_cannot_override_runtime_format(tmp_path: Path) -> Non
     assert loaded.metadata["schema_version"] == 4
     assert loaded.metadata["model_type"] == "thermal_network"
     assert loaded.metadata["dtype"] == "float64"
+
+
+def test_artifact_rejects_nonfinite_metadata_before_writing(tmp_path: Path) -> None:
+    target = tmp_path / "artifact"
+    with pytest.raises(ValueError, match="Out of range float values"):
+        save_artifact(target, _cooling_model(), metadata={"score": float("nan")})
+    assert not target.exists()
+
+
+def test_artifact_rejects_system_and_state_disagreement(tmp_path: Path) -> None:
+    target = save_artifact(tmp_path / "artifact", _cooling_model())
+    system_path = target / "system.yaml"
+    system = yaml.safe_load(system_path.read_text(encoding="utf-8"))
+    system["nodes"][0]["heat_capacity"] = 9.0
+    system_path.write_text(yaml.safe_dump(system, sort_keys=False), encoding="utf-8")
+    metadata_path = target / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["file_sha256"]["system.yaml"] = hashlib.sha256(system_path.read_bytes()).hexdigest()
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"conflicts with system\.yaml"):
+        load_artifact(target)
+
+
+def test_artifact_rejects_fitted_parameter_metadata_disagreement(tmp_path: Path) -> None:
+    target = save_artifact(tmp_path / "artifact", _cooling_model())
+    metadata_path = target / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["fitted_parameters"]["boundaries"][0]["conductance"]["value"] *= 2.0
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fitted_parameters metadata conflicts"):
+        load_artifact(target)
+
+
+def test_artifact_rejects_semantically_unchanged_file_replacement(tmp_path: Path) -> None:
+    target = save_artifact(tmp_path / "artifact", _cooling_model())
+    system_path = target / "system.yaml"
+    system_path.write_text(
+        system_path.read_text(encoding="utf-8") + "\n# replaced outside the artifact writer\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"checksum mismatch for system\.yaml"):
+        load_artifact(target)
 
 
 @pytest.mark.parametrize(

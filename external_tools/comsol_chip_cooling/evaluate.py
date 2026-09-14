@@ -396,7 +396,7 @@ def _checks(
     event = events.set_index("case_id")
     values = {
         "internal_test_accuracy": (
-            internal["test"]["mean_case_rmse"] <= CRITERIA["internal_test_mean_rmse_k"]
+            internal["test"]["mean_case_causal_rmse"] <= CRITERIA["internal_test_mean_rmse_k"]
         ),
         "external_forecast_mean_accuracy": (
             forecast_cases["rmse_k"].mean() <= CRITERIA["external_forecast_mean_rmse_k"]
@@ -468,7 +468,7 @@ def _summary(
         },
         "training": {
             "best_epoch": metadata["training"]["best_epoch"],
-            "best_validation_rmse_k": metadata["training"]["best_validation_rmse"],
+            "best_causal_validation_rmse_k": metadata["training"]["best_causal_validation_rmse"],
             "split_metrics": internal,
         },
         "forecast": {
@@ -538,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = evaluate(root, output)
     print(json.dumps(summary["checks"], indent=2))
     print(f"saved evaluation: {output}")
-    return 0
+    return 0 if all(summary["checks"].values()) else 1
 
 
 if __name__ == "__main__":

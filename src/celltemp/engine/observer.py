@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import math
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import torch
 
 from .rc import ThermalRCModel
 from .state import ThermalState
+
+_OPERATOR_CACHE_SIZE = 256
 
 
 @dataclass(frozen=True)
@@ -32,11 +36,12 @@ class KalmanObserver:
     """Linear Kalman observer around the physical RC transition.
 
     The estimated state is ``[temperature, unknown source heat, sensor bias]``.
-    Unknown heat and sensor bias are continuous-time random walks. Their exact
-    discrete covariance is obtained from the coupled thermal dynamics, preserving
-    the correlations and thermal filtering that a diagonal ``q**2 * dt`` update
-    would lose. Bias uses a zero-mean gauge by default, or may be anchored to one
-    explicitly calibrated reference sensor whose bias is fixed to zero.
+    Unknown heat and sensor bias are continuous-time random walks. Their covariance
+    uses exact Van Loan discretization with the exact model, or the matching
+    backward-Euler noise map with the implicit model. Both preserve correlations
+    and thermal filtering that a diagonal ``q**2 * dt`` update would lose. Bias
+    uses a zero-mean gauge by default, or may be anchored to one explicitly
+    calibrated reference sensor whose bias is fixed to zero.
     """
 
     def __init__(
@@ -55,15 +60,16 @@ class KalmanObserver:
         for name, value in (
             ("disturbance_process_std", disturbance_process_std),
             ("bias_process_std", bias_process_std),
-            ("sensor_std", sensor_std),
             ("initial_temperature_std", initial_temperature_std),
             ("initial_disturbance_std", initial_disturbance_std),
             ("initial_bias_std", initial_bias_std),
         ):
-            if value < 0.0:
-                raise ValueError(f"{name} must be non-negative")
-        if innovation_gate_sigma <= 0.0:
-            raise ValueError("innovation_gate_sigma must be positive")
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be non-negative and finite")
+        if not math.isfinite(sensor_std) or sensor_std <= 0.0:
+            raise ValueError("sensor_std must be positive and finite")
+        if not math.isfinite(innovation_gate_sigma) or innovation_gate_sigma <= 0.0:
+            raise ValueError("innovation_gate_sigma must be positive and finite")
         self.model = model
         self.disturbance_process_std = float(disturbance_process_std)
         self.bias_process_std = float(bias_process_std)
@@ -85,10 +91,10 @@ class KalmanObserver:
             )
         )
         self.bias_basis = self._bias_basis()
-        self._operator_cache: dict[
+        self._operator_cache: OrderedDict[
             tuple[float, tuple[float, ...]],
             tuple[torch.Tensor, torch.Tensor],
-        ] = {}
+        ] = OrderedDict()
 
     def _bias_basis(self) -> torch.Tensor:
         """Return identifiable sensor-bias coordinates for the selected gauge."""
@@ -232,6 +238,29 @@ class KalmanObserver:
             torch.diag(variance),
         )
 
+    def initialize_posterior(
+        self,
+        observation: torch.Tensor,
+        *,
+        mask: torch.Tensor | None = None,
+        actuator: torch.Tensor | None = None,
+    ) -> ObserverState:
+        """Initialize state and assimilate the first measurement exactly once.
+
+        ``initialize`` supplies a physically useful mean and a prior covariance.
+        This method contracts that covariance in observed directions while leaving
+        the mean unchanged when the initialization residual is zero. Forecast and
+        monitor both use this boundary so their uncertainty has the same meaning.
+        """
+        prior = self.initialize(observation, mask=mask, actuator=actuator)
+        posterior, _ = self.update(prior, observation, mask)
+        return posterior
+
+    @property
+    def disturbance_basis(self) -> str:
+        """Describe the spatial basis used for unknown heat estimation."""
+        return "source_weights" if self.model.spec.sources else "node_identity"
+
     def _continuous_state_matrix(self, actuator: torch.Tensor) -> torch.Tensor:
         """Return dynamics for ``[temperature, unknown source heat, sensor bias]``."""
         matrix = torch.zeros(
@@ -271,42 +300,42 @@ class KalmanObserver:
         if step.ndim != 0:
             raise ValueError("observer dt must be scalar")
         step_value = float(step.detach().cpu().item())
-        if step_value < 0.0:
-            raise ValueError("observer dt must be non-negative")
-        actuator_key = tuple(float(value) for value in actuator.detach().cpu().tolist())
-        cache_key = (step_value, actuator_key)
+        if not math.isfinite(step_value) or step_value < 0.0:
+            raise ValueError("observer dt must be non-negative and finite")
+        continuous = self._continuous_state_matrix(actuator)
+        matrix_key = tuple(float(value) for value in continuous.detach().cpu().flatten().tolist())
+        cache_key = (step_value, matrix_key)
         cached = self._operator_cache.get(cache_key)
         if cached is not None:
+            self._operator_cache.move_to_end(cache_key)
             return cached
 
-        continuous = self._continuous_state_matrix(actuator)
-        if self.model.integrator == "exact":
-            transition = torch.matrix_exp(continuous * step)
-        else:
+        density = self._process_spectral_density()
+        if self.model.integrator == "implicit":
             identity = torch.eye(
                 self.state_size,
                 dtype=continuous.dtype,
                 device=continuous.device,
             )
             transition = torch.linalg.solve(identity - step * continuous, identity)
-
-        # Van Loan discretization of integral exp(Fs) Q exp(F' s) ds.
-        density = self._process_spectral_density()
-        zero = torch.zeros_like(continuous)
-        van_loan = torch.cat(
-            [
-                torch.cat([continuous, density], dim=1),
-                torch.cat([zero, -continuous.T], dim=1),
-            ],
-            dim=0,
-        )
-        exponential = torch.matrix_exp(van_loan * step)
-        continuous_transition = exponential[: self.state_size, : self.state_size]
-        process_covariance = (
-            exponential[: self.state_size, self.state_size :] @ continuous_transition.T
-        )
+            process_covariance = transition @ (density * step) @ transition.T
+        else:
+            # Van Loan discretization of integral exp(Fs) Q exp(F' s) ds.
+            zero = torch.zeros_like(continuous)
+            van_loan = torch.cat(
+                [
+                    torch.cat([continuous, density], dim=1),
+                    torch.cat([zero, -continuous.T], dim=1),
+                ],
+                dim=0,
+            )
+            exponential = torch.matrix_exp(van_loan * step)
+            transition = exponential[: self.state_size, : self.state_size]
+            process_covariance = exponential[: self.state_size, self.state_size :] @ transition.T
         process_covariance = (process_covariance + process_covariance.T) * 0.5
         self._operator_cache[cache_key] = transition, process_covariance
+        if len(self._operator_cache) > _OPERATOR_CACHE_SIZE:
+            self._operator_cache.popitem(last=False)
         return transition, process_covariance
 
     def predict(

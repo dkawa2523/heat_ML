@@ -10,6 +10,7 @@ consumed by the portable report builder.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Iterable
@@ -35,11 +36,26 @@ HF_BENCHMARK = HF_ROOT / "benchmark"
 
 GENERATED_AT = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 TITLE = "CAEベンチマークケース技術レポート"
+INPUT_SHA256: dict[str, str] = {}
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(f"required report input is missing: {path}")
+    resolved = path.resolve()
+    try:
+        name = resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        name = str(resolved)
+    INPUT_SHA256[name] = sha256(resolved)
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
 
@@ -243,7 +259,8 @@ def build_linear_catalog() -> tuple[
         if role == "train":
             metric = training_by_id[case_id]
             result = (
-                f"{SPLIT_LABELS[str(metric['split'])]} RMSE {float(metric['rmse']):.3f} K; "
+                f"{SPLIT_LABELS[str(metric['split'])]} causal RMSE "
+                f"{float(metric['causal_rmse']):.3f} K; "
                 f"CAE Tmax {float(row['temperature_max_c']):.1f} °C"
             )
         elif role == "forecast":
@@ -323,7 +340,8 @@ def build_nonlinear_catalog() -> tuple[
         if role == "train":
             metric = metrics_by_id[case_id]
             result = (
-                f"{SPLIT_LABELS[str(metric['split'])]} RMSE {float(metric['rmse']):.3f} K; "
+                f"{SPLIT_LABELS[str(metric['split'])]} causal RMSE "
+                f"{float(metric['causal_rmse']):.3f} K; "
                 f"Tchip,max {float(row['chip_max_c']):.1f} °C; "
                 f"dp,max {float(row['pressure_drop_max_pa']):.4f} Pa"
             )
@@ -640,6 +658,7 @@ def table(
 
 
 def main() -> None:
+    INPUT_SHA256.clear()
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
     linear_catalog, linear_forecast, linear_monitor = build_linear_catalog()
@@ -749,8 +768,8 @@ def main() -> None:
     linear_card = [{**linear_summary, "mean_screening_limit_k": 0.25}]
     nonlinear_card = [
         {
-            "test_rmse_k": float(nonlinear_test["rmse"]),
-            "validation_rmse_k": float(nonlinear_val["rmse"]),
+            "test_causal_rmse_k": float(nonlinear_test["causal_rmse"]),
+            "validation_causal_rmse_k": float(nonlinear_val["causal_rmse"]),
         }
     ]
     hf_card = [{**hf_summary, "all_points_within_mesh_proxy": 1.0}]
@@ -991,8 +1010,16 @@ def main() -> None:
             "dataset": "nonlinear_summary",
             "sourceId": "nonlinear_summary_source",
             "metrics": [
-                {"label": "非線形held-out RMSE [K]", "field": "test_rmse_k", "format": "number"},
-                {"label": "validation RMSE [K]", "field": "validation_rmse_k", "format": "number"},
+                {
+                    "label": "非線形held-out causal RMSE [K]",
+                    "field": "test_causal_rmse_k",
+                    "format": "number",
+                },
+                {
+                    "label": "validation causal RMSE [K]",
+                    "field": "validation_causal_rmse_k",
+                    "format": "number",
+                },
             ],
         },
         {
@@ -1586,12 +1613,14 @@ CAEのHV02−HV01 chip差は終端−0.381 Kですが、モデルpair差は−0.
         "sources": sources,
         "package_info": {
             "report_generator": "external_tools/comsol_chip_cooling/reports/cae_benchmark_report/build_report.py",
-            "snapshot_scope": "COMSOL Electronic Chip Cooling CAE benchmark evidence available on 2026-08-31",
+            "snapshot_scope": f"COMSOL Electronic Chip Cooling CAE benchmark evidence rebuilt on {GENERATED_AT[:10]}",
+            "input_sha256": dict(sorted(INPUT_SHA256.items())),
         },
     }
     (REPORT_DIR / "artifact.json").write_text(
         json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     chart_map = f"""# Chart map and report QA notes
@@ -1635,16 +1664,17 @@ The three line charts are retained because they answer distinct temporal questio
 - No measured experiment values have been supplied; templates are not counted as validation.
 - High-fidelity strict mesh convergence and transient time-step convergence are not complete.
 """
-    (REPORT_DIR / "chart_map.md").write_text(chart_map, encoding="utf-8")
+    (REPORT_DIR / "chart_map.md").write_text(chart_map, encoding="utf-8", newline="\n")
 
-    readme = """# CAE benchmark report artifact
+    readme = """# CAE benchmark report evidence
 
-Primary deliverable: `report.html`.
+Canonical deliverable: `artifact.json` plus `source_data/`.
 
-- `artifact.json`: canonical bounded report input.
+- `artifact.json`: current bounded report input with source hashes.
 - `source_data/`: normalized snapshot tables used by the report.
 - `chart_map.md`: chart contracts, structure mapping, and explicit evidence gaps.
 - `build_report.py`: deterministic normalization and artifact authoring.
+- `report.html`: optional portable render; generated outside this repository and ignored so a stale render cannot be mistaken for current evidence.
 
 Rebuild the artifact from repository root:
 
@@ -1652,9 +1682,9 @@ Rebuild the artifact from repository root:
 .venv\\Scripts\\python.exe external_tools/comsol_chip_cooling/reports/cae_benchmark_report/build_report.py
 ```
 
-Then package and verify `artifact.json` with the Data Analytics portable report builder. The script consumes the published CAE datasets plus the latest ignored `work/evaluation` and model-run outputs; rerun the corresponding benchmark workflows first if those work products are absent.
+Then package and verify `artifact.json` with the Data Analytics report builder when a portable HTML is needed. The script consumes the published CAE datasets plus the latest ignored `work/evaluation` and model-run outputs; rerun the corresponding benchmark workflows first if those work products are absent.
 """
-    (REPORT_DIR / "README.md").write_text(readme, encoding="utf-8")
+    (REPORT_DIR / "README.md").write_text(readme, encoding="utf-8", newline="\n")
 
     print(
         json.dumps(

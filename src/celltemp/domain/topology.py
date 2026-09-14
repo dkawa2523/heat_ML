@@ -114,13 +114,19 @@ class ActuatorSpec:
 
     name: str
     tau: float = 0.0
-    learnable: bool = True
+    learnable: bool | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("actuator name must not be empty")
         if not np.isfinite(self.tau) or self.tau < 0.0:
             raise ValueError("actuator tau must be finite and non-negative")
+        if self.learnable is None:
+            object.__setattr__(self, "learnable", self.tau > 0.0)
+        elif not isinstance(self.learnable, bool):
+            raise TypeError("actuator learnable must be boolean")
+        if self.learnable and self.tau == 0.0:
+            raise ValueError("a learnable actuator tau must have a positive prior")
 
 
 @dataclass(frozen=True)
@@ -139,6 +145,8 @@ class SourceSpec:
         weights = np.asarray(self.node_weights)
         if not np.isfinite(weights).all() or np.any(weights < 0.0):
             raise ValueError("source node weights must be finite and non-negative")
+        if not np.any(weights > 0.0):
+            raise ValueError("source node weights must contain a positive value")
 
 
 @dataclass(frozen=True)
@@ -179,6 +187,8 @@ class BoundarySpec:
         weights = np.asarray(self.node_weights)
         if not np.isfinite(weights).all() or np.any(weights < 0.0):
             raise ValueError("boundary node weights must be finite and non-negative")
+        if not np.any(weights > 0.0):
+            raise ValueError("boundary node weights must contain a positive value")
 
 
 @dataclass(frozen=True)
@@ -193,6 +203,7 @@ class ThermalSystemSpec:
     boundaries: tuple[BoundarySpec, ...] = ()
     sensor_names: tuple[str, ...] = ()
     sensor_nodes: tuple[str, ...] = ()
+    sensor_weights: tuple[tuple[float, ...], ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "node_names", tuple(self.node_names))
@@ -201,10 +212,16 @@ class ThermalSystemSpec:
         object.__setattr__(self, "actuators", tuple(self.actuators))
         object.__setattr__(self, "sources", tuple(self.sources))
         object.__setattr__(self, "boundaries", tuple(self.boundaries))
+        sensor_weights = tuple(_tuple_floats(row) for row in self.sensor_weights)
+        if sensor_weights and not self.sensor_names:
+            raise ValueError("sensor_names are required with sensor_weights")
+        if sensor_weights and self.sensor_nodes:
+            raise ValueError("use either sensor_nodes or sensor_weights, not both")
         sensors = tuple(self.sensor_names) or tuple(self.node_names)
-        sensor_nodes = tuple(self.sensor_nodes) or sensors
+        sensor_nodes = () if sensor_weights else tuple(self.sensor_nodes) or sensors
         object.__setattr__(self, "sensor_names", sensors)
         object.__setattr__(self, "sensor_nodes", sensor_nodes)
+        object.__setattr__(self, "sensor_weights", sensor_weights)
 
         self._validate_dimensions()
         nodes = set(self.node_names)
@@ -227,10 +244,15 @@ class ThermalSystemSpec:
             raise ValueError("source names must be unique")
         if len({boundary.name for boundary in self.boundaries}) != len(self.boundaries):
             raise ValueError("boundary names must be unique")
-        if len(self.sensor_names) != len(self.sensor_nodes):
-            raise ValueError("sensor_names and sensor_nodes must have equal length")
+        sensor_layout_size = (
+            len(self.sensor_weights) if self.sensor_weights else len(self.sensor_nodes)
+        )
+        if len(self.sensor_names) != sensor_layout_size:
+            raise ValueError("sensor names and observation mappings must have equal length")
         if len(set(self.sensor_names)) != len(self.sensor_names):
             raise ValueError("sensor_names must be unique")
+        if set(self.sensor_names) & {actuator.name for actuator in self.actuators}:
+            raise ValueError("sensor and actuator names must be distinct")
 
     @staticmethod
     def _validate_law_control(
@@ -283,6 +305,15 @@ class ThermalSystemSpec:
                 raise ValueError(f"boundary {boundary.name} must have one weight per node")
 
     def _validate_sensors(self, nodes: set[str]) -> None:
+        if self.sensor_weights:
+            weights = np.asarray(self.sensor_weights)
+            if weights.shape != (len(self.sensor_names), len(self.node_names)):
+                raise ValueError("sensor_weights must have one row per sensor and column per node")
+            if not np.isfinite(weights).all() or np.any(weights < 0.0):
+                raise ValueError("sensor_weights must be finite and non-negative")
+            if not np.allclose(weights.sum(axis=1), 1.0, rtol=1e-9, atol=1e-12):
+                raise ValueError("each sensor_weights row must sum to one")
+            return
         unknown_sensor_nodes = [name for name in self.sensor_nodes if name not in nodes]
         if unknown_sensor_nodes:
             raise ValueError(f"sensor mapping refers to unknown nodes {unknown_sensor_nodes}")
@@ -293,6 +324,8 @@ class ThermalSystemSpec:
 
     @property
     def observation_matrix(self) -> np.ndarray:
+        if self.sensor_weights:
+            return np.asarray(self.sensor_weights, dtype=np.float64).copy()
         matrix = np.zeros((len(self.sensor_names), len(self.node_names)), dtype=np.float64)
         node_index = {name: i for i, name in enumerate(self.node_names)}
         for sensor_index, node_name in enumerate(self.sensor_nodes):

@@ -43,8 +43,12 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert (run_dir / "artifact" / "system.yaml").exists()
     summary = json.loads((run_dir / "metrics_summary.json").read_text(encoding="utf-8"))
     assert set(summary) == {"train", "val", "test"}
-    assert np.isfinite(summary["test"]["mean_case_rmse"])
+    assert np.isfinite(summary["test"]["mean_case_conditional_rmse"])
+    assert np.isfinite(summary["test"]["mean_case_causal_rmse"])
     assert len(pd.read_csv(run_dir / "split.csv")) == 8
+    metadata = json.loads((run_dir / "artifact" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["training"]["model_selection_metric"] == "causal_rmse"
+    assert "train_temporal_ranges" in metadata
 
     write_forecast_request(cae_project)
     write_monitor_log(cae_project, noise=0.05)
@@ -58,6 +62,14 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     forecast = pd.read_csv(forecast_dir / "const_case.csv")
     assert len(forecast) == 11
     assert np.isfinite(forecast[[f"temperature_{name}" for name in SENSORS]]).all().all()
+    assert np.isfinite(forecast[[f"temperature_std_{name}" for name in SENSORS]]).all().all()
+    assert (forecast[[f"temperature_std_{name}" for name in SENSORS]] >= 0.0).all().all()
+    forecast_manifest = json.loads((forecast_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert forecast_manifest["settings"]["observer"]["initial_temperature_std"] == 100.0
+    assert forecast_manifest["settings"]["uncertainty"]["scope"] == "latent_state_and_process_only"
+    assert forecast_manifest["input"]["files"][0]["sha256"]
+    coverage = pd.read_csv(forecast_dir / "forecast_coverage.csv")
+    assert coverage["within_training_range"].all()
     monitored = pd.read_csv(monitor_dir / "monitor_case.csv")
     assert np.isfinite(monitored[[f"posterior_physical_{name}" for name in SENSORS]]).all().all()
     assert set(monitored["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
@@ -66,6 +78,9 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert set(summary["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
     assert np.isfinite(summary["innovation_rmse"]).all()
     assert np.isfinite(summary["mean_nis_per_dof"]).all()
+    monitor_manifest = json.loads((monitor_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert monitor_manifest["workflow"] == "monitor"
+    assert monitor_manifest["settings"]["observer"]["bias_reference"] == SENSORS[-1]
 
 
 def test_forecast_uses_history_without_accepting_measurements_after_the_boundary(

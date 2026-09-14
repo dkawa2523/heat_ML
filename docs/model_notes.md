@@ -8,7 +8,8 @@
 - boundary conductance scalar lawの係数
 
 すべてengineering priorからのlog倍率として保持され、常に非負です。`learnable: false`を
-設定した項はprior値に固定されます。
+設定した項はprior値に固定され、prior regularizationの平均からも除外されます。actuatorの
+`learnable`省略時は正の`tau`だけが学習対象になり、`tau=0`は直接入力として固定されます。
 
 ## 固定する量
 
@@ -41,14 +42,29 @@ timestampが「開始時刻」か「終了時刻」かを必ず確認し、必�
 
 ## 初期状態
 
+同定では、shooting pointの観測行列で決まらないnull空間方向を、そのcaseの選択区間に対する
+線形感度からridge付き最小二乗でprofileします。単一node、重複sensor、node加重平均でも先頭観測を
+変えずに隠れmodeだけを推定します。ridgeには単なるmachine epsilonではなく、観測温度を
+中心とする既定50 KのGaussian priorを使い、弱観測modeの極端な初期温度を防ぎます。この幅は
+`training.initial_temperature_prior_std`で対象に合わせて変更できます。これはcaseごとのnuisance初期状態であり、共有する
+RC係数でもartifactの一部でもありません。条件付きRMSEは未知初期状態を推定できる場合の同定指標です。
+学習結果は、将来観測を初期化へ使う`conditional_rmse`と、先頭観測だけを使う`causal_rmse`を
+分けて保存し、best modelの選択には後者を使います。
+
 sensorとnodeが一対一なら、初期node温度は観測値です。時刻0だけを使う最小forecastでは、
 隠れnodeを観測写像のridge逆問題で観測平均へ弱く寄せます。連続するburn-in観測をCSV先頭へ
 置けば、forecastは物理observerで未観測nodeとeffective actuatorを因果推定し、履歴末端の
 posterior物理状態からopen-loopへ引き渡します。将来区間の未知熱・sensor biasを既知と仮定
 しないよう、observerの外乱・bias状態はhandoffしません。
 
+forecastの標準偏差は、handoff時点の状態共分散と未知熱process noiseを伝播したGaussian observer上の
+潜在物理温度の状態不確かさです。将来の測定noise、係数、将来入力、model-form uncertaintyは含まず、
+経験的coverageを保証するものではありません。`disturbance_process_std`は保持データの残差に合わせて
+調整します。初回観測はforecastとmonitorの両方で一度だけposterior covarianceへ反映します。
+
 actuator初期値は既定で最初のcommandとし、開始前に定常だったと仮定します。開始直前の実効値
-が既知なら、ライブラリAPIの`initial_actuator`へ渡せます。
+が既知なら、ライブラリAPIの`initial_actuator`またはCSV先頭行の
+`initial_effective_<control>`へ渡せます。
 
 ## Loss
 
@@ -59,7 +75,7 @@ Huber lossはKelvinで計算します。sensor別標準化をしないため、�
 長いログやsensor数の多いcaseだけが支配しません。`horizon`は長大ログの計算量を制限する明示的な
 optionであり、通常の同定精度を調整するknobとしては使いません。
 
-`prior_weight`は係数をengineering priorへ弱く戻します。これは物理式をlossへ重複実装する
+`prior_weight`は学習対象の係数だけをengineering priorへ弱く戻します。これは物理式をlossへ重複実装する
 penaltyではなく、不十分な励起に対する識別性regularizationです。
 
 学習中のlog倍率は数値安定性のため`±4`に制限します。したがってengineering priorに対する

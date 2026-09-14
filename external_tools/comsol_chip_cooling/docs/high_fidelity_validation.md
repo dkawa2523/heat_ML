@@ -136,6 +136,9 @@ CAEの3温度は領域平均なので、単一点thermocoupleとは同じ観測�
 用いて同じ領域平均を近似し、その空間集約誤差を`uncertainty_*`へ含めます。具体的な受入列、配置原則、
 反復条件は`data/nonlinear_high_fidelity/experiment/README.md`に定義します。比較時には実験標準不確かさと
 mesh差を二乗和で合成し、bias、MAE、RMSE、最大誤差、正規化RMSE、95%不確かさ内率を出力します。
+比較完了は受入合格と同義ではありません。`validation_status.json`は比較後も
+`acceptance_passed: null`とし、用途別に事前設定した誤差・不確かさ基準を別途満たした場合だけ
+`true`にします。benchmark報告も`experiment_compared`と`experiment_validated`を分けて表示します。
 
 `experiment/experiment_template.csv`は過渡HV02と同じ時刻・3入力を持ち、温度・不確かさ欄だけを空欄に
 した測定受入表です。`steady_experiment_template.csv`はMC01/MC02用です。空欄は欠測であり、0 degCや

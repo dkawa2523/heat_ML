@@ -77,12 +77,26 @@ def test_system_yaml_round_trip(tmp_path: Path) -> None:
     assert loaded == original
 
 
+def test_sensor_can_observe_a_weighted_node_average(tmp_path: Path) -> None:
+    mapping = _system_mapping()
+    mapping["sensors"] = [
+        {"name": "surface_average", "node_weights": {"shell": 0.25, "core": 0.75}}
+    ]
+    spec = system_spec_from_mapping(mapping)
+    np.testing.assert_allclose(spec.observation_matrix, [[0.25, 0.75]])
+
+    path = tmp_path / "weighted-system.yaml"
+    save_system_spec(spec, path)
+    assert load_system_spec(path) == spec
+
+
 def test_frame_adapter_preserves_variable_dt_and_missing_observation() -> None:
     frame = pd.DataFrame(
         {
             "time": [0.0, 0.25, 1.0],
             "tc": [20.0, np.nan, 21.0],
             "power": [0.0, 5.0, 5.0],
+            "initial_effective_power": [3.0, np.nan, np.nan],
         }
     )
     trajectory = trajectory_from_frame(
@@ -94,7 +108,30 @@ def test_frame_adapter_preserves_variable_dt_and_missing_observation() -> None:
     )
     np.testing.assert_allclose(trajectory.dt, [0.25, 0.75])
     np.testing.assert_allclose(trajectory.commands[:, 0], [0.0, 5.0])
+    assert trajectory.initial_actuator is not None
+    np.testing.assert_allclose(trajectory.initial_actuator, np.array([3.0]))
     assert not trajectory.mask[1, 0]
+
+
+@pytest.mark.parametrize(
+    ("time_col", "sensor_cols", "control_cols"),
+    [
+        ("time", ["value"], ["value"]),
+        ("time", ["time"], ["value"]),
+    ],
+)
+def test_frame_adapter_rejects_column_role_collisions(
+    time_col: str, sensor_cols: list[str], control_cols: list[str]
+) -> None:
+    frame = pd.DataFrame({"time": [0.0, 1.0], "value": [20.0, 21.0]})
+    with pytest.raises(ValueError, match="must be distinct"):
+        trajectory_from_frame(
+            case_id="ambiguous",
+            frame=frame,
+            time_col=time_col,
+            sensor_cols=sensor_cols,
+            control_cols=control_cols,
+        )
 
 
 def test_system_loader_rejects_unknown_weight_node_and_non_mapping_root(tmp_path: Path) -> None:
@@ -112,6 +149,23 @@ def test_system_loader_rejects_unknown_weight_node_and_non_mapping_root(tmp_path
 def test_system_loader_rejects_unknown_schema_version() -> None:
     mapping = {**_system_mapping(), "version": 99}
     with pytest.raises(ValueError, match="unsupported system schema version 99"):
+        system_spec_from_mapping(mapping)
+
+
+def test_system_loader_rejects_ambiguous_or_misspelled_physics() -> None:
+    mapping = _system_mapping()
+    mapping["actuators"][0]["lernable"] = True
+    with pytest.raises(ValueError, match=r"unknown actuator options.*lernable"):
+        system_spec_from_mapping(mapping)
+
+    mapping = _system_mapping()
+    mapping["actuators"][0]["learnable"] = "false"
+    with pytest.raises(ValueError, match="must be boolean"):
+        system_spec_from_mapping(mapping)
+
+    mapping = _system_mapping()
+    mapping["edges"][0]["nodes"] = ["shell", "core", "extra"]
+    with pytest.raises(ValueError, match="exactly two nodes"):
         system_spec_from_mapping(mapping)
 
 

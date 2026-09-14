@@ -25,11 +25,12 @@ controlを持つため、別索引、ファイル名regex、暗黙の定数contr
 
 分割は次の2方式だけです。
 
-- `random`: time gridとcontrol履歴が同じtrajectoryを自動的に同じgroupへ入れる。
+- `random`: time gridとcontrol履歴が数値的に同じtrajectoryを自動的に同じgroupへ入れる。
 - `explicit`: 必要な評価だけ、任意の`case_id,split`表を使用する。
 
-`random`の同一判定は記録されたtime gridとcontrol値の完全一致です。logger由来の微小揺らぎを
-同一recipeとしてまとめる必要がある実データでは、根拠のない丸めを加えず`explicit`を使います。
+`random`の同一判定は既定で相対・絶対とも`1e-9`の許容値を使い、CSV往復などの丸め差で反復caseが
+分離することを防ぎます。より大きいlogger揺らぎを同一recipeとして扱う場合だけ
+`split.recipe_rtol/recipe_atol`を単位と収録精度に合わせて明示します。
 
 ### Trajectory
 
@@ -49,10 +50,10 @@ controlを持つため、別索引、ファイル名regex、暗黙の定数contr
 - commandまたは計測入力と一次遅れtauを持つactuator
 - scalar lawとnode分布を持つheat source
 - reservoir温度則、conductance scalar law、node分布を持つboundary
-- sensorからnodeへの観測写像
+- sensorから単一nodeまたはnode加重平均への観測写像
 
-sensorはstate nodeの部分集合または別名です。これにより、3本のTCしかなくても4点以上の
-内部状態を表現できます。
+sensorはstate nodeの部分集合・別名、または合計1の非負node weightsです。これにより、3本のTCしか
+なくても4点以上の内部状態を表現でき、CAEの面積・体積平均もnodeを増やさず対応できます。
 
 scalar lawは熱機構名を持たず、入力から非負の1値を作る責務だけを持ちます。
 
@@ -132,7 +133,9 @@ A-stable implicit Eulerも選べます。
 
 1. 1 epochで全学習caseを一度ずつshuffleして処理する。
 2. 既定では先頭観測から軌道末尾まで状態方程式を連続積分する。
-3. 観測写像の逆問題からnode初期温度を得る。
+3. shooting-point観測行列のnull空間だけを選択区間への線形感度からcase固有のnuisance stateとして
+   profileする。直接・重複・加重平均sensorのいずれでも初期観測は保存し、弱観測modeには物理温度幅の
+   Gaussian priorを置く。
 4. 観測mask上のHuber lossをKelvin単位でcaseごとに計算する。
 5. 軌道長や観測数では重み付けせず、case lossを均等に平均する。
 
@@ -140,8 +143,9 @@ A-stable implicit Eulerも選べます。
 caseごとに独立した有効長と観測可能なshooting pointを使います。短いcaseが同じbatch内の長いcaseを
 切り詰めることはありません。
 
-validationは設定した学習horizonに関係なく完全な軌道で計算し、caseごとのRMSE平均でmodel
-stateを選択します。長いcaseや観測点の多いcaseだけが過大な重みを持たない設計です。
+validationは設定した学習horizonに関係なく完全な軌道で計算し、先頭観測だけからの因果的な
+open-loop RMSE平均でmodel stateを選択します。条件付きprofile RMSEも保存し、係数fitと初期状態推定を
+監査できます。長いcaseや観測点の多いcaseだけが過大な重みを持たない設計です。
 
 capacityは既定で固定します。`C`とすべての`G/q`を同じ倍率で変える尺度不定性を避け、
 同定されたconductanceとsource heat rate係数を解釈可能に保つためです。
@@ -153,16 +157,21 @@ effective actuatorから、command scheduleだけでopen-loop積分します。�
 同じ処理の最小ケースです。安定性はclipではなく、正のcapacity/conductanceと安定積分で
 確保します。
 
+開始直前の実効actuatorが既知なら、trajectory CSV先頭行の`initial_effective_<control>`を使用します。
+省略時だけ最初のcommandへ整定済みと仮定します。
+
 入力はtrain、monitorと同じtrajectory CSVです。観測は先頭から連続するprefix、最初の
 全sensor空欄行以後は将来です。個別sensorの欠測は許しますが、forecast境界後に観測が再登場する
 入力は拒否します。その1ファイルが履歴、時間軸、将来commandをすべて表し、条件一覧から
 scheduleファイルを参照する二段構成は持ちません。出力はposterior handoff時刻から始まり、
 履歴の再構成値をopen-loop予測として数えません。
 
-出力はsensor温度に加え、全node温度とeffective actuatorを持ちます。sensorとnodeの対応に
-かかわらず列schemaを一定に保ちます。parameter uncertainty
-を含まない状態分散だけを予測区間として見せることは避け、forecastは検証可能な物理軌道へ
-限定します。
+出力はsensor温度、全node温度、effective actuatorに加え、observerのposterior covarianceと
+unknown-heat process noiseをopen-loop伝播した標準偏差・95%区間を持ちます。これは状態・process
+uncertaintyだけで、parameter、将来入力、model-form uncertaintyを含みません。またartifactに保存した
+学習control・sensor温度範囲と将来schedule・予測温度を比較し、case・quantity単位の適用範囲を
+一つの別表へ保存します。この区間はGaussian observer仮定に基づき、経験的coverageを保証しません。
+process noiseは保持データの残差を使って用途ごとに調整します。
 
 ## 6. Monitor
 
@@ -170,11 +179,13 @@ monitorは後付け補正ではなく、拡張状態`[T, unknown_heat, sensor_bi
 入力は実測温度と適用commandを同じ行に持つtrajectory CSVであり、log一覧表は持ちません。
 
 - `T`: RC方程式で予測
-- `unknown_heat`: `system.yaml`の既知source分布に沿うsigned heat rate [W]
+- `unknown_heat`: `system.yaml`の既知source分布に沿うsigned heat rate [W]。sourceがない場合だけ
+  node identity basisを使う
 - `sensor_bias`: 明示したgauge内で識別可能なslow random walk
 - measurement: `H T + sensor_bias`
 
-未知熱とsensor biasの連続時間process noiseは、熱方程式を含むVan Loan離散化で共分散へ変換します。
+未知熱とsensor biasの連続時間process noiseは、`exact`では熱方程式を含むVan Loan離散化、
+`implicit`では同じbackward-Euler遷移を通す離散化で共分散へ変換します。
 出力はprior physical temperature、predicted measurement、posterior physical temperature、
 reconstructed measurement、node未知熱、sensor bias、bias gauge、innovation、full innovation
 covariance、NISです。
@@ -199,6 +210,9 @@ artifactは次の3ファイルのみです。
 - `system.yaml`: topology、capacity、prior、観測写像。
 - `metadata.json`: schema、integrator、同定後物理係数、データ範囲、評価結果。
 
+読込時は`system.yaml`から導出した固定buffer、`model.pt`から再計算した同定後係数、両ファイルの
+SHA-256をmetadataと照合し、同じshapeでも内容や来歴が異なる混成artifactを拒否します。
+
 前処理object、外部graph CSV、元configへの相対参照を持ちません。directory単独で移送できます。
 
 ## 8. Config and output boundary
@@ -212,6 +226,8 @@ project root、そのancestor、filesystem rootそのものは置換対象にで
 
 sensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。artifactも既定では
 `project.output_dir/project.run_name/artifact`から導出し、別runを読む場合だけ明示します。
+forecastとmonitorは同じobserver設定解決と初回観測更新を使い、入力・artifact hash、解決済み設定を
+共通の`run_manifest.json`へ保存します。
 
 ## 9. Dependency direction
 

@@ -4,13 +4,22 @@ import torch
 
 from celltemp.domain import (
     ActuatorSpec,
+    ConstantLawSpec,
+    EdgeSpec,
     PositivePartLawSpec,
     SourceSpec,
     ThermalSystemSpec,
     Trajectory,
 )
 from celltemp.engine import ThermalRCModel
-from celltemp.learning import TrainingConfig, fit_thermal_model, trajectory_loss, trajectory_rmse
+from celltemp.learning import (
+    TrainingConfig,
+    fit_thermal_model,
+    initial_observation_rmse,
+    trajectory_loss,
+    trajectory_rmse,
+)
+from celltemp.learning.objective import profiled_initial_temperature, trajectory_tensors
 from celltemp.learning.trainer import _valid_starts
 
 
@@ -44,6 +53,109 @@ def test_trajectory_objective_is_zero_for_generating_model() -> None:
     model = ThermalRCModel(_source_system(0.2))
     assert float(trajectory_loss(model, trajectory).detach()) < 1e-12
     assert trajectory_rmse(model, trajectory) < 1e-12
+
+
+def test_trajectory_objective_profiles_hidden_initial_temperature() -> None:
+    spec = ThermalSystemSpec(
+        node_names=("surface", "core"),
+        heat_capacity=(1.0, 2.0),
+        edges=(EdgeSpec("surface", "core", ConstantLawSpec(0.25, learnable=False)),),
+        actuators=(),
+        sensor_names=("surface_tc",),
+        sensor_nodes=("surface",),
+    )
+    model = ThermalRCModel(spec)
+    steps = 20
+    states, _ = model.forward_trajectory(
+        torch.tensor([80.0, 20.0], dtype=torch.float64),
+        torch.empty((steps, 0), dtype=torch.float64),
+        torch.ones(steps, dtype=torch.float64),
+    )
+    trajectory = Trajectory(
+        case_id="hidden-initial-state",
+        time=np.arange(steps + 1, dtype=float),
+        temperature=model.observe(states).detach().numpy(),
+        commands=np.empty((steps, 0)),
+        sensor_names=("surface_tc",),
+        control_names=(),
+    )
+
+    assert trajectory_rmse(model, trajectory) < 3e-3
+    assert initial_observation_rmse(model, trajectory) > 1.0
+
+
+def test_hidden_initial_profile_uses_weighted_observation_null_space() -> None:
+    from celltemp.domain import BoundarySpec, ReservoirTemperatureSpec
+
+    spec = ThermalSystemSpec(
+        node_names=("core", "surface"),
+        heat_capacity=(3.0, 1.0),
+        edges=(EdgeSpec("core", "surface", ConstantLawSpec(0.2, learnable=False)),),
+        actuators=(),
+        boundaries=(
+            BoundarySpec(
+                "ambient",
+                (0.0, 1.0),
+                ReservoirTemperatureSpec(20.0),
+                ConstantLawSpec(0.1, learnable=False),
+            ),
+        ),
+        sensor_names=("weighted_tc",),
+        sensor_weights=((0.25, 0.75),),
+    )
+    model = ThermalRCModel(spec)
+    steps = 30
+    states, _ = model.forward_trajectory(
+        torch.tensor([80.0, 20.0], dtype=torch.float64),
+        torch.empty((steps, 0), dtype=torch.float64),
+        torch.ones(steps, dtype=torch.float64),
+    )
+    trajectory = Trajectory(
+        case_id="weighted-observation",
+        time=np.arange(steps + 1, dtype=float),
+        temperature=model.observe(states).numpy(),
+        commands=np.empty((steps, 0)),
+        sensor_names=spec.sensor_names,
+        control_names=(),
+    )
+
+    assert trajectory_rmse(model, trajectory) < 2e-3
+    assert trajectory_rmse(model, trajectory) < initial_observation_rmse(model, trajectory) / 100.0
+
+
+def test_hidden_initial_profile_has_a_physical_scale_when_observability_is_weak() -> None:
+    spec = ThermalSystemSpec(
+        node_names=("measured", "hidden"),
+        heat_capacity=(1.0, 1.0),
+        edges=(EdgeSpec("measured", "hidden", ConstantLawSpec(1e-4, learnable=False)),),
+        actuators=(),
+        sensor_names=("sensor",),
+        sensor_nodes=("measured",),
+    )
+    model = ThermalRCModel(spec)
+    temperature = np.full((6, 1), 20.0)
+    temperature[-1, 0] = 21.0
+    trajectory = Trajectory(
+        case_id="weakly-observable",
+        time=np.arange(6, dtype=float),
+        temperature=temperature,
+        commands=np.empty((5, 0)),
+        sensor_names=("sensor",),
+        control_names=(),
+    )
+    observed, commands, dt, mask = trajectory_tensors(model, trajectory)
+
+    initial = profiled_initial_temperature(
+        model,
+        observed,
+        commands,
+        dt,
+        mask,
+        start=0,
+        stop=5,
+    )
+
+    assert 20.0 <= initial[1] <= 25.0
 
 
 def test_fit_reduces_full_rollout_error() -> None:
@@ -125,13 +237,27 @@ def test_shooting_starts_preserve_the_requested_horizon() -> None:
         {"epochs": 0},
         {"horizon": 0},
         {"learning_rate": 0.0},
+        {"initial_temperature_prior_std": 0.0},
         {"prior_weight": -1.0},
         {"gradient_clip": -1.0},
+        {"prior_weight": float("nan")},
+        {"gradient_clip": float("inf")},
     ],
 )
-def test_training_config_rejects_nonpositive_values(options: dict) -> None:
+def test_training_config_rejects_invalid_numeric_values(options: dict) -> None:
     with pytest.raises(ValueError, match=r"positive|non-negative"):
         TrainingConfig(**options)
+
+
+def test_fit_rejects_nonfinite_loss() -> None:
+    model = ThermalRCModel(_source_system(0.2))
+    model.source_laws.log_scale_multiplier.data.fill_(float("nan"))
+    with pytest.raises(FloatingPointError, match="non-finite training loss"):
+        fit_thermal_model(
+            model,
+            [_synthetic_trajectory()],
+            config=TrainingConfig(epochs=1),
+        )
 
 
 def test_learning_rejects_missing_cases_and_wrong_control_names() -> None:

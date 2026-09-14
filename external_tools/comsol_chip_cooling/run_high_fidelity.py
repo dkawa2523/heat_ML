@@ -6,9 +6,10 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-from comsol_runtime import select_comsol
+from comsol_runtime import ComsolRuntime, select_comsol
 from nonlinear_cases import high_fidelity_cases
-from run_nonlinear import JAVA_SOURCE, build_dataset
+from nonlinear_dataset import write_csv
+from run_nonlinear import JAVA_SOURCE, build_dataset, raw_tables_available
 from summarize_high_fidelity import summarize
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -46,11 +47,17 @@ def main() -> int:
     evidence_root = args.evidence_root.resolve()
     if not args.allow_unqualified:
         _require_qualified(args.mesh_profile, evidence_root)
-    runtime = select_comsol(args.comsol_root)
-    print(f"Using COMSOL: {runtime.root}", flush=True)
-    runtime.compile(JAVA_SOURCE)
+    cases = high_fidelity_cases()
+    reusable = args.reuse_raw and raw_tables_available(cases, args.mesh_profile)
+    runtime: ComsolRuntime | None = None
+    if reusable:
+        print("Reusing existing verified raw COMSOL tables", flush=True)
+    else:
+        runtime = select_comsol(args.comsol_root)
+        print(f"Using COMSOL: {runtime.root}", flush=True)
+        runtime.compile(JAVA_SOURCE)
     summary = build_dataset(
-        high_fidelity_cases(),
+        cases,
         runtime=runtime,
         data_root=args.data_root.resolve(),
         mesh_profile=args.mesh_profile,
@@ -59,7 +66,7 @@ def main() -> int:
     )
     summary_path = args.data_root.resolve() / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    summary.to_csv(summary_path, index=False)
+    write_csv(summary, summary_path)
     if args.data_root.resolve() == evidence_root / "dynamic":
         summarize(evidence_root)
         print(f"High-fidelity quality report: {evidence_root / 'quality_report.md'}")
