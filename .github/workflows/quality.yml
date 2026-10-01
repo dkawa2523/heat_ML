@@ -41,7 +41,7 @@ jobs:
 
       - name: product benchmark
         if: matrix.python-version == '3.10'
-        run: python benchmarks/topcell/run.py
+        run: python -m benchmarks.topcell.run
 
       - name: dependency audit
         if: matrix.python-version == '3.10'

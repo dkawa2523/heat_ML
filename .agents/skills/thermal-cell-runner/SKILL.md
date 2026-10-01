@@ -1,6 +1,6 @@
 ---
 name: thermal-cell-runner
-description: Run and verify this repository's thermal-cell-practical setup, train, forecast, monitor, TopCell benchmark, COMSOL evaluation, and CAE report-refresh workflows. Use only inside this repository; do not use for algorithm changes or unrelated thermal projects.
+description: Run and verify this repository's thermal-cell-practical setup, time-series analysis, train, forecast, monitor, TopCell benchmark, and COMSOL evaluation workflows. Use only inside this repository; do not use for algorithm changes or unrelated thermal projects.
 ---
 
 # Thermal Cell Runner
@@ -30,24 +30,22 @@ guessing.
 
 - **Environment setup:** read the `README.md` execution section, then run
   `uv sync --extra dev --locked`. Do not update `uv.lock` during ordinary execution.
-- **Quality gate:** run `uv run --locked python quality.py fast` for a quick check or
+- **Quality gate:** run `uv run --locked python quality.py fast` for a quick check,
+  `uv run --locked python quality.py architecture` for Ruff/Pyrefly/import-linter/Radon only, or
   `uv run --locked python quality.py pr` for the full repository gate.
+- **Time-series analysis:** use the project config and run `celltemp analyze`. Inspect the
+  case/sensor/control metrics, summary, uniformity traces, and requested figures.
 - **Quickstart:** use `examples/topcell_quickstart/config.yaml`; run only the requested
   `train`, `forecast`, or `monitor` stages. Run them in that order when the user requests the
   complete quickstart.
 - **TopCell benchmark:** read `benchmarks/topcell/README.md`, then run
-  `uv run --locked --with-editable . python benchmarks/topcell/run.py`.
+  `uv run --locked --with-editable . python -m benchmarks.topcell.run`.
 - **Linear COMSOL model evaluation:** read `external_tools/comsol_chip_cooling/README.md`, then use
   the existing dataset with the configured `train -> forecast -> monitor -> evaluate.py` flow.
 - **Nonlinear or high-fidelity COMSOL evaluation:** read both
   `external_tools/comsol_chip_cooling/README.md` and
   `external_tools/comsol_chip_cooling/docs/high_fidelity_validation.md`. Use existing published
   datasets for evaluation unless the user explicitly requests new COMSOL solves.
-- **CAE report refresh:** read
-  `external_tools/comsol_chip_cooling/reports/cae_benchmark_report/README.md`, ensure the relevant
-  benchmark outputs are current, then run its `build_report.py` command. Treat `artifact.json` and
-  `source_data/` as canonical; do not recreate the ignored `report.html` unless explicitly asked
-  for a portable render.
 
 Read `docs/units_and_conventions.md` before preparing, interpreting, or changing any input,
 observer setting, or physical parameter. Read only the documentation relevant to the selected
@@ -62,7 +60,7 @@ mode.
 - Confirm that expected input files exist. Do not synthesize missing measurements or treat an
   empty experiment template as validation data.
 - Core quickstart and TopCell work products live under ignored `work/` directories. COMSOL dataset
-  generators and high-fidelity benchmark/report commands can update tracked evidence; state this
+  generators and high-fidelity benchmark commands can update tracked evidence; state this
   before running them and include those changes in the final summary.
 - New COMSOL solves require an explicit user request. Before a solve, inspect the selected
   script's `--help` and follow the documented license, installation, case, mesh, and `--reuse-raw`
@@ -76,6 +74,7 @@ mode.
 Use these forms from the repository root, substituting a user-selected config when supplied:
 
 ```text
+uv run --locked --with-editable . celltemp analyze --config examples/topcell_quickstart/config.yaml
 uv run --locked --with-editable . celltemp train --config examples/topcell_quickstart/config.yaml
 uv run --locked --with-editable . celltemp forecast --config examples/topcell_quickstart/config.yaml
 uv run --locked --with-editable . celltemp monitor --config examples/topcell_quickstart/config.yaml
@@ -87,14 +86,13 @@ For the existing linear COMSOL dataset:
 uv run --locked --with-editable . celltemp train --config external_tools/comsol_chip_cooling/config.yaml
 uv run --locked --with-editable . celltemp forecast --config external_tools/comsol_chip_cooling/config.yaml
 uv run --locked --with-editable . celltemp monitor --config external_tools/comsol_chip_cooling/config.yaml
-uv run --locked --with-editable . python external_tools/comsol_chip_cooling/evaluate.py
+uv run --locked --with-editable . python -m external_tools.comsol_chip_cooling.evaluate
 ```
 
-For existing high-fidelity data and the canonical evidence artifact:
+For existing high-fidelity data and its canonical summary:
 
 ```text
-uv run --locked --with-editable . python external_tools/comsol_chip_cooling/benchmark_high_fidelity.py
-uv run --locked --with-editable . python external_tools/comsol_chip_cooling/reports/cae_benchmark_report/build_report.py
+uv run --locked --with-editable . python -m external_tools.comsol_chip_cooling.benchmark_high_fidelity
 ```
 
 Use documented dot-key CLI overrides only when the user explicitly requests them. Do not persist
@@ -105,9 +103,16 @@ temporary overrides back into YAML unless asked.
 Run dependent stages sequentially and stop at the first nonzero exit code. Do not claim success
 from file existence alone.
 
-- **Train:** inspect `metrics_summary.json`, `metrics_by_case.csv`, `split.csv`, and artifact
-  `metadata.json`. Report causal and conditional metrics separately; model selection uses causal
-  validation RMSE.
+- **Train:** inspect `metrics_summary.json`, `metrics_by_case.csv`, `split.csv`,
+  `thermal_paths.csv`, `thermal_modes.csv`, and artifact `metadata.json`. Report causal and
+  conditional metrics separately; model selection uses causal validation RMSE. Treat the path and
+  mode tables as a representative observed training-command operating point, not every operating
+  condition.
+- **Analyze:** inspect `summary.json`, `case_metrics.csv`, `sensor_metrics.csv`, and
+  `control_metrics.csv`. Confirm the case count, peak-temperature case, largest sensor-spread
+  case, and that each requested figure was written. When `analysis.thermal_impedance` is
+  configured, also inspect `thermal_impedance.csv` and `thermal_impedance_qualification.csv`;
+  report transient Zth and steady-Rth qualification separately.
 - **Forecast:** inspect `forecast_summary.csv`, `forecast_coverage.csv`, and `run_manifest.json`.
   Surface control, predicted-temperature, timestep, horizon, and slew OOD warnings. An OOD warning
   is not automatically a command failure, but it limits interpretation.
@@ -116,7 +121,6 @@ from file existence alone.
 - **Benchmark/evaluation:** parse the published summary JSON and require every declared check or
   workflow status to pass. Preserve a failing exit code and explain the failed checks without
   modifying thresholds or inputs.
-- **Report:** verify the rebuilt artifact timestamp, case inventory, datasets, and input hashes.
 
 Run `quality.py` after execution only when the user requested code quality validation or code was
 changed. Do not add redundant tests or diagnostics for an ordinary model run.
@@ -136,5 +140,5 @@ changed. Do not add redundant tests or diagnostics for an ordinary model run.
 
 Summarize the exact command and config, exit status, output directory, principal causal metrics,
 coverage/OOD warnings, validation qualification, and files changed by the run. Link the canonical
-summary, manifest, or report artifact. If blocked, identify the missing input, environment, license,
+summary or manifest. If blocked, identify the missing input, environment, license,
 or explicit mode choice and leave existing outputs untouched.

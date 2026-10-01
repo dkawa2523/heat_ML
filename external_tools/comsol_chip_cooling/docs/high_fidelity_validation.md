@@ -66,8 +66,8 @@ hotspot安全判定へ昇格させません。
 
 `dynamic/cae_reference.csv`は放射を含む`HV02`を実験比較用の過渡境界へ変換した表です。過渡条件は
 MC01/MC02の発熱上限・入口温度・流速範囲内に置き、各温度のmesh不確かさには両定常点の
-local-medium対local-fine差の最大値を保守的に付与します。ただし独立した時間刻み収束試験は未実施なので、
-`temporal_qualified=false`を保持し、動的な設計保証には使いません。
+local-medium対local-fine差の最大値を保守的に付与します。2 s / 1 sの独立時間刻み比較は実施済みですが
+事前基準に未達なので、`temporal_qualified=false`を保持し、動的な設計保証には使いません。
 
 ## 2026-08-30の収束結果
 
@@ -126,6 +126,47 @@ mesh評価と本体のmodel-form error評価を混ぜないため、過渡デー
 heat sink温度を下げて空気側へ熱を移す方向性の確認には使えますが、0.39 degCを設計精度で確定した値とは
 扱いません。
 
+## 過渡時間刻み収束
+
+時間刻み収束は最も結合条件の多い`HV02_composite_radiation`をlocal-medium meshで2回解き、入力scheduleと
+20秒の公開出力時刻は変えず、BDF solverの最大内部刻みだけ2 s、1 sへ固定して比較します。command波形を
+細分化しないため、入力近似差をsolver時間刻み差へ混ぜません。
+
+受入値は新しい結果を見る前に、strict mesh許容値の一部を時間積分へ配分して固定します。
+
+| quantity | 隣接時間刻み差の上限 |
+|---|---:|
+| chip/base/fins領域平均、outlet平均温度 | 0.05 K |
+| chip/fins最高温度 | 0.10 K |
+| 圧力差、放射熱量 | fine側peakの0.5% |
+
+比較は同じ時刻を直接結合し、補間しません。8 quantityがすべて合格した場合だけ
+`temporal_qualified=true`とし、3領域平均温度の最大差を`temporal_uncertainty_*`へ保持します。
+未実行または一部だけの結果ではfalseのままです。不合格時は基準を変更せず、fine側を次のcoarse側として
+さらに半分の最大刻みを解きます。各隣接pairは`temporal/comparison_<coarse>_to_<fine>.csv`へ残し、
+`time_step_convergence.csv`は資格判定に使う最新pairを保持します。
+
+2026-09-30に2 s / 1 sを完了し、結果は次のとおりでした。
+
+| quantity | 観測差 | 基準 | 判定 |
+|---|---:|---:|---|
+| chip平均 | 0.08150 K | 0.05 K | 不合格 |
+| base平均 | 0.08132 K | 0.05 K | 不合格 |
+| fins平均 | 0.08039 K | 0.05 K | 不合格 |
+| chip最高 | 0.08164 K | 0.10 K | 合格 |
+| fins最高 | 0.08148 K | 0.10 K | 合格 |
+| outlet平均 | 0.03276 K | 0.05 K | 合格 |
+| 圧力差 | 0.0225% | 0.5% | 合格 |
+| 放射熱量 | 0.858% | 0.5% | 不合格 |
+
+したがって時間離散化は未資格です。1 s / 0.5 sの追加比較は後日実施し、それまでは2 s / 1 sを正本と
+します。受入値の緩和や未完了solveの部分値による代用は行いません。
+
+```powershell
+uv run --locked --with-editable . python -m `
+  external_tools.comsol_chip_cooling.run_time_step_convergence
+```
+
 ## 実験と同一の評価境界
 
 一次キーと粒度は`(case_id, time)`です。比較列は`chip`, `sink_base`, `fins`、入力列は
@@ -134,8 +175,12 @@ heat sink温度を下げて空気側へ熱を移す方向性の確認には使�
 
 CAEの3温度は領域平均なので、単一点thermocoupleとは同じ観測量ではありません。実験側は複数センサを
 用いて同じ領域平均を近似し、その空間集約誤差を`uncertainty_*`へ含めます。具体的な受入列、配置原則、
-反復条件は`data/nonlinear_high_fidelity/experiment/README.md`に定義します。比較時には実験標準不確かさと
-mesh差を二乗和で合成し、bias、MAE、RMSE、最大誤差、正規化RMSE、95%不確かさ内率を出力します。
+反復条件は`data/nonlinear_high_fidelity/experiment/README.md`に定義します。比較時には独立と仮定した
+実験標準不確かさ、mesh差、取得済みの場合は時間刻み差を別列に保持した上で二乗和で合成し、
+bias、MAE、RMSE、最大誤差、正規化RMSE、
+95%不確かさ内率を出力します。主キーは完全一致、controlはCSV数値round-trip相当の許容差
+`1e-8 * max(abs(CAE値), 1)`だけを許し、補間しません。出力は3 fileを書き終えてからdirectory単位で
+置換します。
 比較完了は受入合格と同義ではありません。`validation_status.json`は比較後も
 `acceptance_passed: null`とし、用途別に事前設定した誤差・不確かさ基準を別途満たした場合だけ
 `true`にします。benchmark報告も`experiment_compared`と`experiment_validated`を分けて表示します。
@@ -149,15 +194,14 @@ CAE値による代入ではありません。
 repository rootから実行します。
 
 ```powershell
-uv run --with-editable . python `
-  external_tools/comsol_chip_cooling/run_mesh_convergence.py --reuse-raw
+uv run --locked --with-editable . python -m `
+  external_tools.comsol_chip_cooling.run_mesh_convergence --reuse-raw
 ```
 
 単一meshの構造だけを確認する場合は次を使います。
 
 ```powershell
-uv run --with-editable . python `
-  external_tools/comsol_chip_cooling/run_nonlinear.py `
+uv run --locked --with-editable . python -m external_tools.comsol_chip_cooling.run_nonlinear `
   --mesh-only --mesh-profile local-medium `
   --data-root external_tools/comsol_chip_cooling/data/nonlinear_high_fidelity
 ```

@@ -124,7 +124,7 @@ def load_trajectories(data_cfg: Mapping[str, Any], root: str | Path) -> list[Tra
     trajectories: list[Trajectory] = []
     for source in paths:
         frame = pd.read_csv(source, sep=separator)
-        frame.columns = [str(name).strip() for name in frame.columns]
+        frame.columns = [name.strip() for name in frame.columns]
         trajectory = trajectory_from_frame(
             case_id=source.stem,
             frame=frame,
@@ -151,4 +151,5 @@ def load_split_assignments(path: str | Path) -> dict[str, str]:
     case_ids = table["case_id"].astype(str)
     if case_ids.duplicated().any():
         raise ValueError("split table case_id values must be unique")
-    return dict(zip(case_ids, table["split"].astype(str)))
+    splits = table["split"].astype(str)
+    return dict(zip(case_ids.tolist(), splits.tolist(), strict=True))

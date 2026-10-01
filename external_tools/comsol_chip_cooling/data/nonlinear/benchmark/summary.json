@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-29T12:34:59.859700+00:00",
+  "objective": "Open-loop model-form screening across nonlinear interpolation, extrapolation, pulse, hot-start, and paired-radiation CAE cases.",
+  "data_quality": {
+    "mesh_profile": "global-8",
+    "mesh_qualified": false,
+    "temporal_qualified": false,
+    "experiment_compared": false,
+    "permitted_use": "model-form screening"
+  },
+  "workflow": {
+    "status": "pass",
+    "artifact_controls": [
+      "chip_power",
+      "coolant_temperature",
+      "inlet_air_velocity"
+    ],
+    "complete_external_control_boundary": true,
+    "forecast_truth_columns_excluded_by_request": true,
+    "all_predictions_finite": true,
+    "radiation_pair_time_and_controls_identical": true
+  },
+  "model": {
+    "type": "three-node thermal network using shared scalar response laws",
+    "artifact": "work/high_fidelity_benchmark/runs/nonlinear_high_fidelity_network/artifact",
+    "fitted_parameters": {
+      "edges": [
+        {
+          "node_a": "chip",
+          "node_b": "sink_base",
+          "conductance": {
+            "type": "constant",
+            "value": 39.96068852870492
+          }
+        },
+        {
+          "node_a": "sink_base",
+          "node_b": "fins",
+          "conductance": {
+            "type": "constant",
+            "value": 9.659281943282522
+          }
+        }
+      ],
+      "actuators": [
+        {
+          "name": "chip_power",
+          "tau": 0.0
+        },
+        {
+          "name": "coolant_temperature",
+          "tau": 0.0
+        },
+        {
+          "name": "inlet_air_velocity",
+          "tau": 0.0
+        }
+      ],
+      "sources": [
+        {
+          "name": "chip_dissipation",
+          "heat_rate": {
+            "type": "positive_part",
+            "control": "chip_power",
+            "gain": 1.0,
+            "threshold": 0.0
+          }
+        }
+      ],
+      "boundaries": [
+        {
+          "name": "coolant_convection",
+          "conductance": {
+            "type": "power_law",
+            "control": "inlet_air_velocity",
+            "reference": 0.1,
+            "offset": 0.04,
+            "scale": 0.13757525348904123,
+            "exponent": 0.9432966113831553
+          }
+        }
+      ]
+    }
+  },
+  "evaluation": {
+    "n_cases": 14,
+    "groups": [
+      {
+        "case_group": "air_velocity",
+        "n_cases": 2,
+        "mean_rmse_k": 0.12255945069546113,
+        "worst_rmse_k": 0.14715096459753782,
+        "mean_prior_rmse_k": 12.936844200127497,
+        "mean_persistence_rmse_k": 27.36224267367122,
+        "worst_case": "NF06_air_velocity_interpolation"
+      },
+      {
+        "case_group": "combined",
+        "n_cases": 1,
+        "mean_rmse_k": 0.18215731835631394,
+        "worst_rmse_k": 0.18215731835631394,
+        "mean_prior_rmse_k": 11.22293122734949,
+        "mean_persistence_rmse_k": 22.278850804630142,
+        "worst_case": "NF02_unseen_three_input_recipe"
+      },
+      {
+        "case_group": "dynamics",
+        "n_cases": 1,
+        "mean_rmse_k": 0.0535009492166741,
+        "worst_rmse_k": 0.0535009492166741,
+        "mean_prior_rmse_k": 2.2240917567854215,
+        "mean_persistence_rmse_k": 5.405744975866163,
+        "worst_case": "NF08_short_power_pulses"
+      },
+      {
+        "case_group": "extrapolation",
+        "n_cases": 3,
+        "mean_rmse_k": 0.22858992028425848,
+        "worst_rmse_k": 0.5027701695503778,
+        "mean_prior_rmse_k": 18.692538804221144,
+        "mean_persistence_rmse_k": 41.06939897305584,
+        "worst_case": "NF05_cold_inlet_extrapolation"
+      },
+      {
+        "case_group": "initialization",
+        "n_cases": 1,
+        "mean_rmse_k": 0.3532338925737395,
+        "worst_rmse_k": 0.3532338925737395,
+        "mean_prior_rmse_k": 36.75043212483389,
+        "mean_persistence_rmse_k": 45.53110459814405,
+        "worst_case": "NF09_stationary_hot_start"
+      },
+      {
+        "case_group": "interpolation",
+        "n_cases": 1,
+        "mean_rmse_k": 0.19505597920871628,
+        "worst_rmse_k": 0.19505597920871628,
+        "mean_prior_rmse_k": 10.488426805138978,
+        "mean_persistence_rmse_k": 22.46095742423863,
+        "worst_case": "NF01_fixed_flow_interpolation"
+      },
+      {
+        "case_group": "radiation",
+        "n_cases": 5,
+        "mean_rmse_k": 4.556268957671771,
+        "worst_rmse_k": 9.412459054331054,
+        "mean_prior_rmse_k": 10.815860267320426,
+        "mean_persistence_rmse_k": 28.25970402410919,
+        "worst_case": "NR05_stationary_hot_start"
+      }
+    ],
+    "non_radiation_holdouts": {
+      "n_cases": 9,
+      "mean_rmse_k": 0.19053742239990462,
+      "worst_case": "NF05_cold_inlet_extrapolation",
+      "worst_rmse_k": 0.5027701695503778,
+      "mean_prior_rmse_k": 15.848576303002915,
+      "mean_persistence_rmse_k": 30.401037785487663
+    },
+    "radiation_model_gap": {
+      "n_cases": 5,
+      "mean_rmse_k": 4.556268957671771,
+      "worst_case": "NR05_stationary_hot_start",
+      "worst_rmse_k": 9.412459054331054,
+      "mean_prior_rmse_k": 10.815860267320426,
+      "mean_persistence_rmse_k": 28.25970402410919
+    },
+    "mean_case_rmse_k": 1.7497272564255717,
+    "worst_case": "NR05_stationary_hot_start",
+    "worst_case_rmse_k": 9.412459054331054,
+    "mean_prior_rmse_k": 14.051177718830596,
+    "mean_persistence_rmse_k": 29.636275727852496,
+    "residual_diagnostics": {
+      "sign_convention": "predicted_minus_truth",
+      "forecast_origin_excluded": true,
+      "interpretation": "descriptive screening only; protocol covariation prevents causal attribution"
+    },
+    "prediction_figures": {
+      "non_radiation_timeseries": "figures/core_prediction_timeseries.png",
+      "non_radiation_parity": "figures/core_prediction_parity.png",
+      "radiation_model_gap_timeseries": "figures/model_gap_prediction_timeseries.png",
+      "radiation_model_gap_parity": "figures/model_gap_prediction_parity.png"
+    }
+  },
+  "radiation_pairs": {
+    "n_pairs": 5,
+    "max_abs_truth_effect_k": 32.720148800000004,
+    "mean_pair_delta_rmse_k": 4.456637932723594,
+    "interpretation": "directional screening only on a non-converged mesh"
+  }
+}

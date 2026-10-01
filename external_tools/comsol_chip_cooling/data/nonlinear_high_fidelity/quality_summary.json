@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "strict_mesh_qualified": false,
+  "benchmark_mesh_qualified": true,
+  "transient_time_discretization_qualified": false,
+  "experiment_validated": false,
+  "max_adjacent_mesh_temperature_difference_k": 0.4962085957,
+  "dynamic_cases": [
+    {
+      "case_id": "HV01_composite_conjugate",
+      "rows": 12,
+      "time_end_s": 220,
+      "temperature_min_c": 25.00001508,
+      "temperature_max_c": 45.01330438,
+      "chip_final_c": 45.01330438,
+      "chip_peak_c": 45.13857137,
+      "pressure_drop_max_pa": 0.01088032547,
+      "radiative_heat_rate_max_abs_w": 0.0,
+      "energy_residual_max_abs_w": 0.1104539026
+    },
+    {
+      "case_id": "HV02_composite_radiation",
+      "rows": 12,
+      "time_end_s": 220,
+      "temperature_min_c": 24.99815948,
+      "temperature_max_c": 44.63197071,
+      "chip_final_c": 44.63197071,
+      "chip_peak_c": 44.75865705,
+      "pressure_drop_max_pa": 0.01088284958,
+      "radiative_heat_rate_max_abs_w": 0.3957449502,
+      "energy_residual_max_abs_w": 0.01748052074
+    }
+  ],
+  "radiation_pair": {
+    "max_abs_sensor_temperature_delta_k": 0.3927567699999983,
+    "max_abs_radiative_heat_rate_w": 0.3957449502,
+    "temperature_delta_over_adjacent_mesh_difference": 0.7915154501625219,
+    "time_and_public_inputs_identical": true
+  },
+  "intended_use": "nonlinear model-form screening",
+  "excluded_uses": [
+    "chip design qualification",
+    "hotspot safety decision",
+    "final pressure-drop design value"
+  ],
+  "time_step_convergence": {
+    "qualified": false,
+    "coarse_max_time_step_s": 2.0,
+    "fine_max_time_step_s": 1.0,
+    "max_sensor_temperature_difference_k": 0.08149587312,
+    "basis": "maximum BDF step 2 s versus 1 s at identical output times and controls",
+    "evidence": "time_step_convergence.csv"
+  }
+}

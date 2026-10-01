@@ -3,8 +3,9 @@
 実験値は存在しない値で補完せず、過渡用`experiment_template.csv`または定常用
 `steady_experiment_template.csv`と同じ列で投入します。templateの時刻・入力は対応するCAEから生成し、
 温度と不確かさだけを空欄にしています。主キーと粒度は
-`(case_id, time)` の1行1評価時刻です。CAE側と実験側は、時刻と3入力が完全に一致する行だけを比較し、
-補間や最近傍対応は行いません。
+`(case_id, time)` の1行1評価時刻です。CAE側と実験側は主キーを完全一致で結合し、3入力はCSVの数値
+round-tripだけを許す許容差`1e-8 * max(abs(CAE値), 1)`で照合します。それを超える差は停止し、補間や
+最近傍対応は行いません。
 
 ## 必須観測
 
@@ -17,6 +18,10 @@
 | `coolant_temperature` | degC | COMSOL inlet境界に相当する入口断面平均温度 |
 | `inlet_air_velocity` | m/s | COMSOL fully-developed inletに相当する入口断面平均速度 |
 | `uncertainty_*` | degC | 各集約温度の1標準不確かさ（校正、再現性、空間集約を含む） |
+
+比較では実験標準不確かさ、CAEの`mesh_uncertainty_*`、時間刻み収束後に追加される
+`temporal_uncertainty_*`を別列のまま保持し、独立と仮定した二乗和平方根も併記します。
+独立とみなせない誤差要因は実験計画側で共分散を評価し、この単純な正規化残差を受入判定へ使いません。
 
 単一点のthermocouple値をCAEの体積平均へ直接対応させてはいけません。最低限、chipとbaseは中心・上流側・
 下流側、finsは各finの根元・中間・先端を含む配置で空間勾配を確認し、集約重みと欠測処理を実験記録へ
@@ -40,11 +45,14 @@
 実データ取得後は次で同一境界を検査・比較します。
 
 ```powershell
-uv run python external_tools/comsol_chip_cooling/validate_experiment.py `
+uv run --locked --with-editable . python -m external_tools.comsol_chip_cooling.validate_experiment `
   --cae external_tools/comsol_chip_cooling/data/nonlinear_high_fidelity/dynamic/cae_reference.csv `
   --experiment path/to/measured.csv `
   --output external_tools/comsol_chip_cooling/data/nonlinear_high_fidelity/experiment/result
 ```
+
+3つの出力fileは隣接する一時directoryへすべて書き終えた後に一括置換します。入力不一致や書込失敗では、
+直前の完了済み比較結果を変更しません。
 
 現時点では一致する実測CSVが提供・公開されていないため、実験妥当化は未実施です。このディレクトリの
 templateにある時刻・入力は試験条件ですが、空欄の温度・不確かさは実測データではありません。

@@ -30,10 +30,10 @@ Git管理せず、毎回generatorから再構築します。
 
 ## 実行
 
-以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
+以下はPowerShell、macOS、Linuxで共通の`uv`コマンドです。
 
 ```powershell
-py -3 benchmarks/topcell/run.py
+uv run --locked python -m benchmarks.topcell.run
 ```
 
 ## 基準実行結果
@@ -44,7 +44,8 @@ py -3 benchmarks/topcell/run.py
 ### 外部forecast
 
 seed 42、case-balanced全軌道20 epochでの結果です。model gapを除く11ケースの平均RMSEは
-`0.143 K`、engineering priorは`7.185 K`でした。
+`0.143 K`、engineering priorは`7.185 K`、最終観測値を固定するpersistenceは`43.551 K`でした。
+15/15 checksが合格し、fitted RCはcore平均で両baselineを下回りました。
 
 | group | cases | mean RMSE [K] | worst RMSE [K] | 分かること |
 |---|---:|---:|---:|---|
@@ -92,10 +93,20 @@ work/outputs/benchmark/
   case_catalog.csv
   forecast_by_case.csv
   forecast_by_group.csv
+  model_comparison.csv       3 baselineのcase別worst sensor・peak値/時刻比較
   monitor_by_case.csv
   parameter_recovery.csv
   benchmark_summary.json
+  figures/
+    core_prediction_timeseries.png       core中worst caseの真値・予測波形
+    core_prediction_parity.png           全core予測の真値–予測散布図とR²
+    model_gap_prediction_timeseries.png  非線形negative controlの真値・予測波形
+    model_gap_prediction_parity.png      negative controlの真値–予測散布図とR²
 ```
+
+`model_comparison.csv`は1 case × 1 modelで、aggregate誤差、worst sensor、peak温度誤差、peak時刻誤差を
+同じ列に揃えます。真値peakが記録区間端にあるsensorは時刻評価から除外し、
+`peak_time_qualified_sensors`で評価可能数を確認できます。
 
 各ケースの意図、一次指標、合否境界は
 [topcell_benchmark_problem.md](docs/topcell_benchmark_problem.md)に定義しています。

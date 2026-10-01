@@ -9,9 +9,9 @@ train/                  10 identification trajectories
 eval/forecast/           9 open-loop trajectories
 eval/monitor/            3 causal-monitor trajectories
 eval/model_gap/          5 radiation trajectories
+benchmark/               fitted RCの独立14ケース評価、残差、放射pair、図
 qa_summary.csv           1 row per trajectory
 radiation_pairs.csv      paired radiation-minus-base effects
-quality_report.md        dataset-level QA findings and use boundary
 ```
 
 各trajectoryは別manifestを必要としません。基本列は次のとおりです。
@@ -32,6 +32,12 @@ trainingは全観測を持ちます。forecastとmodel-gapは初期行だけ観�
 通常ケースは10秒間隔で91行、短pulseケースは1秒間隔で601行です。commandはrow `k`を
 `[t[k], t[k+1])`へ適用するleft zero-order holdです。公開データはmesh level 8で、mesh independenceは
 成立していません。本データはモデル評価・screening用であり、製品の設計保証値には使いません。
+
+`benchmark/`は`benchmark_nonlinear.py`が生成します。case/group/sensor別にfitted RC、engineering
+prior、persistenceを同じ表へ置き、条件別残差、5つのradiation pair、各baselineのaligned predictionを
+CSV/JSONへ保存します。`model_comparison.csv`は1 case × 1 modelのworst sensor・peak温度・適格なpeak時刻を
+比較する正本です。図は放射なしholdoutとradiation model gapを
+別scaleで表示し、平均へ混ぜません。外部report builderや派生Markdownは正本にしません。
 
 旧global mesh level比較は局所解像度を評価できないため公開後処理から退役させました。現在のmesh収束
 評価と実験受入境界は、別用途として

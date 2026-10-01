@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="910.08pt" height="516.24pt" viewBox="0 0 910.08 516.24" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-01T08:52:34.396307</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 516.24
+L 910.08 516.24
+L 910.08 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 41.562 450.4968
+L 609.048 450.4968
+Q 617.976 450.4968 617.976 441.6264
+L 617.976 124.5096
+Q 617.976 115.6392 609.048 115.6392
+L 41.562 115.6392
+Q 32.634 115.6392 32.634 124.5096
+L 32.634 441.6264
+Q 32.634 450.4968 41.562 450.4968
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #fcfdfe; stroke: #d7dee8; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 87.876 317.4408
+L 152.604 317.4408
+Q 161.532 317.4408 161.532 308.5704
+L 161.532 262.0008
+Q 161.532 253.1304 152.604 253.1304
+L 87.876 253.1304
+Q 78.948 253.1304 78.948 262.0008
+L 78.948 308.5704
+Q 78.948 317.4408 87.876 317.4408
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f8d8ca; stroke: #697386; stroke-width: 1.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 224.586 317.4408
+L 289.314 317.4408
+Q 298.242 317.4408 298.242 308.5704
+L 298.242 262.0008
+Q 298.242 253.1304 289.314 253.1304
+L 224.586 253.1304
+Q 215.658 253.1304 215.658 262.0008
+L 215.658 308.5704
+Q 215.658 317.4408 224.586 317.4408
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f9dfc7; stroke: #697386; stroke-width: 1.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 361.296 317.4408
+L 426.024 317.4408
+Q 434.952 317.4408 434.952 308.5704
+L 434.952 262.0008
+Q 434.952 253.1304 426.024 253.1304
+L 361.296 253.1304
+Q 352.368 253.1304 352.368 262.0008
+L 352.368 308.5704
+Q 352.368 317.4408 361.296 317.4408
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f5e7cb; stroke: #697386; stroke-width: 1.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 498.006 317.4408
+L 562.734 317.4408
+Q 571.662 317.4408 571.662 308.5704
+L 571.662 262.0008
+Q 571.662 253.1304 562.734 253.1304
+L 498.006 253.1304
+Q 489.078 253.1304 489.078 262.0008
+L 489.078 308.5704
+Q 489.078 317.4408 498.006 317.4408
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #dceaf0; stroke: #697386; stroke-width: 1.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 78.39 155.556
+L 571.104 155.556
+L 571.104 140.0328
+L 78.39 140.0328
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #e4572e; opacity: 0.92"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 78.39 420.0048
+L 571.104 420.0048
+L 571.104 404.4816
+L 78.39 404.4816
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f4a62a; opacity: 0.95"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 580.59 393.948
+L 595.098 393.948
+L 595.098 177.732
+L 580.59 177.732
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #247ba0"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 638.622 252.576
+L 865.728 252.576
+Q 874.656 252.576 874.656 243.7056
+L 874.656 124.5096
+Q 874.656 115.6392 865.728 115.6392
+L 638.622 115.6392
+Q 629.694 115.6392 629.694 124.5096
+L 629.694 243.7056
+Q 629.694 252.576 638.622 252.576
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #dce3fa; stroke: #4059ad; stroke-width: 1.7; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 638.622 362.3472
+L 865.728 362.3472
+Q 874.656 362.3472 874.656 353.4768
+L 874.656 284.7312
+Q 874.656 275.8608 865.728 275.8608
+L 638.622 275.8608
+Q 629.694 275.8608 629.694 284.7312
+L 629.694 353.4768
+Q 629.694 362.3472 638.622 362.3472
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #ffffff; stroke: #d7dee8; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 638.622 450.4968
+L 865.728 450.4968
+Q 874.656 450.4968 874.656 441.6264
+L 874.656 394.5024
+Q 874.656 385.632 865.728 385.632
+L 638.622 385.632
+Q 629.694 385.632 629.694 394.5024
+L 629.694 441.6264
+Q 629.694 450.4968 638.622 450.4968
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #fff8eb; stroke: #d88412; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 162.09 285.84
+L 215.1 285.84
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #697386; stroke-width: 4; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 298.8 285.84
+L 351.81 285.84
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #697386; stroke-width: 4; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 435.51 285.84
+L 488.52 285.84
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #697386; stroke-width: 4; stroke-linecap: square"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 285.143444 312.983976
+Q 392.264309 388.974147 499.385168 312.984947
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.8; stroke: #697386; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 287.880329 318.11325
+L 285.143444 312.983976
+L 290.888995 313.872032
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.8; stroke: #697386; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 493.639612 313.872969
+L 499.385168 312.984947
+L 496.648252 318.114205
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.8; stroke: #697386; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 44.91 488.7504
+L 66.114 488.7504
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #e4572e; stroke-width: 4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_5">
+    <path d="M 206.73 488.7504
+L 227.934 488.7504
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #247ba0; stroke-width: 4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_6">
+    <path d="M 368.55 488.7504
+L 389.754 488.7504
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #00a6a6; stroke-width: 4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_7">
+    <path d="M 530.37 488.7504
+L 551.574 488.7504
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #8e5ea2; stroke-width: 4; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_8">
+    <path d="M 692.19 488.7504
+L 713.394 488.7504
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #4059ad; stroke-width: 4; stroke-linecap: round"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="33.75" y="53.385969" transform="rotate(-0 33.75 53.385969)">TopCell / quickstart — 4領域の合成伝熱問題</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 11.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="34.866" y="67.310012" transform="rotate(-0 34.866 67.310012)">実CADではなく、入熱分布・冷却分布・熱結合を明示したlumped-networkの概念図</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #ffffff" x="48.816" y="97.572287" transform="rotate(-0 48.816 97.572287)">1</text>
+   </g>
+   <g id="text_4">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="65.556" y="98.184841" transform="rotate(-0 65.556 98.184841)">問題設定：4つの温度領域をすべて計測</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="120.24" y="286.779225" transform="rotate(-0 120.24 286.779225)">CP</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 8.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #5d6878" x="120.24" y="304.278044" transform="rotate(-0 120.24 304.278044)">thermal zone</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="120.24" y="227.085587" transform="rotate(-0 120.24 227.085587)">TCP</text>
+   </g>
+   <g id="text_8">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="256.95" y="286.779225" transform="rotate(-0 256.95 286.779225)">Center</text>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 8.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #5d6878" x="256.95" y="304.278044" transform="rotate(-0 256.95 304.278044)">thermal zone</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="256.95" y="227.085587" transform="rotate(-0 256.95 227.085587)">TCenter</text>
+   </g>
+   <g id="text_11">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="393.66" y="286.779225" transform="rotate(-0 393.66 286.779225)">middle</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 8.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #5d6878" x="393.66" y="304.278044" transform="rotate(-0 393.66 304.278044)">thermal zone</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="393.66" y="227.085587" transform="rotate(-0 393.66 227.085587)">Tmiddle</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 700; font-size: 12px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="530.37" y="286.779225" transform="rotate(-0 530.37 286.779225)">edge</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 8.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #5d6878" x="530.37" y="304.278044" transform="rotate(-0 530.37 304.278044)">thermal zone</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #172033" x="530.37" y="227.085587" transform="rotate(-0 530.37 227.085587)">Tedge</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 8.8px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #5d6878" x="393.66" y="342.3888" transform="rotate(-0 393.66 342.3888)">Center ↔ edge の追加熱結合</text>
+   </g>
+   <g id="text_18">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #e4572e" x="85.644" y="133.9344" transform="rotate(-0 85.644 133.9344)">plasma heating（CP側が強く、edge側へ弱まる）</text>
+   </g>
+   <g id="text_19">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #a65c00" x="85.644" y="438.3" transform="rotate(-0 85.644 438.3)">heater heating（Center / middle側が強い）</text>
+   </g>
+   <g id="text_20">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; fill: #247ba0" transform="translate(608.836641 248.754) rotate(-90)">brine cooling</text>
+   </g>
+   <g id="text_21">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #ffffff" x="641.97" y="97.572287" transform="rotate(-0 641.97 97.572287)">2</text>
+   </g>
+   <g id="text_22">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="658.71" y="98.238669" transform="rotate(-0 658.71 98.238669)">評価したモデル</text>
+   </g>
+   <g id="text_23">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #4059ad" x="647.55" y="140.0328" transform="rotate(-0 647.55 140.0328)">4-node physical RC</text>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 9.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="647.55" y="161.1" transform="rotate(-0 647.55 161.1)">固定：4領域の熱容量・観測位置</text>
+   </g>
+   <g id="text_25">
+    <text style="font-size: 9.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="647.55" y="181.6128" transform="rotate(-0 647.55 181.6128)">学習：熱結合、入熱gain、冷却結合、入力遅れ</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 9.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="647.55" y="203.7888" transform="rotate(-0 647.55 203.7888)">積分：exact / causal open-loop forecast</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 9.4px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="647.55" y="228.7368" transform="rotate(-0 647.55 228.7368)">比較：engineering prior RC / persistence</text>
+   </g>
+   <g id="text_28">
+    <text style="font-weight: 700; font-size: 11.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="645.876" y="295.8192" transform="rotate(-0 645.876 295.8192)">quickstart</text>
+   </g>
+   <g id="text_29">
+    <text style="font-size: 9px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="715.626" y="295.8192" transform="rotate(-0 715.626 295.8192)">workflow smoke（独立benchmarkではない）</text>
+   </g>
+   <g id="text_30">
+    <text style="font-weight: 700; font-size: 11.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="645.876" y="321.876" transform="rotate(-0 645.876 321.876)">TopCell</text>
+   </g>
+   <g id="text_31">
+    <text style="font-size: 9px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="701.676" y="321.876" transform="rotate(-0 701.676 321.876)">228学習軌道 → 12外部forecast + 5 monitor</text>
+   </g>
+   <g id="text_32">
+    <text style="font-weight: 700; font-size: 9.4px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #2a9d68" x="645.876" y="344.6064" transform="rotate(-0 645.876 344.6064)">forecast truthはモデル入力へ渡さない</text>
+   </g>
+   <g id="text_33">
+    <text style="font-weight: 700; font-size: 10.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #d88412" x="645.876" y="406.1448" transform="rotate(-0 645.876 406.1448)">注意</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 9.3px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="686.61" y="406.1448" transform="rotate(-0 686.61 406.1448)">CP / Center / middle / edgeに実寸座標はない</text>
+   </g>
+   <g id="text_35">
+    <text style="font-size: 9px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="645.876" y="428.8752" transform="rotate(-0 645.876 428.8752)">図は定義済み熱結合と分布を可視化した概念配置</text>
+   </g>
+   <g id="text_36">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="71.694" y="492.037962" transform="rotate(-0 71.694 492.037962)">入熱</text>
+   </g>
+   <g id="text_37">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="233.514" y="492.024306" transform="rotate(-0 233.514 492.024306)">冷却・流れ</text>
+   </g>
+   <g id="text_38">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="395.334" y="492.046587" transform="rotate(-0 395.334 492.046587)">温度計測（領域平均）</text>
+   </g>
+   <g id="text_39">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="557.154" y="492.042275" transform="rotate(-0 557.154 492.042275)">表面間放射</text>
+   </g>
+   <g id="text_40">
+    <text style="font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="718.974" y="492.060244" transform="rotate(-0 718.974 492.060244)">評価対象のRCモデル</text>
+   </g>
+   <g id="patch_14">
+    <path d="M 120.24 157.556665
+Q 120.24 190.206126 120.24 217.04181
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #e4572e; stroke-width: 5.2; stroke-linecap: round"/>
+    <path d="M 122.84 211.84181
+L 120.24 217.04181
+L 117.64 211.84181
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #e4572e; stroke: #e4572e; stroke-width: 5.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 256.95 157.556665
+Q 256.95 190.206126 256.95 218.159844
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #e4572e; stroke-width: 4.2; stroke-linecap: round"/>
+    <path d="M 259.55 212.959844
+L 256.95 218.159844
+L 254.35 212.959844
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #e4572e; stroke: #e4572e; stroke-width: 4.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 393.66 157.556665
+Q 393.66 190.206126 393.66 219.054271
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #e4572e; stroke-width: 3.4; stroke-linecap: round"/>
+    <path d="M 396.26 213.854271
+L 393.66 219.054271
+L 391.06 213.854271
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #e4572e; stroke: #e4572e; stroke-width: 3.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_17">
+    <path d="M 530.37 157.556665
+Q 530.37 190.206126 530.37 219.948698
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #e4572e; stroke-width: 2.6; stroke-linecap: round"/>
+    <path d="M 532.97 214.748698
+L 530.37 219.948698
+L 527.77 214.748698
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #e4572e; stroke: #e4572e; stroke-width: 2.6; stroke-linecap: round"/>
+   </g>
+   <g id="patch_18">
+    <path d="M 120.24 402.485029
+Q 120.24 367.894377 120.24 335.651597
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #f4a62a; stroke-width: 2.1; stroke-linecap: round"/>
+    <path d="M 117.64 340.851597
+L 120.24 335.651597
+L 122.84 340.851597
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f4a62a; stroke: #f4a62a; stroke-width: 2.1; stroke-linecap: round"/>
+   </g>
+   <g id="patch_19">
+    <path d="M 256.95 402.485029
+Q 256.95 367.894377 256.95 338.06655
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #f4a62a; stroke-width: 4.26; stroke-linecap: round"/>
+    <path d="M 254.35 343.26655
+L 256.95 338.06655
+L 259.55 343.26655
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f4a62a; stroke: #f4a62a; stroke-width: 4.26; stroke-linecap: round"/>
+   </g>
+   <g id="patch_20">
+    <path d="M 393.66 402.485029
+Q 393.66 367.894377 393.66 337.261566
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #f4a62a; stroke-width: 3.54; stroke-linecap: round"/>
+    <path d="M 391.06 342.461566
+L 393.66 337.261566
+L 396.26 342.461566
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f4a62a; stroke: #f4a62a; stroke-width: 3.54; stroke-linecap: round"/>
+   </g>
+   <g id="patch_21">
+    <path d="M 530.37 402.485029
+Q 530.37 367.894377 530.37 336.456581
+" clip-path="url(#pc5d62d50e8)" style="fill: none; stroke: #f4a62a; stroke-width: 2.82; stroke-linecap: round"/>
+    <path d="M 527.77 341.656581
+L 530.37 336.456581
+L 532.97 341.656581
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #f4a62a; stroke: #f4a62a; stroke-width: 2.82; stroke-linecap: round"/>
+   </g>
+   <g id="patch_22">
+    <path d="M 155.698126 305.536212
+Q 365.200202 336.484174 573.01558 367.182975
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.82; stroke: #247ba0; stroke-width: 1.525; stroke-linecap: round"/>
+    <path d="M 568.251357 363.850982
+L 573.01558 367.182975
+L 567.491452 368.995158
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #247ba0; opacity: 0.82; stroke: #247ba0; stroke-width: 1.525; stroke-linecap: round"/>
+   </g>
+   <g id="patch_23">
+    <path d="M 292.391182 305.640923
+Q 433.55938 334.211882 572.672923 362.367
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.82; stroke: #247ba0; stroke-width: 1.875; stroke-linecap: round"/>
+    <path d="M 568.092015 358.787157
+L 572.672923 362.367
+L 567.060503 363.883821
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #247ba0; opacity: 0.82; stroke: #247ba0; stroke-width: 1.875; stroke-linecap: round"/>
+   </g>
+   <g id="patch_24">
+    <path d="M 429.061326 305.813118
+Q 501.915332 327.393267 571.633756 348.044623
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.82; stroke: #247ba0; stroke-width: 2.925; stroke-linecap: round"/>
+    <path d="M 567.386324 344.074822
+L 571.633756 348.044623
+L 565.909456 349.060688
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #247ba0; opacity: 0.82; stroke: #247ba0; stroke-width: 2.925; stroke-linecap: round"/>
+   </g>
+   <g id="patch_25">
+    <path d="M 564.672491 307.063125
+Q 570.266963 319.436558 573.949902 327.582206
+" clip-path="url(#pc5d62d50e8)" style="fill: none; opacity: 0.82; stroke: #247ba0; stroke-width: 4.15; stroke-linecap: round"/>
+    <path d="M 574.176692 321.772855
+L 573.949902 327.582206
+L 569.438495 323.915163
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #247ba0; opacity: 0.82; stroke: #247ba0; stroke-width: 4.15; stroke-linecap: round"/>
+   </g>
+   <g id="patch_26">
+    <path d="M 48.816 103.4424
+C 51.4797 103.4424 54.03466 102.390929 55.918181 100.51956
+C 57.801701 98.648191 58.86 96.109715 58.86 93.4632
+C 58.86 90.816685 57.801701 88.278209 55.918181 86.40684
+C 54.03466 84.535471 51.4797 83.484 48.816 83.484
+C 46.1523 83.484 43.59734 84.535471 41.713819 86.40684
+C 39.830299 88.278209 38.772 90.816685 38.772 93.4632
+C 38.772 96.109715 39.830299 98.648191 41.713819 100.51956
+C 43.59734 102.390929 46.1523 103.4424 48.816 103.4424
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #4059ad"/>
+   </g>
+   <g id="patch_27">
+    <path d="M 641.97 103.4424
+C 644.6337 103.4424 647.18866 102.390929 649.072181 100.51956
+C 650.955701 98.648191 652.014 96.109715 652.014 93.4632
+C 652.014 90.816685 650.955701 88.278209 649.072181 86.40684
+C 647.18866 84.535471 644.6337 83.484 641.97 83.484
+C 639.3063 83.484 636.75134 84.535471 634.867819 86.40684
+C 632.984299 88.278209 631.926 90.816685 631.926 93.4632
+C 631.926 96.109715 632.984299 98.648191 634.867819 100.51956
+C 636.75134 102.390929 639.3063 103.4424 641.97 103.4424
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #4059ad"/>
+   </g>
+   <g id="patch_28">
+    <path d="M 120.24 245.0916
+C 121.793825 245.0916 123.284218 244.478242 124.382939 243.38661
+C 125.481659 242.294978 126.099 240.8142 126.099 239.2704
+C 126.099 237.7266 125.481659 236.245822 124.382939 235.15419
+C 123.284218 234.062558 121.793825 233.4492 120.24 233.4492
+C 118.686175 233.4492 117.195782 234.062558 116.097061 235.15419
+C 114.998341 236.245822 114.381 237.7266 114.381 239.2704
+C 114.381 240.8142 114.998341 242.294978 116.097061 243.38661
+C 117.195782 244.478242 118.686175 245.0916 120.24 245.0916
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #ffffff; stroke: #00a6a6; stroke-width: 2.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_29">
+    <path d="M 256.95 245.0916
+C 258.503825 245.0916 259.994218 244.478242 261.092939 243.38661
+C 262.191659 242.294978 262.809 240.8142 262.809 239.2704
+C 262.809 237.7266 262.191659 236.245822 261.092939 235.15419
+C 259.994218 234.062558 258.503825 233.4492 256.95 233.4492
+C 255.396175 233.4492 253.905782 234.062558 252.807061 235.15419
+C 251.708341 236.245822 251.091 237.7266 251.091 239.2704
+C 251.091 240.8142 251.708341 242.294978 252.807061 243.38661
+C 253.905782 244.478242 255.396175 245.0916 256.95 245.0916
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #ffffff; stroke: #00a6a6; stroke-width: 2.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_30">
+    <path d="M 393.66 245.0916
+C 395.213825 245.0916 396.704218 244.478242 397.802939 243.38661
+C 398.901659 242.294978 399.519 240.8142 399.519 239.2704
+C 399.519 237.7266 398.901659 236.245822 397.802939 235.15419
+C 396.704218 234.062558 395.213825 233.4492 393.66 233.4492
+C 392.106175 233.4492 390.615782 234.062558 389.517061 235.15419
+C 388.418341 236.245822 387.801 237.7266 387.801 239.2704
+C 387.801 240.8142 388.418341 242.294978 389.517061 243.38661
+C 390.615782 244.478242 392.106175 245.0916 393.66 245.0916
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #ffffff; stroke: #00a6a6; stroke-width: 2.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_31">
+    <path d="M 530.37 245.0916
+C 531.923825 245.0916 533.414218 244.478242 534.512939 243.38661
+C 535.611659 242.294978 536.229 240.8142 536.229 239.2704
+C 536.229 237.7266 535.611659 236.245822 534.512939 235.15419
+C 533.414218 234.062558 531.923825 233.4492 530.37 233.4492
+C 528.816175 233.4492 527.325782 234.062558 526.227061 235.15419
+C 525.128341 236.245822 524.511 237.7266 524.511 239.2704
+C 524.511 240.8142 525.128341 242.294978 526.227061 243.38661
+C 527.325782 244.478242 528.816175 245.0916 530.37 245.0916
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #ffffff; stroke: #00a6a6; stroke-width: 2.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_32">
+    <path d="M 120.24 241.04448
+C 120.713547 241.04448 121.167762 240.857552 121.50261 240.524864
+C 121.837458 240.192176 122.0256 239.740892 122.0256 239.2704
+C 122.0256 238.799908 121.837458 238.348624 121.50261 238.015936
+C 121.167762 237.683248 120.713547 237.49632 120.24 237.49632
+C 119.766453 237.49632 119.312238 237.683248 118.97739 238.015936
+C 118.642542 238.348624 118.4544 238.799908 118.4544 239.2704
+C 118.4544 239.740892 118.642542 240.192176 118.97739 240.524864
+C 119.312238 240.857552 119.766453 241.04448 120.24 241.04448
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #00a6a6"/>
+   </g>
+   <g id="patch_33">
+    <path d="M 256.95 241.04448
+C 257.423547 241.04448 257.877762 240.857552 258.21261 240.524864
+C 258.547458 240.192176 258.7356 239.740892 258.7356 239.2704
+C 258.7356 238.799908 258.547458 238.348624 258.21261 238.015936
+C 257.877762 237.683248 257.423547 237.49632 256.95 237.49632
+C 256.476453 237.49632 256.022238 237.683248 255.68739 238.015936
+C 255.352542 238.348624 255.1644 238.799908 255.1644 239.2704
+C 255.1644 239.740892 255.352542 240.192176 255.68739 240.524864
+C 256.022238 240.857552 256.476453 241.04448 256.95 241.04448
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #00a6a6"/>
+   </g>
+   <g id="patch_34">
+    <path d="M 393.66 241.04448
+C 394.133547 241.04448 394.587762 240.857552 394.92261 240.524864
+C 395.257458 240.192176 395.4456 239.740892 395.4456 239.2704
+C 395.4456 238.799908 395.257458 238.348624 394.92261 238.015936
+C 394.587762 237.683248 394.133547 237.49632 393.66 237.49632
+C 393.186453 237.49632 392.732238 237.683248 392.39739 238.015936
+C 392.062542 238.348624 391.8744 238.799908 391.8744 239.2704
+C 391.8744 239.740892 392.062542 240.192176 392.39739 240.524864
+C 392.732238 240.857552 393.186453 241.04448 393.66 241.04448
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #00a6a6"/>
+   </g>
+   <g id="patch_35">
+    <path d="M 530.37 241.04448
+C 530.843547 241.04448 531.297762 240.857552 531.63261 240.524864
+C 531.967458 240.192176 532.1556 239.740892 532.1556 239.2704
+C 532.1556 238.799908 531.967458 238.348624 531.63261 238.015936
+C 531.297762 237.683248 530.843547 237.49632 530.37 237.49632
+C 529.896453 237.49632 529.442238 237.683248 529.10739 238.015936
+C 528.772542 238.348624 528.5844 238.799908 528.5844 239.2704
+C 528.5844 239.740892 528.772542 240.192176 529.10739 240.524864
+C 529.442238 240.857552 529.896453 241.04448 530.37 241.04448
+z
+" clip-path="url(#pc5d62d50e8)" style="fill: #00a6a6"/>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pc5d62d50e8">
+   <rect x="8.64" y="8.64" width="892.8" height="498.96"/>
+  </clipPath>
+ </defs>
+</svg>

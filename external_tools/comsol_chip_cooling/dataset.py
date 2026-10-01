@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
-from cases import Case
 
 from celltemp.inference import forecast_origin_index
+
+from .cases import Case
+from .dataset_support import left_limits
 
 SENSORS = ("chip", "sink_base", "fins")
 CONTROLS = ("chip_power", "coolant_temperature")
@@ -65,14 +66,14 @@ def parse_comsol_table(path: Path, case: Case) -> pd.DataFrame:
     # COMSOL evaluates a discontinuous Piecewise function at an output knot
     # from the completed interval (left limit). Row k still governs the next
     # interval, so the raw endpoint sequence is [u0, u0, ..., u[n-2]].
-    if not np.allclose(frame["raw_chip_power"], _left_limits(case.chip_power), atol=1e-8):
+    if not np.allclose(frame["raw_chip_power"], left_limits(case.chip_power), atol=1e-8):
         raise ValueError(f"{case.case_id}: evaluated chip power differs from the schedule")
     if not np.allclose(
         frame["raw_coolant_kelvin"] - 273.15,
-        _left_limits(case.coolant_temperature),
+        left_limits(case.coolant_temperature),
     ):
         raise ValueError(f"{case.case_id}: evaluated coolant temperature differs from schedule")
-    if not np.allclose(frame["raw_hidden_power"], _left_limits(case.hidden_power), atol=1e-8):
+    if not np.allclose(frame["raw_hidden_power"], left_limits(case.hidden_power), atol=1e-8):
         raise ValueError(f"{case.case_id}: evaluated disturbance power differs from schedule")
     for column, expected in EXPECTED_VOLUMES_M3.items():
         if not np.allclose(frame[column], expected, rtol=1e-8, atol=1e-14):
@@ -80,11 +81,6 @@ def parse_comsol_table(path: Path, case: Case) -> pd.DataFrame:
                 f"{case.case_id}: {column} changed; verify the Application Library geometry"
             )
     return frame
-
-
-def _left_limits(values: np.ndarray) -> np.ndarray:
-    sampled = np.asarray(values, dtype=np.float64)
-    return np.concatenate([sampled[:1], sampled[:-1]])
 
 
 def truth_frame(raw: pd.DataFrame, case: Case) -> pd.DataFrame:
@@ -254,24 +250,3 @@ def validate_dataset_frame(frame: pd.DataFrame, role: str, case_id: str) -> dict
         "temperature_max_c": float(truth.to_numpy().max()),
         "missing_measurements": int((~observations).sum()),
     }
-
-
-def write_csv(frame: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=path.parent,
-            delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            frame.to_csv(stream, index=False, float_format="%.10g")
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)

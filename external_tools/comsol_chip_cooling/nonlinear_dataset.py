@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
-from nonlinear_cases import NonlinearCase
+
+from .dataset_support import left_limits
+from .nonlinear_cases import NonlinearCase
 
 SENSORS = ("chip", "sink_base", "fins")
 CONTROLS = ("chip_power", "coolant_temperature", "inlet_air_velocity")
@@ -53,11 +54,6 @@ def schedule_frame(case: NonlinearCase) -> pd.DataFrame:
     )
 
 
-def _left_limits(values: np.ndarray) -> np.ndarray:
-    sampled = np.asarray(values, dtype=np.float64)
-    return np.concatenate([sampled[:1], sampled[:-1]])
-
-
 def _read_comsol_table(path: Path) -> pd.DataFrame:
     rows: list[list[float]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -95,7 +91,7 @@ def parse_comsol_table(path: Path, case: NonlinearCase) -> pd.DataFrame:
         ("raw_effective_air_velocity", case.effective_air_velocity, 1e-12),
     )
     for column, expected, tolerance in checks:
-        if not np.allclose(frame[column], _left_limits(expected), atol=tolerance):
+        if not np.allclose(frame[column], left_limits(expected), atol=tolerance):
             raise ValueError(f"{case.case_id}: {column} differs from the applied schedule")
 
     _verify_volumes(frame, case)
@@ -377,24 +373,3 @@ def radiation_pair_summary(cases: list[NonlinearCase], data_root: Path) -> pd.Da
             }
         )
     return pd.DataFrame(rows)
-
-
-def write_csv(frame: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=path.parent,
-            delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            frame.to_csv(stream, index=False, float_format="%.10g")
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)

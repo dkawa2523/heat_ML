@@ -22,8 +22,14 @@ def _system_mapping() -> dict:
             {"name": "core", "heat_capacity": 5.0},
         ],
         "actuators": [
-            {"name": "heater", "tau": 3.0},
-            {"name": "flow", "tau": 0.0, "learnable": False},
+            {"name": "heater", "tau": 3.0, "unit": "W", "role": "heat_input"},
+            {
+                "name": "flow",
+                "tau": 0.0,
+                "learnable": False,
+                "unit": "m/s",
+                "role": "heat_transfer",
+            },
         ],
         "edges": [
             {
@@ -67,6 +73,8 @@ def test_system_mapping_expands_named_node_weights() -> None:
     assert spec.sources[0].node_weights == (0.0, 1.0)
     assert spec.sensor_names == ("tc_core",)
     assert spec.sensor_nodes == ("core",)
+    assert spec.control_units == ("W", "m/s")
+    assert spec.control_roles == ("heat_input", "heat_transfer")
 
 
 def test_system_yaml_round_trip(tmp_path: Path) -> None:
@@ -175,6 +183,23 @@ def test_plain_sensor_names_map_to_same_named_nodes() -> None:
     spec = system_spec_from_mapping(mapping)
     assert spec.sensor_names == ("core",)
     assert spec.sensor_nodes == ("core",)
+
+
+@pytest.mark.parametrize(
+    ("sensor", "message"),
+    [
+        ({"name": "bad", "node": "missing"}, "unknown nodes"),
+        (
+            {"name": "bad", "node": "core", "node_weights": {"core": 1.0}},
+            "either node or node_weights",
+        ),
+    ],
+)
+def test_system_loader_rejects_invalid_sensor_mapping(sensor: dict, message: str) -> None:
+    mapping = _system_mapping()
+    mapping["sensors"] = [sensor]
+    with pytest.raises(ValueError, match=message):
+        system_spec_from_mapping(mapping)
 
 
 @pytest.mark.parametrize(

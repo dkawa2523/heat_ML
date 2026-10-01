@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="910.08pt" height="516.24pt" viewBox="0 0 910.08 516.24" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-01T08:52:35.960377</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 516.24
+L 910.08 516.24
+L 910.08 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 47.142 216.54
+L 279.828 216.54
+Q 288.756 216.54 288.756 207.6696
+L 288.756 105.1056
+Q 288.756 96.2352 279.828 96.2352
+L 47.142 96.2352
+Q 38.214 96.2352 38.214 105.1056
+L 38.214 207.6696
+Q 38.214 216.54 47.142 216.54
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #ffffff; stroke: #697386; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 341.208 204.8976
+L 557.154 204.8976
+Q 566.082 204.8976 566.082 196.0272
+L 566.082 116.1936
+Q 566.082 107.3232 557.154 107.3232
+L 341.208 107.3232
+Q 332.28 107.3232 332.28 116.1936
+L 332.28 196.0272
+Q 332.28 204.8976 341.208 204.8976
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #ffffff; stroke: #4059ad; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 617.976 221.5296
+L 864.612 221.5296
+Q 873.54 221.5296 873.54 212.6592
+L 873.54 99.5616
+Q 873.54 90.6912 864.612 90.6912
+L 617.976 90.6912
+Q 609.048 90.6912 609.048 99.5616
+L 609.048 212.6592
+Q 609.048 221.5296 617.976 221.5296
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #ffffff; stroke: #e4572e; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 291.546 414.4608
+L 606.258 414.4608
+Q 615.186 414.4608 615.186 405.5904
+L 615.186 337.9536
+Q 615.186 329.0832 606.258 329.0832
+L 291.546 329.0832
+Q 282.618 329.0832 282.618 337.9536
+L 282.618 405.5904
+Q 282.618 414.4608 291.546 414.4608
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #ffffff; stroke: #d88412; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 638.622 414.4608
+L 864.612 414.4608
+Q 873.54 414.4608 873.54 405.5904
+L 873.54 337.9536
+Q 873.54 329.0832 864.612 329.0832
+L 638.622 329.0832
+Q 629.694 329.0832 629.694 337.9536
+L 629.694 405.5904
+Q 629.694 414.4608 638.622 414.4608
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #ffffff; stroke: #2a9d68; stroke-width: 1.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 47.142 484.3152
+L 864.612 484.3152
+Q 873.54 484.3152 873.54 475.4448
+L 873.54 457.1496
+Q 873.54 448.2792 864.612 448.2792
+L 47.142 448.2792
+Q 38.214 448.2792 38.214 457.1496
+L 38.214 475.4448
+Q 38.214 484.3152 47.142 484.3152
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #f7f8fa; stroke: #d7dee8; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 163.764 218.2032
+L 163.764 301.3632
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 163.764 301.3632
+L 732.924 301.3632
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2; stroke-linecap: square"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #172033" x="33.75" y="53.274562" transform="rotate(-0 33.75 53.274562)">COMSOLファイルの所在と評価データの系譜</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 11.5px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="34.866" y="67.304622" transform="rotate(-0 34.866 67.304622)">Application Library原本はインストール領域、repo内の.mphは代表ケースだけを保存した作業コピー</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 10.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #697386" x="51.606" y="122.077559" transform="rotate(-0 51.606 122.077559)">① immutable source model (outside repo)</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="51.606" y="143.649855" transform="rotate(-0 51.606 143.649855)">C:/Program Files/COMSOL/COMSOL64/</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="51.606" y="160.836255" transform="rotate(-0 51.606 160.836255)">Multiphysics_copy1/applications/</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="51.606" y="178.022655" transform="rotate(-0 51.606 178.022655)">Heat_Transfer_Module/</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="51.606" y="195.209055" transform="rotate(-0 51.606 195.209055)">Tutorials,_Forced_and_Natural_Convection/</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="51.606" y="212.395455" transform="rotate(-0 51.606 212.395455)">chip_cooling.mph</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 9.2px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #2a9d68" x="52.164" y="234.2808" transform="rotate(-0 52.164 234.2808)">ModelUtil.loadCopyで開くため、原本は上書きしない</text>
+   </g>
+   <g id="text_10">
+    <text style="font-weight: 700; font-size: 10.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #4059ad" x="345.672" y="133.165559" transform="rotate(-0 345.672 133.165559)">② Java runner (repo)</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="345.672" y="154.737855" transform="rotate(-0 345.672 154.737855)">comsol/RunChipCoolingCase.java</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="345.672" y="171.924255" transform="rotate(-0 345.672 171.924255)">comsol/RunChipCoolingNonlinearCase.java</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="345.672" y="189.110655" transform="rotate(-0 345.672 189.110655)">input schedule → COMSOL solve → raw table</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 700; font-size: 10.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #e4572e" x="622.44" y="116.533559" transform="rotate(-0 622.44 116.533559)">③ saved representative .mph copies (repo work/)</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="622.44" y="138.105855" transform="rotate(-0 622.44 138.105855)">linear: work/models/</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="622.44" y="155.292255" transform="rotate(-0 622.44 155.292255)">  electronic_chip_cooling_dataset.mph</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="622.44" y="172.478655" transform="rotate(-0 622.44 172.478655)">global-8 nonlinear: work/nonlinear/mesh_8/models/</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="622.44" y="189.665055" transform="rotate(-0 622.44 189.665055)">  electronic_chip_cooling_conjugate.mph</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="622.44" y="206.851455" transform="rotate(-0 622.44 206.851455)">  electronic_chip_cooling_radiation.mph</text>
+   </g>
+   <g id="text_20">
+    <text style="font-weight: 700; font-size: 10.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #d88412" x="296.01" y="354.937262" transform="rotate(-0 296.01 354.937262)">④ high-fidelity local-medium: .mph copyは保存していない</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="296.01" y="376.497855" transform="rotate(-0 296.01 376.497855)">work/nonlinear/mesh_local_medium/raw/*.txt</text>
+   </g>
+   <g id="text_22">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="296.01" y="393.684255" transform="rotate(-0 296.01 393.684255)">work/nonlinear/mesh_local_medium/logs/*.log</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="296.01" y="410.870655" transform="rotate(-0 296.01 410.870655)">data/nonlinear_high_fidelity/dynamic/**/*.csv</text>
+   </g>
+   <g id="text_24">
+    <text style="font-size: 9px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="297.684" y="433.3104" transform="rotate(-0 297.684 433.3104)">元のchip_cooling.mph + schedule + runner + raw/logから再現する構成</text>
+   </g>
+   <g id="text_25">
+    <text style="font-weight: 700; font-size: 10.7px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #2a9d68" x="643.086" y="354.820231" transform="rotate(-0 643.086 354.820231)">⑤ benchmarkが読むもの</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="643.086" y="376.497855" transform="rotate(-0 643.086 376.497855)">published trajectory CSV</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="643.086" y="393.684255" transform="rotate(-0 643.086 393.684255)">→ train artifact</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 8.35px; font-family: 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', 'Computer Modern Typewriter', 'Andale Mono', 'Nimbus Mono L', 'Courier New', 'Courier', 'Fixed', 'Terminal', monospace; text-anchor: start; fill: #172033" x="643.086" y="410.826295" transform="rotate(-0 643.086 410.826295)">→ forecast prediction / metrics / figures</text>
+   </g>
+   <g id="text_29">
+    <text style="font-size: 8.9px; font-family: 'BIZ UDGothic', 'Meiryo', 'Yu Gothic', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #5d6878" x="52.164" y="469.315781" transform="rotate(-0 52.164 469.315781)">補足：work/chip_cooling_dataset_model.mph と mesh_7 / mesh_9 のコピーは現行runnerの主評価先ではない作業履歴</text>
+   </g>
+   <g id="patch_8">
+    <path d="M 292.433473 156.1104
+Q 309.124852 156.1104 323.356556 156.1104
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2.2; stroke-linecap: round"/>
+    <path d="M 318.156556 153.5104
+L 323.356556 156.1104
+L 318.156556 158.7104
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #d7dee8; stroke: #d7dee8; stroke-width: 2.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 570.314953 156.1104
+Q 586.168445 156.1104 599.562263 156.1104
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2.2; stroke-linecap: round"/>
+    <path d="M 594.362263 153.5104
+L 599.562263 156.1104
+L 594.362263 158.7104
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #d7dee8; stroke: #d7dee8; stroke-width: 2.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 448.344 303.363899
+Q 448.344 314.392059 448.344 323.184151
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2; stroke-linecap: round"/>
+    <path d="M 450.944 317.984151
+L 448.344 323.184151
+L 445.744 317.984151
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #d7dee8; stroke: #d7dee8; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 732.924 303.365591
+Q 732.924 315.778372 732.924 325.955085
+" clip-path="url(#pfc88c27e4b)" style="fill: none; stroke: #d7dee8; stroke-width: 2; stroke-linecap: round"/>
+    <path d="M 735.524 320.755085
+L 732.924 325.955085
+L 730.324 320.755085
+z
+" clip-path="url(#pfc88c27e4b)" style="fill: #d7dee8; stroke: #d7dee8; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pfc88c27e4b">
+   <rect x="8.64" y="8.64" width="892.8" height="498.96"/>
+  </clipPath>
+ </defs>
+</svg>

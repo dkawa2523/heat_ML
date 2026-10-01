@@ -1,0 +1,4 @@
+evaluation,omitted_effect,core_cases,model_gap_cases,core_mean_case_rmse_k,model_gap_mean_case_rmse_k,model_gap_to_core_ratio
+topcell,temperature-dependent heat loss,11,1,0.14291188741464964,9.823405747911528,68.73749920753302
+nonlinear_comsol,surface-to-surface radiation,9,5,0.19053742239990462,4.556268957671771,23.912724861518083
+high_fidelity_comsol,surface-to-surface radiation,1,1,0.047652987041397525,0.14358424397816405,3.013121587812077

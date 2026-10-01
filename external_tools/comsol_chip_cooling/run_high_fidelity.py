@@ -6,11 +6,12 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-from comsol_runtime import ComsolRuntime, select_comsol
-from nonlinear_cases import high_fidelity_cases
-from nonlinear_dataset import write_csv
-from run_nonlinear import JAVA_SOURCE, build_dataset, raw_tables_available
-from summarize_high_fidelity import summarize
+
+from .comsol_runtime import ComsolRuntime, select_comsol
+from .dataset_support import write_csv_atomic
+from .nonlinear_cases import high_fidelity_cases
+from .run_nonlinear import JAVA_SOURCE, build_dataset, raw_tables_available
+from .summarize_high_fidelity import summarize
 
 TOOL_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = TOOL_ROOT / "data" / "nonlinear_high_fidelity"
@@ -66,10 +67,10 @@ def main() -> int:
     )
     summary_path = args.data_root.resolve() / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(summary, summary_path)
+    write_csv_atomic(summary, summary_path)
     if args.data_root.resolve() == evidence_root / "dynamic":
         summarize(evidence_root)
-        print(f"High-fidelity quality report: {evidence_root / 'quality_report.md'}")
+        print(f"High-fidelity quality summary: {evidence_root / 'quality_summary.json'}")
     else:
         print("Skipped derived views because --data-root is outside the evidence root")
     print(f"High-fidelity trajectories: {args.data_root.resolve()}")

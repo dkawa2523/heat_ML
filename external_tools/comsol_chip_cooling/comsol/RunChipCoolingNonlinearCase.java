@@ -44,14 +44,23 @@ public final class RunChipCoolingNonlinearCase {
             buildMeshOnly(args[1], args[2], args[3], args[4]);
             return;
         }
-        if (args.length != 5) {
+        if (args.length != 5 && args.length != 6) {
             throw new IllegalArgumentException(
                     "Usage: RunChipCoolingNonlinearCase <source.mph> <schedule-base64> "
-                            + "<raw-output.txt> <edited-model.mph|-> <mesh-profile>\n"
+                            + "<raw-output.txt> <edited-model.mph|-> <mesh-profile> "
+                            + "[maximum-time-step-seconds]\n"
                             + "   or: mesh-only <source.mph> <mesh-profile> "
                             + "<metrics.csv> <edited-model.mph|->");
         }
         String meshProfile = normalizeMeshProfile(args[4]);
+        Double maximumTimeStepSeconds = null;
+        if (args.length == 6) {
+            maximumTimeStepSeconds = Double.parseDouble(args[5]);
+            if (!Double.isFinite(maximumTimeStepSeconds) || maximumTimeStepSeconds <= 0.0) {
+                throw new IllegalArgumentException(
+                        "Maximum time step must be positive and finite");
+            }
+        }
         readSchedule(args[1]);
 
         Model model = ModelUtil.loadCopy("ChipCoolingNonlinearDataset", args[0]);
@@ -63,11 +72,16 @@ public final class RunChipCoolingNonlinearCase {
         System.out.println("Solving stationary initial field (" + initialSolutionTag + ")");
         model.sol(initialSolutionTag).runAll();
         activateTransientInputs(model);
-        String solutionTag = createTransientStudy(model, initialSolutionTag);
+        String solutionTag = createTransientStudy(
+                model, initialSolutionTag, maximumTimeStepSeconds);
 
         System.out.println("Solving " + (radiationEnabled ? "conjugate+radiation" : "conjugate")
                 + " transient with " + SCHEDULE_TIME.size() + " output times, mesh profile "
-                + meshProfile + " (" + solutionTag + ")");
+                + meshProfile
+                + (maximumTimeStepSeconds == null
+                        ? ", adaptive maximum time step"
+                        : ", maximum BDF step " + maximumTimeStepSeconds + " s")
+                + " (" + solutionTag + ")");
         model.sol(solutionTag).runAll();
 
         String datasetTag = solutionDatasetTag(model, solutionTag, existingDatasets);
@@ -498,7 +512,10 @@ public final class RunChipCoolingNonlinearCase {
         return newestNonemptySolverTag(model, existingSolvers);
     }
 
-    private static String createTransientStudy(Model model, String initialSolutionTag) {
+    private static String createTransientStudy(
+            Model model,
+            String initialSolutionTag,
+            Double maximumTimeStepSeconds) {
         Set<String> existingSolvers = new HashSet<>(Arrays.asList(model.sol().tags()));
         model.study().create("std_nonlinear");
         model.study("std_nonlinear").label("Dataset transient: nonlinear chip cooling");
@@ -517,6 +534,12 @@ public final class RunChipCoolingNonlinearCase {
         model.sol(solutionTag).feature("v1").set("initsoluse", "current");
         if (solverFeatures.contains("t1")) {
             model.sol(solutionTag).feature("t1").set("tstepsbdf", "strict");
+            if (maximumTimeStepSeconds != null) {
+                model.sol(solutionTag).feature("t1")
+                        .set("maxstepconstraintbdf", "const");
+                model.sol(solutionTag).feature("t1")
+                        .set("maxstepbdf", Double.toString(maximumTimeStepSeconds));
+            }
             for (String childTag
                     : model.sol(solutionTag).feature("t1").feature().tags()) {
                 if ("Segregated".equals(model.sol(solutionTag).feature("t1")

@@ -11,8 +11,8 @@ nodes:
 # Both inputs are physical quantities already applied by COMSOL. There is no
 # invented actuator lag or scaling to identify.
 actuators:
-  - {name: chip_power, tau: 0.0, learnable: false}
-  - {name: coolant_temperature, tau: 0.0, learnable: false}
+  - {name: chip_power, tau: 0.0, learnable: false, unit: W, role: heat_input}
+  - {name: coolant_temperature, tau: 0.0, learnable: false, unit: degC, role: reservoir_temperature}
 
 edges:
   - {nodes: [chip, sink_base], conductance: {type: constant, value: 40.0, learnable: true}}

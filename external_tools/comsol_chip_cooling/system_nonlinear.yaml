@@ -8,9 +8,11 @@ nodes:
   - {name: fins, heat_capacity: 46.17}
 
 actuators:
-  - {name: chip_power, tau: 0.0, learnable: false}
-  - {name: coolant_temperature, tau: 0.0, learnable: false}
-  - {name: inlet_air_velocity, tau: 0.0, learnable: false}
+  - {name: chip_power, tau: 0.0, learnable: false, unit: W, role: heat_input}
+  - {name: coolant_temperature, tau: 0.0, learnable: false,
+     unit: degC, role: reservoir_temperature}
+  - {name: inlet_air_velocity, tau: 0.0, learnable: false,
+     unit: m/s, role: cooling_flow}
 
 edges:
   - {nodes: [chip, sink_base], conductance: {type: constant, value: 40.0, learnable: true}}

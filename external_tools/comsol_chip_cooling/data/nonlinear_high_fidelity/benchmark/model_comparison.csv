@@ -1,0 +1,7 @@
+case_id,case_group,radiation_enabled,model,n_points,rmse_k,mae_k,bias_k,max_abs_error_k,terminal_rmse_k,worst_sensor,worst_sensor_rmse_k,max_abs_peak_temperature_error_k,max_abs_peak_temperature_error_sensor,max_abs_peak_time_error_s,max_abs_peak_time_error_sensor,peak_time_qualified_sensors
+HV01_composite_conjugate,conjugate_flow,False,fitted_rc,33,0.04765298704,0.03385379469,-0.01507607695,0.1121851147,0.0857920766,chip,0.06109649956,0.1121851147,chip,,,0
+HV01_composite_conjugate,conjugate_flow,False,engineering_prior_rc,33,0.9769315839,0.67217042,-0.67217042,1.948824633,1.882021834,chip,1.019326324,1.948824633,chip,,,0
+HV01_composite_conjugate,conjugate_flow,False,persistence,33,10.04024535,7.287746398,-7.287746398,20.01328929,19.56407875,chip,10.35747567,20.01328929,chip,,,0
+HV02_composite_radiation,radiation,True,fitted_rc,33,0.143584244,0.09925211003,0.09925211003,0.3439540199,0.3045571034,fins,0.168203389,0.3439540199,fins,,,0
+HV02_composite_radiation,radiation,True,engineering_prior_rc,33,0.8009057775,0.5576713596,-0.5574382488,1.568157836,1.497639338,chip,0.8466533046,1.568157836,chip,,,0
+HV02_composite_radiation,radiation,True,persistence,33,9.866199465,7.173813667,-7.173813256,19.63381019,19.18038912,chip,10.18738723,19.63381019,chip,,,0

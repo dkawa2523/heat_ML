@@ -5,10 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thermal-cell-practical"
 version = "1.0.0"
-description = "Physical-unit thermal network foundation for identification, forecasting, and monitoring"
+description = "Physical-unit thermal time-series analysis, identification, and forecasting"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "matplotlib>=3.8",
   "numpy>=1.24,<2.3",
   "pandas>=2.0",
   "pyyaml>=6.0",
@@ -23,7 +24,8 @@ dev = [
   "coverage[toml]>=7.4",
   "hypothesis>=6.100",
   "ruff>=0.6",
-  "mypy>=1.10",
+  "pyrefly>=1.3",
+  "radon>=6.0",
   "types-PyYAML>=6.0",
   "import-linter>=2.0",
   "pip-audit>=2.7",
@@ -69,7 +71,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.mccabe]
-# Every function, old or new, stays at or below 10. The codebase is at 0 violations.
+# Keep Ruff's McCabe implementation at its current zero-violation baseline.  Radon
+# supplies the separate whole-module complexity and maintainability review.
 max-complexity = 10
 
 [tool.ruff.lint.flake8-tidy-imports]
@@ -82,26 +85,22 @@ ban-relative-imports = "parents"
 "quality.py" = ["S404", "S603", "S607"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["celltemp", "tests"]
+known-first-party = ["benchmarks", "celltemp", "external_tools", "tests"]
 
 [tool.ruff.format]
 line-ending = "lf"
 
 # ---------------------------------------------------------------------------
-# type checking -- mypy is the pre-existing checker for this repo (types-PyYAML
-# is already installed).  Per policy only ONE type checker is configured.
+# type checking -- keep one checker and one explicit project boundary.  The CAE
+# adapters are separate packages, but remain checked because their files define
+# the boundary between solver data and the product API.
 # ---------------------------------------------------------------------------
-[tool.mypy]
-python_version = "3.10"
-files = ["src/celltemp", "tests"]
-exclude = "benchmarks/topcell"
-ignore_missing_imports = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-no_implicit_optional = true
-strict_equality = true
-check_untyped_defs = true
-show_error_codes = true
+[tool.pyrefly]
+preset = "default"
+python-version = "3.10"
+project-includes = ["src/celltemp", "tests", "benchmarks", "external_tools", "quality.py"]
+search-path = [".", "src"]
+check-unannotated-defs = true
 
 # ---------------------------------------------------------------------------
 # tests

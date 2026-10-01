@@ -8,9 +8,10 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from cases import Case, all_cases
-from comsol_runtime import ComsolRuntime, provenance_path, select_comsol
-from dataset import (
+
+from .cases import Case, all_cases
+from .comsol_runtime import ComsolRuntime, provenance_path, select_comsol
+from .dataset import (
     forecast_frame,
     monitor_frames,
     parse_comsol_table,
@@ -18,8 +19,8 @@ from dataset import (
     training_frame,
     truth_frame,
     validate_dataset_frame,
-    write_csv,
 )
+from .dataset_support import write_csv_atomic
 
 TOOL_ROOT = Path(__file__).resolve().parent
 JAVA_SOURCE = TOOL_ROOT / "comsol" / "RunChipCoolingCase.java"
@@ -98,7 +99,7 @@ def _write_checked(
         raise FileExistsError(f"Refusing to replace {target}; pass --overwrite")
     summary = validate_dataset_frame(frame, role, case_id)
     summary["path"] = provenance_path(target, TOOL_ROOT)
-    write_csv(frame, target)
+    write_csv_atomic(frame, target)
     return summary
 
 
@@ -211,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     summary_path = args.data_root.resolve() / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(summary, summary_path)
+    write_csv_atomic(summary, summary_path)
     print(f"Created {len(summary)} published datasets under {args.data_root.resolve()}")
     print(f"QA summary: {summary_path}")
     return 0

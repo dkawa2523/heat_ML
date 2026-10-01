@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.evaluate_benchmark import main as evaluate
-from scripts.generate_topcell_benchmark import main as generate
-
 from celltemp.config import load_config
 from celltemp.workflows import run_forecast, run_monitor, run_train
+
+from .scripts.evaluate_benchmark import main as evaluate
+from .scripts.generate_topcell_benchmark import main as generate
 
 ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / "config.yaml"

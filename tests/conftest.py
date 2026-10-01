@@ -188,6 +188,11 @@ def train_config() -> dict:
 
 def runtime_config() -> dict:
     return {
+        "analysis": {
+            "input_dir": "data/raw",
+            "output_dir": "outputs/analysis",
+            "overwrite": True,
+        },
         "forecast": {
             "input_dir": "data/pred/forecast",
             "pattern": "*.csv",

@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import argparse
 import base64
+import math
 import subprocess
-import sys
 import time
 from io import StringIO
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from comsol_runtime import ComsolRuntime, provenance_path, select_comsol
-from nonlinear_cases import NonlinearCase, all_nonlinear_cases
-from nonlinear_dataset import (
+
+from .comsol_runtime import ComsolRuntime, provenance_path, select_comsol
+from .dataset_support import write_csv_atomic
+from .nonlinear_cases import NonlinearCase, all_nonlinear_cases
+from .nonlinear_dataset import (
     forecast_frame,
     monitor_frame,
     parse_comsol_table,
@@ -25,7 +27,6 @@ from nonlinear_dataset import (
     training_frame,
     truth_frame,
     validate_dataset_frame,
-    write_csv,
 )
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -66,7 +67,14 @@ def solve_case(
     runtime: ComsolRuntime | None,
     mesh_profile: str,
     reuse_raw: bool,
+    maximum_time_step_s: float | None = None,
 ) -> pd.DataFrame:
+    if maximum_time_step_s is not None and (
+        isinstance(maximum_time_step_s, bool)
+        or not math.isfinite(maximum_time_step_s)
+        or maximum_time_step_s <= 0.0
+    ):
+        raise ValueError("maximum_time_step_s must be positive and finite")
     schedule_path, raw_path, log_path = _case_paths(case, mesh_profile)
     for parent in (schedule_path.parent, raw_path.parent, log_path.parent):
         parent.mkdir(parents=True, exist_ok=True)
@@ -86,9 +94,18 @@ def solve_case(
     pending_path = raw_path.with_suffix(f"{raw_path.suffix}.pending")
     pending_path.unlink(missing_ok=True)
     try:
+        arguments: list[str | Path] = [
+            runtime.source_model,
+            encoded,
+            pending_path,
+            model_output,
+            mesh_profile,
+        ]
+        if maximum_time_step_s is not None:
+            arguments.append(f"{maximum_time_step_s:.17g}")
         runtime.run_java(
             JAVA_CLASS,
-            [runtime.source_model, encoded, pending_path, model_output, mesh_profile],
+            arguments,
             log_path=log_path,
             expected_output=pending_path,
             label=f"case {case.case_id}",
@@ -197,7 +214,7 @@ def build_dataset(
             raise FileExistsError(f"Refusing to replace {target}; pass --overwrite")
         summary = validate_dataset_frame(published, case.role, case.case_id)
         path = provenance_path(target, TOOL_ROOT)
-        write_csv(published, target)
+        write_csv_atomic(published, target)
         summaries.append(
             {
                 **summary,
@@ -271,7 +288,7 @@ def inspect_mesh(*, runtime: ComsolRuntime, mesh_profile: str, data_root: Path) 
             frame[f"{region}_first_layer_thickness_mm"] = first
     target = data_root / "mesh" / f"{mesh_profile}.csv"
     target.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(frame, target)
+    write_csv_atomic(frame, target)
     return target
 
 
@@ -306,60 +323,116 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    mesh_profile = args.mesh_profile or f"global-{args.mesh_size}"
+def _select_cases(case_ids: list[str] | None) -> list[NonlinearCase]:
     selected = all_nonlinear_cases()
-    if args.case_ids:
-        requested = set(args.case_ids)
+    if case_ids:
+        requested = set(case_ids)
         selected = [case for case in selected if case.case_id in requested]
         missing = requested - {case.case_id for case in selected}
         if missing:
             raise ValueError(f"unknown nonlinear case IDs: {sorted(missing)}")
+    return selected
 
-    data_root = args.data_root.resolve()
-    reusable = args.reuse_raw and raw_tables_available(selected, mesh_profile)
-    runtime: ComsolRuntime | None = None
-    if args.mesh_only or not reusable:
-        runtime = select_comsol(args.comsol_root)
-        print(f"Using COMSOL: {runtime.root}", flush=True)
-        print(f"Source model: {runtime.source_model}", flush=True)
-        runtime.compile(JAVA_SOURCE)
-    else:
+
+def _prepare_runtime(
+    *,
+    comsol_root: str | None,
+    cases: list[NonlinearCase],
+    mesh_profile: str,
+    reuse_raw: bool,
+    mesh_only: bool,
+) -> ComsolRuntime | None:
+    reusable = reuse_raw and raw_tables_available(cases, mesh_profile)
+    if reusable and not mesh_only:
         print("Reusing existing verified raw COMSOL tables", flush=True)
-    if args.mesh_only:
-        if runtime is None:
-            raise RuntimeError("COMSOL runtime is required for --mesh-only")
-        target = inspect_mesh(
-            runtime=runtime,
-            mesh_profile=mesh_profile,
-            data_root=data_root,
-        )
-        print(f"Mesh statistics: {target}")
-        return 0
+        return None
+
+    runtime = select_comsol(comsol_root)
+    print(f"Using COMSOL: {runtime.root}", flush=True)
+    print(f"Source model: {runtime.source_model}", flush=True)
+    runtime.compile(JAVA_SOURCE)
+    return runtime
+
+
+def _publish_mesh_statistics(
+    *,
+    runtime: ComsolRuntime | None,
+    mesh_profile: str,
+    data_root: Path,
+) -> None:
+    if runtime is None:
+        raise RuntimeError("COMSOL runtime is required for --mesh-only")
+    target = inspect_mesh(
+        runtime=runtime,
+        mesh_profile=mesh_profile,
+        data_root=data_root,
+    )
+    print(f"Mesh statistics: {target}")
+
+
+def _publish_dataset(
+    cases: list[NonlinearCase],
+    *,
+    runtime: ComsolRuntime | None,
+    data_root: Path,
+    mesh_profile: str,
+    reuse_raw: bool,
+    overwrite: bool,
+    complete_catalog: bool,
+) -> None:
     summary = build_dataset(
-        selected,
+        cases,
         runtime=runtime,
         data_root=data_root,
         mesh_profile=mesh_profile,
-        reuse_raw=args.reuse_raw,
-        overwrite=args.overwrite,
+        reuse_raw=reuse_raw,
+        overwrite=overwrite,
     )
-    if not args.case_ids and args.overwrite:
-        removed = prune_obsolete_case_files(selected, data_root=data_root)
+    if complete_catalog and overwrite:
+        removed = prune_obsolete_case_files(cases, data_root=data_root)
         if removed:
             print(f"Removed {len(removed)} obsolete generated case files", flush=True)
     summary_path = data_root / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    write_csv(summary, summary_path)
-    if not args.case_ids:
+    write_csv_atomic(summary, summary_path)
+    if complete_catalog:
         radiation_path = data_root / "radiation_pairs.csv"
-        write_csv(radiation_pair_summary(selected, data_root), radiation_path)
+        write_csv_atomic(radiation_pair_summary(cases, data_root), radiation_path)
         print(f"Radiation pair summary: {radiation_path}")
     print(f"Created {len(summary)} nonlinear datasets under {data_root}")
     print(f"QA summary: {summary_path}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    mesh_profile = args.mesh_profile or f"global-{args.mesh_size}"
+    selected = _select_cases(args.case_ids)
+    data_root = args.data_root.resolve()
+    runtime = _prepare_runtime(
+        comsol_root=args.comsol_root,
+        cases=selected,
+        mesh_profile=mesh_profile,
+        reuse_raw=args.reuse_raw,
+        mesh_only=args.mesh_only,
+    )
+    if args.mesh_only:
+        _publish_mesh_statistics(
+            runtime=runtime,
+            mesh_profile=mesh_profile,
+            data_root=data_root,
+        )
+    else:
+        _publish_dataset(
+            selected,
+            runtime=runtime,
+            data_root=data_root,
+            mesh_profile=mesh_profile,
+            reuse_raw=args.reuse_raw,
+            overwrite=args.overwrite,
+            complete_catalog=not args.case_ids,
+        )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

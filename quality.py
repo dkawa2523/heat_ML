@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Small local quality gate.
 
-    python quality.py fast   format, lint, types, unit/property tests
-    python quality.py pr     full tests, coverage, and architecture boundaries
+    python quality.py fast          format, lint, types, unit/property tests
+    python quality.py architecture  Ruff, Pyrefly, import boundaries, complexity
+    python quality.py pr            full tests, coverage, and architecture boundaries
 
 The exit code is the verdict. Dependency auditing stays as a separate CI step so
 this script only checks the repository itself.
@@ -50,6 +51,7 @@ def run(tool: str, *args: str, timeout: int = 3600) -> subprocess.CompletedProce
         **os.environ,
         "PYTHONIOENCODING": "utf-8",
         "PYTHONUTF8": "1",
+        "RADONFILESENCODING": "utf-8",
         "PYTHONPATH": source_path if not python_path else source_path + os.pathsep + python_path,
     }
     try:
@@ -91,11 +93,27 @@ def check_lint() -> bool:
 
 
 def check_types() -> bool:
-    return report("types", run("mypy", "src/celltemp", "tests"))
+    return report("types", run("pyrefly", "check", "--summarize-errors"))
 
 
 def check_architecture() -> bool:
     return report("architecture", run("lint-imports"))
+
+
+def check_complexity() -> bool:
+    """Reject only high-risk core complexity; report C-rank hotspots in design reviews."""
+    results = [
+        run("radon", "cc", "--show-complexity", "--min", "D", "src/celltemp"),
+        run("radon", "mi", "--show", "--min", "C", "src/celltemp"),
+    ]
+    failed = any(result.returncode != 0 or result.stdout.strip() for result in results)
+    combined = subprocess.CompletedProcess(
+        args=["radon", "cc/mi", "src/celltemp"],
+        returncode=1 if failed else 0,
+        stdout="\n".join(result.stdout.strip() for result in results if result.stdout.strip()),
+        stderr="\n".join(result.stderr.strip() for result in results if result.stderr.strip()),
+    )
+    return report("complexity", combined)
 
 
 def check_tests(*, coverage: bool) -> bool:
@@ -115,12 +133,15 @@ def run_checks(checks: list[Callable[[], bool]]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("fast", "pr"))
+    parser.add_argument("command", choices=("fast", "architecture", "pr"))
     command = parser.parse_args(argv).command
-    checks = [check_format, check_lint, check_types]
-    if command == "pr":
-        checks += [check_architecture, lambda: check_tests(coverage=True)]
+    if command == "architecture":
+        checks = [check_lint, check_types, check_architecture, check_complexity]
     else:
+        checks = [check_format, check_lint, check_types]
+    if command == "pr":
+        checks += [check_architecture, check_complexity, lambda: check_tests(coverage=True)]
+    elif command == "fast":
         checks += [lambda: check_tests(coverage=False)]
 
     print(f"=== quality {command} ===\n")

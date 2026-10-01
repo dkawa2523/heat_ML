@@ -9,9 +9,9 @@ nodes:
   - {name: edge, heat_capacity: 1.55}
 
 actuators:
-  - {name: brine, tau: 3.0, learnable: true}
-  - {name: heater, tau: 6.0, learnable: true}
-  - {name: plasma, tau: 2.0, learnable: true}
+  - {name: brine, tau: 3.0, learnable: true, unit: "1", role: cooling_command}
+  - {name: heater, tau: 6.0, learnable: true, unit: "1", role: heat_input}
+  - {name: plasma, tau: 2.0, learnable: true, unit: "1", role: heat_input}
 
 edges:
   - {nodes: [CP, Center], conductance: {type: constant, value: 0.0533333333, learnable: true}}

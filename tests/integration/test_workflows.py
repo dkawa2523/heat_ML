@@ -24,7 +24,7 @@ from celltemp.domain import (
     ThermalSystemSpec,
 )
 from celltemp.engine import ThermalRCModel
-from tests.conftest import SENSORS, write_forecast_request, write_monitor_log
+from tests.conftest import CONTROLS, SENSORS, write_forecast_request, write_monitor_log
 
 pytestmark = pytest.mark.integration
 
@@ -36,6 +36,14 @@ def _run_cli(monkeypatch: pytest.MonkeyPatch, *arguments: str) -> None:
 
 def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = cae_project / "config.yaml"
+    _run_cli(monkeypatch, "analyze", "--config", str(config_path))
+    analysis_dir = cae_project / "outputs" / "analysis"
+    analysis_summary = json.loads((analysis_dir / "summary.json").read_text(encoding="utf-8"))
+    assert analysis_summary["cases"] == 8
+    assert analysis_summary["settings"]["figures"] is True
+    assert len(pd.read_csv(analysis_dir / "sensor_metrics.csv")) == 8 * len(SENSORS)
+    assert len(list((analysis_dir / "figures").glob("*.png"))) == 8
+
     _run_cli(monkeypatch, "train", "--config", str(config_path))
     run_dir = cae_project / "outputs" / "runs" / "test_run"
 
@@ -45,10 +53,36 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert set(summary) == {"train", "val", "test"}
     assert np.isfinite(summary["test"]["mean_case_conditional_rmse"])
     assert np.isfinite(summary["test"]["mean_case_causal_rmse"])
-    assert len(pd.read_csv(run_dir / "split.csv")) == 8
+    split = pd.read_csv(run_dir / "split.csv")
+    assert len(split) == 8
+    comparison = pd.read_csv(run_dir / "model_comparison.csv")
+    held_out = split[split["split"].isin(["val", "test"])]
+    assert len(comparison) == len(held_out) * 3
+    assert set(comparison["split"]) == {"val", "test"}
+    assert set(comparison["model"]) == {
+        "fitted_rc",
+        "engineering_prior_rc",
+        "persistence",
+    }
+    causal_by_case = pd.read_csv(run_dir / "metrics_by_case.csv").set_index(["split", "case_id"])[
+        "causal_rmse"
+    ]
+    fitted = comparison[comparison["model"] == "fitted_rc"]
+    for row in fitted.itertuples(index=False):
+        assert row.rmse_k == pytest.approx(causal_by_case.loc[(row.split, row.case_id)])
+    assert (run_dir / "figures" / "test_prediction_timeseries.png").stat().st_size > 0
+    assert (run_dir / "figures" / "test_prediction_parity.png").stat().st_size > 0
+    thermal_paths = pd.read_csv(run_dir / "thermal_paths.csv")
+    assert {"node", "internal_edge", "source", "boundary"} <= set(thermal_paths["element_type"])
+    thermal_modes = pd.read_csv(run_dir / "thermal_modes.csv")
+    assert len(thermal_modes) == len(SENSORS)
+    assert (thermal_modes["pole_real_per_s"] <= 0.0).all()
     metadata = json.loads((run_dir / "artifact" / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["training"]["model_selection_metric"] == "causal_rmse"
     assert "train_temporal_ranges" in metadata
+    assert metadata["model_characterization"]["operating_point"] == (
+        "representative_training_command"
+    )
 
     write_forecast_request(cae_project)
     write_monitor_log(cae_project, noise=0.05)
@@ -64,6 +98,18 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert np.isfinite(forecast[[f"temperature_{name}" for name in SENSORS]]).all().all()
     assert np.isfinite(forecast[[f"temperature_std_{name}" for name in SENSORS]]).all().all()
     assert (forecast[[f"temperature_std_{name}" for name in SENSORS]] >= 0.0).all().all()
+    assert {"command_heater", "mean_temperature", "sensor_span"} <= set(forecast)
+    assert len(pd.read_csv(forecast_dir / "forecast_case_metrics.csv")) == 1
+    assert len(pd.read_csv(forecast_dir / "forecast_sensor_metrics.csv")) == len(SENSORS)
+    control_metrics = pd.read_csv(forecast_dir / "forecast_control_metrics.csv")
+    assert set(control_metrics["control"]) == set(CONTROLS)
+    energy = pd.read_csv(forecast_dir / "energy_balance.csv")
+    assert {"source_total_w", "boundary_total_w", "storage_total_w"} <= set(energy)
+    assert energy["balance_residual_total_w"].abs().max() < 1e-10
+    energy_figure = forecast_dir / "figures" / "energy_balance_const_case.png"
+    assert energy_figure.stat().st_size > 0
+    forecast_figure = forecast_dir / "figures" / "forecast_const_case.png"
+    assert forecast_figure.stat().st_size > 0
     forecast_manifest = json.loads((forecast_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert forecast_manifest["settings"]["observer"]["initial_temperature_std"] == 100.0
     assert forecast_manifest["settings"]["uncertainty"]["scope"] == "latent_state_and_process_only"
@@ -161,7 +207,82 @@ def test_forecast_uses_history_without_accepting_measurements_after_the_boundary
     assert output_path.read_bytes() == previous_output
 
 
-@pytest.mark.parametrize("command", ["train", "forecast", "monitor"])
+def test_analyze_writes_only_explicitly_qualified_thermal_impedance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    time = np.arange(21, dtype=float)
+    power = np.zeros_like(time)
+    power[5] = 5.0
+    power[6:] = 10.0
+    temperature = 25.0 + np.minimum(np.maximum(time - 5.0, 0.0) * 2.0, 10.0)
+    pd.DataFrame({"time": time, "part": temperature, "power": power}).to_csv(
+        data_dir / "known_step.csv", index=False
+    )
+    save_yaml(
+        {
+            "version": 3,
+            "nodes": [{"name": "part", "heat_capacity": 1.0}],
+            "actuators": [{"name": "power", "tau": 0.0, "unit": "W"}],
+            "edges": [],
+            "sources": [
+                {
+                    "name": "heating",
+                    "node_weights": {"part": 1.0},
+                    "heat_rate": {
+                        "type": "positive_part",
+                        "control": "power",
+                        "gain": 1.0,
+                    },
+                }
+            ],
+            "boundaries": [],
+            "sensors": [{"name": "part", "node": "part"}],
+        },
+        tmp_path / "system.yaml",
+    )
+    config_path = tmp_path / "config.yaml"
+    save_yaml(
+        {
+            "data": {"directory": "data", "time_col": "time"},
+            "system": "system.yaml",
+            "analysis": {
+                "output_dir": "outputs/analysis",
+                "overwrite": True,
+                "make_plots": True,
+                "thermal_impedance": {
+                    "baseline_window_s": 5.0,
+                    "terminal_window_s": 5.0,
+                    "max_baseline_drift_k_per_s": 0.0,
+                    "max_baseline_std_k": 0.0,
+                    "max_terminal_zth_drift_k_per_w_s": 0.0,
+                    "steps": {
+                        "known_step": {
+                            "control": "power",
+                            "transition_start_s": 5.0,
+                            "transition_end_s": 6.0,
+                            "heat_step_w": 10.0,
+                        }
+                    },
+                },
+            },
+        },
+        config_path,
+    )
+
+    _run_cli(monkeypatch, "analyze", "--config", str(config_path))
+
+    output_dir = tmp_path / "outputs" / "analysis"
+    impedance = pd.read_csv(output_dir / "thermal_impedance.csv")
+    qualification = pd.read_csv(output_dir / "thermal_impedance_qualification.csv")
+    assert impedance.iloc[-1]["thermal_impedance_k_per_w"] == pytest.approx(1.0)
+    assert bool(qualification.iloc[0]["zth_qualified"])
+    assert bool(qualification.iloc[0]["rth_qualified"])
+    assert (output_dir / "figures" / "thermal_impedance.png").exists()
+
+
+@pytest.mark.parametrize("command", ["train", "forecast", "monitor", "analyze"])
 def test_cli_exposes_only_product_workflows(command: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["celltemp", command, "--help"])
     with pytest.raises(SystemExit) as exit_info:

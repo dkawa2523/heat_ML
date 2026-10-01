@@ -8,6 +8,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from celltemp.analysis import (
+    persistence_prediction,
+    prediction_comparison_rows,
+    prediction_error_metrics,
+    rmse,
+)
 from celltemp.artifact import ThermalArtifact, load_artifact
 from celltemp.config import as_path, load_config
 from celltemp.domain import Trajectory
@@ -15,6 +21,7 @@ from celltemp.engine import ThermalRCModel
 from celltemp.inference import forecast, monitor, sensor_bias_in_gauge
 from celltemp.io import load_system_spec, load_trajectories
 from celltemp.workflows.common import resolve_artifact_path
+from celltemp.workflows.prediction_figures import PredictionCase, write_prediction_figures
 
 from .definition import PARAMETER_TRUTH
 
@@ -37,6 +44,11 @@ PRIMARY_METRICS = {
 }
 
 
+def _json_bool(value: object) -> bool:
+    """Normalize NumPy/pandas comparison results for JSON output."""
+    return bool(value)
+
+
 def _trajectory_config(
     directory: str, sensor_names: tuple[str, ...], control_names: tuple[str, ...]
 ) -> dict[str, object]:
@@ -56,35 +68,15 @@ def _source_frame(trajectory: Trajectory) -> pd.DataFrame:
     return pd.read_csv(Path(str(trajectory.metadata["path"])))
 
 
-def _error_metrics(prediction: np.ndarray, truth: np.ndarray) -> dict[str, float]:
-    error = prediction - truth
-    return {
-        "rmse": float(np.sqrt(np.mean(error**2))),
-        "mae": float(np.mean(np.abs(error))),
-        "max_abs": float(np.max(np.abs(error))),
-        "final_rmse": float(np.sqrt(np.mean(error[-1] ** 2))),
-    }
-
-
-def _persistence_prediction(trajectory: Trajectory, origin: int) -> np.ndarray:
-    history_temperature = trajectory.temperature[: origin + 1]
-    history_mask = trajectory.mask[: origin + 1]
-    latest = np.full(len(trajectory.sensor_names), np.nan)
-    for sensor_index in range(len(trajectory.sensor_names)):
-        available = np.flatnonzero(history_mask[:, sensor_index])
-        if len(available):
-            latest[sensor_index] = history_temperature[available[-1], sensor_index]
-    latest[~np.isfinite(latest)] = float(np.mean(latest[np.isfinite(latest)]))
-    return np.repeat(latest[None, :], len(trajectory.time) - origin, axis=0)
-
-
 def evaluate_forecasts(
     artifact: ThermalArtifact, prior_model: ThermalRCModel, directory: str
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame, list[PredictionCase]]:
     trajectories = load_trajectories(
         _trajectory_config(directory, artifact.sensor_names, artifact.control_names), ROOT
     )
     rows: list[dict[str, object]] = []
+    comparison_rows: list[dict[str, object]] = []
+    prediction_cases: list[PredictionCase] = []
     truth_columns = [f"truth_{sensor}" for sensor in artifact.sensor_names]
     for trajectory in trajectories:
         frame = _source_frame(trajectory)
@@ -96,15 +88,17 @@ def evaluate_forecasts(
         truth = frame[truth_columns].to_numpy(dtype=float)[origin:]
         learned = learned_result.sensor_temperature
         prior = prior_result.sensor_temperature
-        persistence = _persistence_prediction(trajectory, origin)
-        learned_metrics = _error_metrics(learned, truth)
-        prior_metrics = _error_metrics(prior, truth)
-        persistence_metrics = _error_metrics(persistence, truth)
+        persistence = persistence_prediction(trajectory.temperature, trajectory.mask, origin)
+        learned_metrics = prediction_error_metrics(truth, learned)
+        prior_metrics = prediction_error_metrics(truth, prior)
+        persistence_metrics = prediction_error_metrics(truth, persistence)
+        case_group = str(frame["benchmark_group"].iat[0])
+        purpose = str(frame["benchmark_purpose"].iat[0])
         rows.append(
             {
                 "case_id": trajectory.case_id,
-                "group": str(frame["benchmark_group"].iat[0]),
-                "purpose": str(frame["benchmark_purpose"].iat[0]),
+                "group": case_group,
+                "purpose": purpose,
                 "input_rows": len(frame),
                 "history_rows": origin + 1,
                 "forecast_rows": len(learned),
@@ -112,21 +106,70 @@ def evaluate_forecasts(
                 "time_end": float(trajectory.time[-1]),
                 "observed_initial_sensors": int(trajectory.mask[0].sum()),
                 "observed_history_sensors": int(trajectory.mask[: origin + 1].any(axis=0).sum()),
-                "learned_rmse": learned_metrics["rmse"],
-                "learned_mae": learned_metrics["mae"],
-                "learned_max_abs": learned_metrics["max_abs"],
-                "final_rmse": learned_metrics["final_rmse"],
-                "prior_rmse": prior_metrics["rmse"],
-                "persistence_rmse": persistence_metrics["rmse"],
+                "learned_rmse": learned_metrics["rmse_k"],
+                "learned_mae": learned_metrics["mae_k"],
+                "learned_max_abs": learned_metrics["max_abs_error_k"],
+                "final_rmse": learned_metrics["terminal_rmse_k"],
+                "prior_rmse": prior_metrics["rmse_k"],
+                "persistence_rmse": persistence_metrics["rmse_k"],
                 "improvement_vs_prior_pct": 100.0
-                * (prior_metrics["rmse"] - learned_metrics["rmse"])
-                / prior_metrics["rmse"],
+                * (prior_metrics["rmse_k"] - learned_metrics["rmse_k"])
+                / prior_metrics["rmse_k"],
                 "improvement_vs_persistence_pct": 100.0
-                * (persistence_metrics["rmse"] - learned_metrics["rmse"])
-                / persistence_metrics["rmse"],
+                * (persistence_metrics["rmse_k"] - learned_metrics["rmse_k"])
+                / persistence_metrics["rmse_k"],
             }
         )
-    return pd.DataFrame(rows)
+        prediction_cases.append(
+            PredictionCase(
+                case_id=trajectory.case_id,
+                time=trajectory.time[origin:],
+                truth=truth,
+                predicted=learned,
+            )
+        )
+        comparison_rows.extend(
+            {
+                "case_id": trajectory.case_id,
+                "case_group": case_group,
+                "purpose": purpose,
+                **comparison,
+            }
+            for comparison in prediction_comparison_rows(
+                trajectory.time[origin:],
+                truth,
+                {
+                    "fitted_rc": learned,
+                    "engineering_prior_rc": prior,
+                    "persistence": persistence,
+                },
+                artifact.sensor_names,
+            )
+        )
+    return pd.DataFrame(rows), pd.DataFrame(comparison_rows), prediction_cases
+
+
+def _write_evidence_figures(
+    cases: list[PredictionCase], forecasts: pd.DataFrame, sensor_names: tuple[str, ...]
+) -> None:
+    groups = forecasts.set_index("case_id")["group"].astype(str).to_dict()
+    core = [case for case in cases if groups[case.case_id] != "model_gap"]
+    model_gap = [case for case in cases if groups[case.case_id] == "model_gap"]
+    write_prediction_figures(
+        core,
+        OUTPUT_DIR / "figures",
+        sensor_names=sensor_names,
+        title="TopCell external forecast — core cases",
+        file_prefix="core_prediction",
+    )
+    if model_gap:
+        write_prediction_figures(
+            model_gap,
+            OUTPUT_DIR / "figures",
+            sensor_names=sensor_names,
+            title="TopCell external forecast — nonlinear model gap",
+            file_prefix="model_gap_prediction",
+        )
 
 
 def summarize_forecast_groups(cases: pd.DataFrame) -> pd.DataFrame:
@@ -141,11 +184,6 @@ def summarize_forecast_groups(cases: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-
-
-def _rmse(values: np.ndarray) -> float:
-    finite = np.isfinite(values)
-    return float(np.sqrt(np.mean(values[finite] ** 2))) if np.any(finite) else float("nan")
 
 
 def _nis_threshold(dof: np.ndarray) -> np.ndarray:
@@ -204,15 +242,15 @@ def evaluate_monitors(
                 "group": str(frame["benchmark_group"].iat[0]),
                 "purpose": str(frame["benchmark_purpose"].iat[0]),
                 "bias_gauge": result.bias_gauge,
-                "measured_rmse_to_truth": _rmse(trajectory.temperature - truth),
-                "posterior_physical_rmse": _rmse(result.posterior_physical_temperature - truth),
-                "sensor_bias_rmse_after_burn_in": _rmse(
+                "measured_rmse_to_truth": rmse(trajectory.temperature - truth),
+                "posterior_physical_rmse": rmse(result.posterior_physical_temperature - truth),
+                "sensor_bias_rmse_after_burn_in": rmse(
                     result.sensor_bias[burn_in] - truth_sensor_bias[burn_in]
                 ),
                 "max_final_sensor_bias_error": float(
                     np.max(np.abs(result.sensor_bias[-1] - truth_sensor_bias[-1]))
                 ),
-                "innovation_rmse": _rmse(result.innovation),
+                "innovation_rmse": rmse(result.innovation),
                 "max_nis": float(np.nanmax(result.nis[1:])),
                 "mean_nis_per_dof": float(
                     np.mean(result.nis[valid_nis] / result.nis_dof[valid_nis])
@@ -223,7 +261,7 @@ def evaluate_monitors(
                 "peak_event_disturbance_w": (
                     float(np.max(disturbance_norm[event])) if np.any(event) else float("nan")
                 ),
-                "event_disturbance_rmse_w": _rmse(
+                "event_disturbance_rmse_w": rmse(
                     result.node_heat_disturbance[event] - truth_disturbance[event]
                 ),
                 "max_event_sensor_bias_k": (
@@ -290,10 +328,13 @@ def acceptance_checks(forecast_cases: pd.DataFrame, monitor_cases: pd.DataFrame)
     sparse_history = _row_by_case(forecast_cases, "F12_history_initialized_sparse")
     return {
         "forecast_core_all_finite": bool(np.isfinite(core["learned_rmse"].to_numpy()).all()),
-        "forecast_core_mean_rmse_below_1K": bool(core["learned_rmse"].mean() < 1.0),
+        "forecast_core_mean_rmse_below_1K": _json_bool(core["learned_rmse"].mean() < 1.0),
         "forecast_core_worst_rmse_below_1_5K": bool(core["learned_rmse"].max() < 1.5),
-        "forecast_core_beats_engineering_prior": bool(
+        "forecast_core_beats_engineering_prior": _json_bool(
             core["learned_rmse"].mean() < core["prior_rmse"].mean()
+        ),
+        "forecast_core_beats_persistence": _json_bool(
+            core["learned_rmse"].mean() < core["persistence_rmse"].mean()
         ),
         "forecast_history_reduces_sparse_initialization_error": bool(
             sparse_history["learned_rmse"] < 0.25 * sparse_initial["learned_rmse"]
@@ -338,7 +379,9 @@ def main() -> None:
     )
     prior_model.eval()
 
-    forecasts = evaluate_forecasts(artifact, prior_model, str(config["forecast"]["input_dir"]))
+    forecasts, model_comparison, prediction_cases = evaluate_forecasts(
+        artifact, prior_model, str(config["forecast"]["input_dir"])
+    )
     forecast_groups = summarize_forecast_groups(forecasts)
     monitors = evaluate_monitors(
         artifact,
@@ -350,9 +393,11 @@ def main() -> None:
 
     forecasts.to_csv(OUTPUT_DIR / "forecast_by_case.csv", index=False)
     forecast_groups.to_csv(OUTPUT_DIR / "forecast_by_group.csv", index=False)
+    model_comparison.to_csv(OUTPUT_DIR / "model_comparison.csv", index=False)
     monitors.to_csv(OUTPUT_DIR / "monitor_by_case.csv", index=False)
     parameters.to_csv(OUTPUT_DIR / "parameter_recovery.csv", index=False)
     write_case_catalog(forecasts, monitors, OUTPUT_DIR)
+    _write_evidence_figures(prediction_cases, forecasts, artifact.sensor_names)
 
     core = forecasts.loc[forecasts["group"] != "model_gap"]
     summary = {
@@ -365,6 +410,7 @@ def main() -> None:
             "mean_core_rmse": float(core["learned_rmse"].mean()),
             "worst_core_rmse": float(core["learned_rmse"].max()),
             "mean_prior_rmse": float(core["prior_rmse"].mean()),
+            "mean_persistence_rmse": float(core["persistence_rmse"].mean()),
             "model_gap_rmse": float(_row_by_group(forecasts, "model_gap")["learned_rmse"]),
         },
         "monitor": {

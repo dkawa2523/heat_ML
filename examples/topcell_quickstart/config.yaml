@@ -25,6 +25,11 @@ system: system.yaml
 engine:
   integrator: exact
 
+analysis:
+  input_dir: data/raw
+  output_dir: work/outputs/analysis
+  overwrite: true
+
 training:
   epochs: 30
   batch_size: 8

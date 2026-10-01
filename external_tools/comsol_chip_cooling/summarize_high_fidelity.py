@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,16 @@ DEFAULT_ROOT = TOOL_ROOT / "data" / "nonlinear_high_fidelity"
 CONTROLS = ("time", "chip_power", "coolant_temperature", "inlet_air_velocity")
 TRUTH_SENSORS = ("truth_chip", "truth_sink_base", "truth_fins")
 SENSORS = ("chip", "sink_base", "fins")
+TEMPORAL_QUANTITIES = {
+    "chip",
+    "sink_base",
+    "fins",
+    "chip_max",
+    "fins_max",
+    "outlet_air_temperature",
+    "pressure_drop",
+    "radiative_heat_rate",
+}
 
 
 def _dynamic_paths(root: Path) -> tuple[Path, Path]:
@@ -61,7 +72,59 @@ def _case_summary(frame: pd.DataFrame) -> dict[str, object]:
     }
 
 
-def _dynamic_reference(radiation: pd.DataFrame, steady_reference: pd.DataFrame) -> pd.DataFrame:
+def _temporal_evidence(root: Path) -> dict[str, object] | None:
+    path = root / "time_step_convergence.csv"
+    if not path.is_file():
+        return None
+    frame = pd.read_csv(path)
+    required = {
+        "coarse_max_time_step_s",
+        "fine_max_time_step_s",
+        "quantity",
+        "max_abs_difference",
+        "passed",
+    }
+    missing = required - set(frame)
+    if missing:
+        raise ValueError(f"{path}: missing time-step evidence columns {sorted(missing)}")
+    quantities = set(frame["quantity"].astype(str))
+    if len(frame) != len(TEMPORAL_QUANTITIES) or quantities != TEMPORAL_QUANTITIES:
+        raise ValueError(f"{path}: incomplete time-step quantities {sorted(quantities)}")
+    steps = frame[["coarse_max_time_step_s", "fine_max_time_step_s"]].to_numpy(dtype=np.float64)
+    differences = frame["max_abs_difference"].to_numpy(dtype=np.float64)
+    if (
+        not np.isfinite(steps).all()
+        or (steps <= 0.0).any()
+        or not np.isfinite(differences).all()
+        or (differences < 0.0).any()
+    ):
+        raise ValueError(f"{path}: time-step limits must be positive and differences non-negative")
+    coarse_steps = frame["coarse_max_time_step_s"].unique()
+    fine_steps = frame["fine_max_time_step_s"].unique()
+    if len(coarse_steps) != 1 or len(fine_steps) != 1 or fine_steps[0] >= coarse_steps[0]:
+        raise ValueError(f"{path}: expected one adjacent coarse/fine time-step pair")
+    indexed = frame.set_index("quantity")
+    passed = frame["passed"].astype(str).str.lower().eq("true")
+    sensor_differences = indexed.loc[list(SENSORS), "max_abs_difference"].to_numpy(dtype=np.float64)
+    return {
+        "qualified": bool(passed.all()),
+        "coarse_max_time_step_s": float(coarse_steps[0]),
+        "fine_max_time_step_s": float(fine_steps[0]),
+        "max_sensor_temperature_difference_k": float(sensor_differences.max()),
+        "sensor_uncertainty": dict(zip(SENSORS, map(float, sensor_differences), strict=True)),
+        "basis": (
+            f"maximum BDF step {coarse_steps[0]:g} s versus {fine_steps[0]:g} s "
+            "at identical output times and controls"
+        ),
+        "evidence": "time_step_convergence.csv",
+    }
+
+
+def _dynamic_reference(
+    radiation: pd.DataFrame,
+    steady_reference: pd.DataFrame,
+    temporal: dict[str, object] | None,
+) -> pd.DataFrame:
     """Expose the physical transient at the same boundary used by experiments."""
     uncertainty = {
         sensor: float(steady_reference[f"mesh_uncertainty_{sensor}"].max()) for sensor in SENSORS
@@ -69,33 +132,41 @@ def _dynamic_reference(radiation: pd.DataFrame, steady_reference: pd.DataFrame) 
     benchmark_qualified = (
         steady_reference["benchmark_qualified"].astype(str).str.lower().eq("true").all()
     )
-    reference = pd.DataFrame(
-        {
-            "case_id": radiation["case_id"],
-            "time": radiation["time"],
-            "chip": radiation["truth_chip"],
-            "sink_base": radiation["truth_sink_base"],
-            "fins": radiation["truth_fins"],
-            "chip_power": radiation["chip_power"],
-            "coolant_temperature": radiation["coolant_temperature"],
-            "inlet_air_velocity": radiation["inlet_air_velocity"],
-            "mesh_uncertainty_chip": uncertainty["chip"],
-            "mesh_uncertainty_sink_base": uncertainty["sink_base"],
-            "mesh_uncertainty_fins": uncertainty["fins"],
-            "mesh_profile": radiation["mesh_profile"],
-            "mesh_qualified": False,
-            "benchmark_qualified": benchmark_qualified,
-            "temporal_qualified": False,
-            "qualification_basis": (
-                "local-medium benchmark qualification; conservative maximum "
-                "local-medium-to-fine difference at MC01/MC02"
-            ),
-            "temporal_qualification_basis": (
-                "adaptive transient solve converged; independent time-step study not performed"
-            ),
-        }
+    temporal_qualified = bool(temporal and temporal["qualified"])
+    temporal_basis = (
+        str(temporal["basis"])
+        if temporal is not None
+        else "adaptive transient solve converged; independent time-step study not performed"
     )
-    return reference
+    columns: dict[str, object] = {
+        "case_id": radiation["case_id"],
+        "time": radiation["time"],
+        "chip": radiation["truth_chip"],
+        "sink_base": radiation["truth_sink_base"],
+        "fins": radiation["truth_fins"],
+        "chip_power": radiation["chip_power"],
+        "coolant_temperature": radiation["coolant_temperature"],
+        "inlet_air_velocity": radiation["inlet_air_velocity"],
+        "mesh_uncertainty_chip": uncertainty["chip"],
+        "mesh_uncertainty_sink_base": uncertainty["sink_base"],
+        "mesh_uncertainty_fins": uncertainty["fins"],
+        "mesh_profile": radiation["mesh_profile"],
+        "mesh_qualified": False,
+        "benchmark_qualified": benchmark_qualified,
+        "temporal_qualified": temporal_qualified,
+        "qualification_basis": (
+            "local-medium benchmark qualification; conservative maximum "
+            "local-medium-to-fine difference at MC01/MC02"
+        ),
+        "temporal_qualification_basis": temporal_basis,
+    }
+    if temporal is not None:
+        sensor_uncertainty = temporal["sensor_uncertainty"]
+        if not isinstance(sensor_uncertainty, dict):
+            raise TypeError("temporal sensor uncertainty must be a mapping")
+        for sensor in SENSORS:
+            columns[f"temporal_uncertainty_{sensor}"] = float(sensor_uncertainty[sensor])
+    return pd.DataFrame(columns)
 
 
 def _experiment_template(reference: pd.DataFrame) -> pd.DataFrame:
@@ -120,11 +191,12 @@ def _experiment_template(reference: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _quality_report(
+def _quality_summary(
     root: Path,
     case_summary: pd.DataFrame,
     delta: pd.DataFrame,
-) -> str:
+    temporal: dict[str, object] | None,
+) -> dict[str, object]:
     acceptance = pd.read_csv(root / "mesh_acceptance.csv")
     medium = acceptance.loc[acceptance["mesh_profile"] == "local-medium"].iloc[0]
     reference = pd.read_csv(root / "cae_reference.csv")
@@ -147,53 +219,32 @@ def _quality_report(
     )
     max_radiative_heat = delta["radiative_heat_rate_w"].abs().max()
     radiation_to_mesh_ratio = max_radiation_delta / max_mesh_uncertainty
-    lines = [
-        "# High-fidelity dataset quality report",
-        "",
-        "## 判定",
-        "",
-        f"- local-medium strict mesh qualification: `{bool(medium['all_cases_pass'])}`",
-        f"- local-medium benchmark qualification: `{bool(medium['all_cases_pass_benchmark'])}`",
-        f"- adjacent-mesh temperature uncertainty maximum: `{max_mesh_uncertainty:.4f} degC`",
-        "- experiment validation: `not performed (no matching measurements supplied)`",
-        "- transient time-discretization qualification: `not performed`",
-        "",
-        "## 動的CAE",
-        "",
-        "| case | rows | end [s] | T min/max [degC] | chip final/peak [degC] | "
-        "max dp [Pa] | max |energy residual| [W] |",
-        "|---|---:|---:|---:|---:|---:|---:|",
-    ]
-    for row in case_summary.to_dict("records"):
-        lines.append(
-            f"| {row['case_id']} | {row['rows']} | {row['time_end_s']:.0f} | "
-            f"{row['temperature_min_c']:.3f}/{row['temperature_max_c']:.3f} | "
-            f"{row['chip_final_c']:.3f}/{row['chip_peak_c']:.3f} | "
-            f"{row['pressure_drop_max_pa']:.6f} | "
-            f"{row['energy_residual_max_abs_w']:.6f} |"
-        )
-    lines.extend(
-        [
-            "",
-            "## 放射pair",
-            "",
-            f"- maximum absolute sensor-temperature delta: `{max_radiation_delta:.4f} degC`",
-            f"- maximum absolute radiative heat rate: `{max_radiative_heat:.4f} W`",
-            "- temperature delta / conservative adjacent-mesh uncertainty: "
-            f"`{radiation_to_mesh_ratio:.3f}`",
-            "- time and all three public inputs: identical",
-            "- quantitative resolution: `screening only; "
-            "paired transient mesh refinement not performed`",
-            "",
-            "## 用途境界",
-            "",
-            "本データは本コードの非線形model-form error評価用です。strict mesh基準は未達のため、",
-            "chip設計保証、hotspot安全判定、圧力損失の最終設計値には使いません。実験templateの",
-            "時刻と入力はCAE境界から生成済みですが、温度・不確かさ欄は空であり実測値として数えません。",
-            "",
-        ]
-    )
-    return "\n".join(lines)
+    result: dict[str, object] = {
+        "schema_version": 1,
+        "strict_mesh_qualified": bool(medium["all_cases_pass"]),
+        "benchmark_mesh_qualified": bool(medium["all_cases_pass_benchmark"]),
+        "transient_time_discretization_qualified": bool(temporal and temporal["qualified"]),
+        "experiment_validated": False,
+        "max_adjacent_mesh_temperature_difference_k": float(max_mesh_uncertainty),
+        "dynamic_cases": case_summary.to_dict(orient="records"),
+        "radiation_pair": {
+            "max_abs_sensor_temperature_delta_k": float(max_radiation_delta),
+            "max_abs_radiative_heat_rate_w": float(max_radiative_heat),
+            "temperature_delta_over_adjacent_mesh_difference": float(radiation_to_mesh_ratio),
+            "time_and_public_inputs_identical": True,
+        },
+        "intended_use": "nonlinear model-form screening",
+        "excluded_uses": [
+            "chip design qualification",
+            "hotspot safety decision",
+            "final pressure-drop design value",
+        ],
+    }
+    if temporal is not None:
+        result["time_step_convergence"] = {
+            key: value for key, value in temporal.items() if key != "sensor_uncertainty"
+        }
+    return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -211,7 +262,8 @@ def summarize(root: Path) -> None:
     delta = _radiation_delta(base, radiation)
     summaries = pd.DataFrame([_case_summary(base), _case_summary(radiation)])
     steady_reference = pd.read_csv(root / "cae_reference.csv")
-    dynamic_reference = _dynamic_reference(radiation, steady_reference)
+    temporal = _temporal_evidence(root)
+    dynamic_reference = _dynamic_reference(radiation, steady_reference, temporal)
     dynamic_root = root / "dynamic"
     delta.to_csv(dynamic_root / "radiation_delta.csv", index=False, float_format="%.10g")
     summaries.to_csv(dynamic_root / "case_summary.csv", index=False, float_format="%.10g")
@@ -225,8 +277,14 @@ def summarize(root: Path) -> None:
         index=False,
         float_format="%.10g",
     )
-    (root / "quality_report.md").write_text(
-        _quality_report(root, summaries, delta), encoding="utf-8"
+    (root / "quality_summary.json").write_text(
+        json.dumps(
+            _quality_summary(root, summaries, delta, temporal),
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        ),
+        encoding="utf-8",
     )
 
 
@@ -234,7 +292,7 @@ def main() -> int:
     args = parse_args()
     root = args.data_root.resolve()
     summarize(root)
-    print(f"High-fidelity quality report: {root / 'quality_report.md'}")
+    print(f"High-fidelity quality summary: {root / 'quality_summary.json'}")
     return 0
 
 

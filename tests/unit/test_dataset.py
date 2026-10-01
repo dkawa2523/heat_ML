@@ -30,7 +30,7 @@ def test_folder_discovery_does_not_interpret_file_names(cae_project: Path, data_
     arbitrary = next(item for item in trajectories if item.case_id == "arbitrary-cae-export")
     frame = pd.read_csv(renamed)
     np.testing.assert_allclose(
-        arbitrary.commands[0], frame.loc[0, ["brine", "heater", "plasma"]].to_numpy(float)
+        arbitrary.commands[0], frame[["brine", "heater", "plasma"]].iloc[0].to_numpy(float)
     )
 
 

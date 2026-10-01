@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-14T21:55:47.897045+00:00",
+  "generated_at": "2026-09-30T00:48:22.818337+00:00",
   "objective": "External open-loop evaluation of the flow-dependent three-node thermal network against local-mesh conjugate-flow CAE, with radiation as a paired model gap.",
   "data_quality": {
     "dynamic_reference_matches_hv02": true,
@@ -214,7 +214,9 @@
         "mae_k": 0.0338537946880777,
         "max_abs_error_k": 0.11218511468921832,
         "prior_rmse_k": 0.9769315839109348,
+        "persistence_rmse_k": 10.040245347020264,
         "rmse_improvement_percent": 95.12217766052468,
+        "rmse_improvement_vs_persistence_percent": 99.52538025322718,
         "rms_error_over_mesh_difference": 0.09617430080991968,
         "max_abs_error_over_mesh_difference": 0.22608458551782867,
         "fraction_abs_error_within_mesh_difference": 1.0,
@@ -230,7 +232,9 @@
         "mae_k": 0.09925211002959611,
         "max_abs_error_k": 0.3439540198743103,
         "prior_rmse_k": 0.8009057774845975,
+        "persistence_rmse_k": 9.866199465496237,
         "rmse_improvement_percent": 82.07226767309383,
+        "rmse_improvement_vs_persistence_percent": 98.54468537271822,
         "rms_error_over_mesh_difference": 0.29057842885914364,
         "max_abs_error_over_mesh_difference": 0.6987524603416061,
         "fraction_abs_error_within_mesh_difference": 1.0,
@@ -324,7 +328,26 @@
     "worst_case": "HV02_composite_radiation",
     "worst_case_rmse_k": 0.14358424397816533,
     "mean_prior_rmse_k": 0.8889186806977661,
-    "model_adequacy_status": "not_resolved_beyond_mesh_difference"
+    "mean_persistence_rmse_k": 9.95322240625825,
+    "model_adequacy_status": "not_resolved_beyond_mesh_difference",
+    "residual_diagnostics": {
+      "sign_convention": "predicted_minus_truth",
+      "forecast_origin_excluded": true,
+      "quantities": [
+        "time",
+        "truth_temperature",
+        "chip_power",
+        "coolant_temperature",
+        "inlet_air_velocity",
+        "pressure_drop",
+        "radiative_heat_rate"
+      ],
+      "interpretation": "descriptive screening only; correlation does not identify a missing law"
+    },
+    "prediction_figures": {
+      "timeseries": "figures/prediction_timeseries.png",
+      "parity": "figures/prediction_parity.png"
+    }
   },
   "radiation_pair": {
     "sensors": [

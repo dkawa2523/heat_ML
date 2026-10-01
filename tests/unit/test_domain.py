@@ -177,6 +177,21 @@ def test_actuator_tau_is_learned_only_when_a_positive_prior_exists() -> None:
     assert ActuatorSpec("lagged", 1.0).learnable is True
 
 
+def test_actuator_metadata_is_optional_and_does_not_change_physics() -> None:
+    actuator = ActuatorSpec(
+        "power",
+        tau=0.0,
+        learnable=False,
+        unit=" W ",
+        role=" heat_input ",
+    )
+
+    assert actuator.unit == "W"
+    assert actuator.role == "heat_input"
+    with pytest.raises(ValueError, match="unit must be a non-empty string"):
+        ActuatorSpec("bad", unit=" ")
+
+
 def test_system_rejects_duplicate_source_names() -> None:
     actuator = ActuatorSpec("power", 0.0, learnable=False)
     source = SourceSpec("heat", (1.0,), PositivePartLawSpec("power", 1.0))

@@ -170,7 +170,6 @@ data/nonlinear/
   eval/model_gap/         5 radiation trajectories
   qa_summary.csv          case-level QA evidence
   radiation_pairs.csv     paired radiation effect summary
-  quality_report.md       generated datasetの品質判定と用途境界
 work/nonlinear/           git管理外のschedule、raw table、solver log、確認用mph
 ```
 

@@ -10,7 +10,7 @@ containers =
 layers =
     cli
     workflows
-    artifact | learning | inference
+    analysis | artifact | learning | inference
     engine | io
     domain | config
 exhaustive = true
@@ -35,3 +35,12 @@ source_modules =
 forbidden_modules =
     pandas
     yaml
+
+[importlinter:contract:workflow-independence]
+name = product workflows remain independently callable
+type = independence
+modules =
+    celltemp.workflows.analysis
+    celltemp.workflows.forecast
+    celltemp.workflows.monitor
+    celltemp.workflows.train

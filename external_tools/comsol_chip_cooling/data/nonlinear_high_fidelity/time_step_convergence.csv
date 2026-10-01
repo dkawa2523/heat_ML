@@ -1,0 +1,9 @@
+case_id,mesh_profile,coarse_max_time_step_s,fine_max_time_step_s,quantity,unit,comparison_metric,max_abs_difference,fine_reference_peak_abs,observed_value,acceptance_limit,passed
+HV02_composite_radiation,local-medium,2,1,chip,K,max_abs_difference,0.08149587312,44.702695,0.08149587312,0.05,False
+HV02_composite_radiation,local-medium,2,1,sink_base,K,max_abs_difference,0.08131728918,44.4089724,0.08131728918,0.05,False
+HV02_composite_radiation,local-medium,2,1,fins,K,max_abs_difference,0.08038967964,43.61973724,0.08038967964,0.05,False
+HV02_composite_radiation,local-medium,2,1,chip_max,K,max_abs_difference,0.08163562593,44.82937364,0.08163562593,0.1,True
+HV02_composite_radiation,local-medium,2,1,fins_max,K,max_abs_difference,0.08148187676,44.50890448,0.08148187676,0.1,True
+HV02_composite_radiation,local-medium,2,1,outlet_air_temperature,K,max_abs_difference,0.032760901,38.23919442,0.032760901,0.05,True
+HV02_composite_radiation,local-medium,2,1,pressure_drop,Pa,max_abs_difference_over_fine_peak,2.446619996e-06,0.01088121704,0.0002248480099,0.005,True
+HV02_composite_radiation,local-medium,2,1,radiative_heat_rate,W,max_abs_difference_over_fine_peak,0.003415864377,0.3981236999,0.008579907144,0.005,False

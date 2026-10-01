@@ -115,6 +115,8 @@ class ActuatorSpec:
     name: str
     tau: float = 0.0
     learnable: bool | None = None
+    unit: str | None = None
+    role: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -127,6 +129,13 @@ class ActuatorSpec:
             raise TypeError("actuator learnable must be boolean")
         if self.learnable and self.tau == 0.0:
             raise ValueError("a learnable actuator tau must have a positive prior")
+        for field_name in ("unit", "role"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"actuator {field_name} must be a non-empty string")
+            object.__setattr__(self, field_name, value.strip())
 
 
 @dataclass(frozen=True)
@@ -321,6 +330,14 @@ class ThermalSystemSpec:
     @property
     def control_names(self) -> tuple[str, ...]:
         return tuple(actuator.name for actuator in self.actuators)
+
+    @property
+    def control_units(self) -> tuple[str | None, ...]:
+        return tuple(actuator.unit for actuator in self.actuators)
+
+    @property
+    def control_roles(self) -> tuple[str | None, ...]:
+        return tuple(actuator.role for actuator in self.actuators)
 
     @property
     def observation_matrix(self) -> np.ndarray:

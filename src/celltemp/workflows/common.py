@@ -7,7 +7,7 @@ import json
 import shutil
 import tempfile
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,7 +89,7 @@ def output_target(cfg: dict, root: Path, *, section: str | None = None) -> tuple
 
 
 @contextmanager
-def staged_output_directory(target: Path, *, overwrite: bool) -> Iterator[Path]:
+def staged_output_directory(target: Path, *, overwrite: bool) -> Generator[Path, None, None]:
     """Write a complete result beside the target and replace it only on success."""
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{target.name}-", dir=target.parent))

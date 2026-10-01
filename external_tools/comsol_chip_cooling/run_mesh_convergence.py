@@ -9,10 +9,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from comsol_runtime import ComsolRuntime, select_comsol
-from nonlinear_cases import NonlinearCase, mesh_convergence_cases
-from nonlinear_dataset import truth_frame, write_csv
-from run_nonlinear import (
+
+from .comsol_runtime import ComsolRuntime, select_comsol
+from .dataset_support import write_csv_atomic
+from .nonlinear_cases import NonlinearCase, mesh_convergence_cases
+from .nonlinear_dataset import truth_frame
+from .run_nonlinear import (
     JAVA_SOURCE,
     MESH_PROFILES,
     _case_paths,
@@ -207,32 +209,50 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    profiles = args.profiles or list(DEFAULT_PROFILES)
+def _select_cases(case_ids: list[str] | None) -> list[NonlinearCase]:
     cases = mesh_convergence_cases()
-    if args.case_ids:
-        requested = set(args.case_ids)
+    if case_ids:
+        requested = set(case_ids)
         cases = [case for case in cases if case.case_id in requested]
         missing = requested - {case.case_id for case in cases}
         if missing:
             raise ValueError(f"unknown mesh-convergence case IDs: {sorted(missing)}")
+    return cases
 
-    data_root = args.data_root.resolve()
+
+def _prepare_runtime(
+    *,
+    comsol_root: str | None,
+    cases: list[NonlinearCase],
+    profiles: list[str],
+    data_root: Path,
+    reuse_raw: bool,
+    overwrite_mesh: bool,
+) -> ComsolRuntime | None:
     mesh_available = all((data_root / "mesh" / f"{profile}.csv").is_file() for profile in profiles)
-    raw_available = args.reuse_raw and all(
-        raw_tables_available(cases, profile) for profile in profiles
-    )
-    runtime: ComsolRuntime | None = None
-    if args.overwrite_mesh or not mesh_available or not raw_available:
-        runtime = select_comsol(args.comsol_root)
-        runtime.compile(JAVA_SOURCE)
-    else:
+    raw_available = reuse_raw and all(raw_tables_available(cases, profile) for profile in profiles)
+    if not (overwrite_mesh or not mesh_available or not raw_available):
         print("Reusing existing mesh evidence and verified raw COMSOL tables", flush=True)
+        return None
+
+    runtime = select_comsol(comsol_root)
+    runtime.compile(JAVA_SOURCE)
+    return runtime
+
+
+def _collect_mesh_qoi(
+    *,
+    cases: list[NonlinearCase],
+    profiles: list[str],
+    data_root: Path,
+    runtime: ComsolRuntime | None,
+    reuse_raw: bool,
+    overwrite_mesh: bool,
+) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for profile in profiles:
         mesh_path = data_root / "mesh" / f"{profile}.csv"
-        if args.overwrite_mesh or not mesh_path.is_file():
+        if overwrite_mesh or not mesh_path.is_file():
             if runtime is None:
                 raise RuntimeError("COMSOL runtime is required to build missing mesh evidence")
             inspect_mesh(
@@ -246,23 +266,57 @@ def main() -> int:
                 case,
                 runtime=runtime,
                 mesh_profile=profile,
-                reuse_raw=args.reuse_raw,
+                reuse_raw=reuse_raw,
             )
             truth = truth_frame(raw, case, mesh_profile=profile)
             rows.append(_qoi_row(truth, case, profile))
 
     qoi = pd.DataFrame(rows)
     qoi["_rank"] = qoi["mesh_profile"].map(PROFILE_RANK)
-    qoi = qoi.sort_values(["case_id", "_rank"]).drop(columns="_rank")
+    return qoi.sort_values(["case_id", "_rank"]).drop(columns="_rank")
+
+
+def _publish_evidence(
+    qoi: pd.DataFrame,
+    *,
+    cases: list[NonlinearCase],
+    profiles: list[str],
+    data_root: Path,
+) -> None:
     comparisons = _comparison_rows(qoi)
     acceptance = _acceptance(comparisons, profiles)
-    data_root.mkdir(parents=True, exist_ok=True)
-    write_csv(qoi, data_root / "mesh_convergence.csv")
-    write_csv(comparisons, data_root / "mesh_convergence_deltas.csv")
-    write_csv(acceptance, data_root / "mesh_acceptance.csv")
     reference = _cae_reference(qoi, comparisons, cases)
+
+    data_root.mkdir(parents=True, exist_ok=True)
+    write_csv_atomic(qoi, data_root / "mesh_convergence.csv")
+    write_csv_atomic(comparisons, data_root / "mesh_convergence_deltas.csv")
+    write_csv_atomic(acceptance, data_root / "mesh_acceptance.csv")
     if reference is not None:
-        write_csv(reference, data_root / "cae_reference.csv")
+        write_csv_atomic(reference, data_root / "cae_reference.csv")
+
+
+def main() -> int:
+    args = parse_args()
+    profiles = args.profiles or list(DEFAULT_PROFILES)
+    cases = _select_cases(args.case_ids)
+    data_root = args.data_root.resolve()
+    runtime = _prepare_runtime(
+        comsol_root=args.comsol_root,
+        cases=cases,
+        profiles=profiles,
+        data_root=data_root,
+        reuse_raw=args.reuse_raw,
+        overwrite_mesh=args.overwrite_mesh,
+    )
+    qoi = _collect_mesh_qoi(
+        cases=cases,
+        profiles=profiles,
+        data_root=data_root,
+        runtime=runtime,
+        reuse_raw=args.reuse_raw,
+        overwrite_mesh=args.overwrite_mesh,
+    )
+    _publish_evidence(qoi, cases=cases, profiles=profiles, data_root=data_root)
     print(f"Mesh convergence evidence: {data_root}")
     return 0
 

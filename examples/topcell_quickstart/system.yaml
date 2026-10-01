@@ -5,9 +5,9 @@ nodes:
   - {name: middle, heat_capacity: 1.35}
   - {name: edge, heat_capacity: 1.50}
 actuators:
-  - {name: brine, tau: 3.0}
-  - {name: heater, tau: 5.0}
-  - {name: plasma, tau: 1.0}
+  - {name: brine, tau: 3.0, unit: "1", role: cooling_command}
+  - {name: heater, tau: 5.0, unit: "1", role: heat_input}
+  - {name: plasma, tau: 1.0, unit: "1", role: heat_input}
 edges:
   - {nodes: [CP, Center], conductance: {type: constant, value: 0.05625}}
   - {nodes: [Center, middle], conductance: {type: constant, value: 0.08182}}

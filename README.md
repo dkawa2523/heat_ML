@@ -1,6 +1,6 @@
 # thermal-cell-practical
 
-少数の温度センサーと運転指令から、熱系を同定・予測・監視するための汎用的な
+少数の温度センサーと運転指令から、熱時系列を解析し、熱系を同定・予測・監視するための
 集中定数熱基盤です。物理単位のまま動く熱ネットワークモデルを一つだけ持ち、学習、
 open-loop forecast、実測monitorが同じ状態方程式を使用します。
 
@@ -8,10 +8,34 @@ open-loop forecast、実測monitorが同じ状態方程式を使用します。
 
 - 複数のCAEまたは実験過渡データから、熱伝導、熱源、境界熱伝達、アクチュエータ
   応答遅れを同定する。
+- 各caseの温度・操作量波形、peak、応答時間、昇温/冷却速度、sensor間温度差を表と図へまとめる。
 - 未知運転条件・時間変化レシピに対して、安定した温度軌道を予測する。
 - 実測中はKalman observerで内部温度、既知熱源経路上の未知発熱、識別可能なセンサーバイアスを
   因果的に推定する。
 - センサー数と熱状態数を分離し、欠測、隠れノード、可変時間刻みに対応する。
+
+## 最短利用経路
+
+Python 3.10以上と`uv`を用意し、repository rootで次を順に実行します。
+
+```powershell
+uv sync --extra dev --locked
+uv run --locked --with-editable . celltemp analyze --config examples/topcell_quickstart/config.yaml
+uv run --locked --with-editable . celltemp train --config examples/topcell_quickstart/config.yaml
+uv run --locked --with-editable . celltemp forecast --config examples/topcell_quickstart/config.yaml
+```
+
+最初に読む成果物を次へ固定します。その他のsplit、履歴、sensor別表、manifestは詳細確認と再現用です。
+
+| 処理 | 最初に読む成果物 | 判断できること |
+|---|---|---|
+| analyze | `work/outputs/analysis/summary.json`、`case_metrics.csv`、`figures/<case_id>.png` | peak、応答、温度均一性、入力波形 |
+| train | `work/outputs/runs/thermal_network_demo/metrics_summary.json`、`model_comparison.csv`、`figures/test_prediction_timeseries.png`、`figures/test_prediction_parity.png`、`thermal_paths.csv` | 保持test波形、真値–予測一致、baseline優位性、主要熱経路 |
+| forecast | `work/outputs/forecast/forecast_summary.csv`、`figures/forecast_<case_id>.png`、`energy_balance.csv` | 未知recipeの温度・状態区間・入力・span・熱収支・適用範囲 |
+
+ここでの相対pathは`examples/topcell_quickstart/`基準です。quickstartは時間変化する入熱・冷却を含む
+操作例であり、特定solverや実機の妥当化結果ではありません。逐次観測同化が必要な設備だけ
+`monitor`を追加します。基本の解析・同定・予測にCOMSOL、notebook、外部report builderは不要です。
 
 ## モデル
 
@@ -37,6 +61,7 @@ measurement = H T + sensor_bias + noise
   source thresholdを横切る区間は交差時刻で分割し、ゼロ固有値を持つ系でも逆行列を使いません。
 - 可変`dt`を各区間で直接使用します。固定刻みへのresampleは不要です。
 - 指令値は明示的なactuator stateを通るため、学習と推論で同じ遅れを使います。
+- 予測状態からedge、source、boundary、蓄熱率をWで分解し、状態方程式との熱収支残差を確認できます。
 - monitorの未知発熱は既存sourceの空間分布を通って温度へ伝播し、sensor biasとは
   別状態として推定されます。sourceがない系だけ各nodeの単位基底を使用します。
 - sensor biasは、基準を指定しなければ零平均、`monitor.observer.bias_reference`へ校正済みsensorを
@@ -45,20 +70,28 @@ measurement = H T + sensor_bias + noise
   単一sensor faultが物理温度を瞬時に引っ張る影響を抑えます。
 
 詳細は [product_architecture.md](docs/product_architecture.md)、単位とweightの規約は
-[units_and_conventions.md](docs/units_and_conventions.md) を参照してください。
+[units_and_conventions.md](docs/units_and_conventions.md)、目的・完成条件・実装順序は
+[foundation_refactoring_plan.md](docs/foundation_refactoring_plan.md)、変更種類ごとの編集場所は
+[extending.md](docs/extending.md) を参照してください。各手法の入力特徴、RC方程式、学習対象、強み・弱点、
+物理RCと評価済みMLP / 1D-CNN / TCN / GRU / LSTMの違いは
+[model_methods_explained.md](docs/model_methods_explained.md) に日本語で図解しています。比較modelは現時点では
+benchmark専用で、通常のproduct APIへは追加していません。数値・波形・R²は
+[neural_model_comparison](docs/neural_model_comparison/)を参照してください。内部train / validation / held-out testと、
+学習に未投入の外部caseの境界は同directoryの`evaluation_boundaries.csv`と先頭図へ固定しています。
 
 ## 構成
 
 ```text
 src/celltemp/
+  analysis/     応答・均一性・誤差指標、熱経路・mode、適格stepのZth解析
   domain/       Trajectory、ThermalSystemSpec
   io/           CSV/DataFrame変換、system YAML読込
   engine/       熱ネットワーク、安定積分、Kalman observer
   learning/     軌道分割、case-balanced軌道学習
-  workflows/    train、forecast、monitor
+  workflows/    analyze、train、forecast、monitor
   artifact.py   model.pt + system.yaml + metadata.json
-  inference.py  状態初期化 / forecast / monitor API
-  cli.py        3つの公開コマンド
+  inference/    状態初期化、observer設定、forecast、monitor API
+  cli.py        4つの公開コマンド
 examples/topcell_quickstart/
   config.yaml   学習・予測・監視で共有する設定
   system.yaml   サンプル熱系
@@ -67,10 +100,14 @@ benchmarks/topcell/
   run.py        生成・学習・外部評価を一括実行
   config.yaml   benchmark唯一の設定
   work/         再生成可能な入力と出力（Git管理外）
+benchmarks/neural_comparison/
+  run.py        RCと5種類のニューラル時系列modelを同条件比較
+  README.md     学習条件、主要結果、採用判断
 external_tools/comsol_chip_cooling/
   docs/         CAE問題設定と検証境界
   data/         公開可能な正本データと評価結果
-  reports/      正本データから再構築する技術レポート入力
+  run*.py       COMSOL生成・変換entry point
+  evaluate*.py  本体から独立した評価entry point
 docs/           モデル、単位、品質、拡張方針
 tests/          単体・property・workflow integration試験
 ```
@@ -99,9 +136,10 @@ time,tc_core,tc_shell,heater,coolant
 ```
 
 各trajectory CSVは`time + sensors + controls`を持つ自己完結形式です。定数commandも同じ値を
-各行へ記録します。CSV単独で再現でき、別の索引との不整合がありません。3つのworkflowは
+各行へ記録します。CSV単独で再現でき、別の索引との不整合がありません。4つのworkflowは
 同じ列規約を用途に応じて次のように使います。
 
+- analyze: 実測またはCAE温度とcommandから、case別の応答・均一性指標と波形図を作る。
 - train: 学習に使うsensor温度を各時刻へ記録する。
 - forecast: 先頭から連続する観測履歴と全行のcommandを記録し、履歴後のsensor温度を空欄にする。
   先頭1行だけを観測する従来形は最小の履歴としてそのまま使える。
@@ -143,10 +181,11 @@ nodes:
   - {name: wafer, heat_capacity: 2.0}
   - {name: chuck, heat_capacity: 5.0}
 actuators:
-  - {name: heater, tau: 3.0}
-  - {name: clamp_pressure, tau: 0.0, learnable: false}
-  - {name: coolant_temperature, tau: 0.0, learnable: false}
-  - {name: coolant_flow, tau: 0.0, learnable: false}
+  - {name: heater, tau: 3.0, unit: W, role: heat_input}
+  - {name: clamp_pressure, tau: 0.0, learnable: false, unit: kPa, role: heat_transfer}
+  - {name: coolant_temperature, tau: 0.0, learnable: false,
+     unit: degC, role: reservoir_temperature}
+  - {name: coolant_flow, tau: 0.0, learnable: false, unit: L/min, role: heat_transfer}
 edges:
   - nodes: [wafer, chuck]
     conductance:
@@ -189,42 +228,56 @@ sensorが面積平均や体積平均を表す場合は、単一`node`の代わ�
 `tau`が正のactuatorは`learnable`省略時に学習対象、`tau: 0`は固定の直接入力です。ゼロを
 学習priorとして指定することはできません。未知key、文字列化したboolean、空のheat pathは
 入力誤記として読込時に拒否します。
+`unit`と`role`は任意の表示metadataです。値の変換や計算式の分岐には使わないため、CSVは記載した
+`unit`の値をそのまま保持し、物理lawとの対応は明示的に定義します。
 
-## 実行
-
-以下はWindows PowerShellの例です。macOS/Linuxでは`py -3`を`python3`へ置き換えます。
-Python 3.10以上の環境へ依存関係をインストールします。再現可能な開発・benchmark環境には
-repositoryの`uv.lock`を使用します。
-
-```powershell
-uv sync --extra dev --locked
-```
+## 設定と詳細実行
 
 通常のPython packageとしては`py -3 -m pip install -e ".[dev]"`でも導入できます。`uv.lock`は
 ローカル・CAE benchmarkの固定環境、CIのpip installは宣言した依存範囲と対応Python版の互換性を
 検出する役割です。配布名は`thermal-cell-practical`、import packageとCLI名は`celltemp`です。
 
-quickstartは1つの設定を3 workflowで共有します。相対パスは常にその設定ファイルのある
+quickstartは主経路のanalyze・train・forecastと、任意のmonitorで1つの設定を共有します。相対パスは常にその設定ファイルのある
 ディレクトリから解決され、実行時のカレントディレクトリには依存しません。相対`output_dir`は
 そのproject内に置き、外部storageへ出す場合だけ絶対パスで明示します。完了した結果は既存結果を
 backupしてから置換され、処理失敗時は直前の結果を保持します。
 
-学習:
+`analyze`は学習前でも実行できます。`analysis`設定を省略した場合は`data.directory`を読み、
+`project.output_dir/project.run_name/analysis`へcase/sensor/control指標、uniformity時系列、
+case別波形図を保存します。入力先や出力先を分ける場合だけ`analysis.input_dir`と
+`analysis.output_dir`を設定します。
 
-```powershell
-py -3 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml
+吸収熱量が既知の単独step試験だけ、任意の`thermal_impedance`を追加できます。commandの単位や
+ファイル名から熱量を推測しないため、`heat_step_w`と有限transition区間を明示します。基準区間の
+drift/noise、他入力の不変性、前後各5点以上を満たしたsensorだけ
+`thermal_impedance.csv`へ`Zth(t)=DeltaT/P`を保存します。終端Zthの傾きも明示した上限を満たした場合だけ、
+`thermal_impedance_qualification.csv`の`effective_rth_k_per_w`を有効にします。`make_plots: true`では、
+適格caseをsensor別に重ねた対数時間軸の`figures/thermal_impedance.png`も保存します。
+
+```yaml
+analysis:
+  thermal_impedance:
+    baseline_window_s: 40.0
+    terminal_window_s: 60.0
+    max_baseline_drift_k_per_s: 0.00001
+    max_baseline_std_k: 0.001
+    max_terminal_zth_drift_k_per_w_s: 0.001
+    steps:
+      power_step_8w:
+        control: absorbed_power_command
+        transition_start_s: 60.0
+        transition_end_s: 64.0
+        heat_step_w: 8.0
 ```
 
-予測:
+ここで`heat_step_w`は電源指令ではなく、校正またはCAE条件から既知の対象への吸収熱変化です。終端が
+まだ上昇中なら過渡Zthは残りますが、定常Rthは空欄になります。通常レシピ、複合入力、rampへこの設定を
+付けないでください。
+
+任意のオンライン監視（予測だけなら不要）:
 
 ```powershell
-py -3 -m celltemp.cli forecast --config examples/topcell_quickstart/config.yaml
-```
-
-監視:
-
-```powershell
-py -3 -m celltemp.cli monitor --config examples/topcell_quickstart/config.yaml
+uv run --locked --with-editable . celltemp monitor --config examples/topcell_quickstart/config.yaml
 ```
 
 校正済みsensorを絶対biasの基準にする場合だけ、monitor設定へ名前を追加します。そのsensorには
@@ -254,10 +307,22 @@ forecast出力は温度平均に加え、履歴末端の状態共分散と設定
 `forecast_coverage.csv`には、将来command、予測sensor温度、時間刻み、予測時間、control slewが
 artifactの学習範囲内かも保存され、範囲外caseはCLIにも警告されます。
 
+各予測CSVは`command_*`、`effective_*`、予測温度、sensor平均・span・標準偏差を同じ時刻軸で持ちます。
+case別の`figures/forecast_<case_id>.png`は、このCSVを数値の正本として、予測sensor温度と95%状態区間、
+時間変化するcommand、sensor spanを3段で示す主要予測図です。将来truthや誤差は通常forecastには
+存在しないため描きません。
+さらに`forecast_case_metrics.csv`、`forecast_sensor_metrics.csv`、
+`forecast_control_metrics.csv`へ、peakと時刻、10–90%応答、整定、昇温・冷却速度、均一性、入力積分と
+slewを自動保存します。`energy_balance.csv`はedgeの向き別熱流、source入熱、boundary入熱または冷却、
+node蓄熱率、収支残差をWで保存します。同じ表からcase別の`figures/energy_balance_<case_id>.png`を
+生成し、source・boundaryの符号付き熱流、外部からの正味入熱と蓄熱率、数値残差を3段で確認できます。
+boundaryの負値はnodeから外へ出る熱です。元CAE/実験データ自体の波形図には独立した
+`celltemp analyze`を使います。
+
 すべての設定は`key=value`で上書きできます。
 
 ```powershell
-py -3 -m celltemp.cli train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
+uv run --locked --with-editable . celltemp train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
 ```
 
 未知の設定名は`config.yaml`と`system.yaml`の両方でtypoとして拒否されます。
@@ -307,41 +372,63 @@ artifact/
 metrics_by_case.csv     case-balanced train/val/test評価
 metrics_by_sensor.csv   センサー別評価
 metrics_summary.json    平均・中央値・worst-case
+model_comparison.csv    保持caseのfitted RC・prior RC・persistence因果比較
+figures/
+  test_prediction_timeseries.png  worst test caseの真値・因果予測波形
+  test_prediction_parity.png      全test予測の真値–予測散布図とR²
+thermal_paths.csv       代表学習入力でのnode C、path G/R、source heat
+thermal_modes.csv       代表学習入力でのpole、時定数、支配node
 training_history.csv
 split.csv
 test_predictions/
 config.snapshot.yaml      監査用snapshot。元の基準directoryはartifact metadataに保存
 ```
 
+`thermal_paths.csv`と`thermal_modes.csv`のoperating pointは、学習commandの成分別中央値に最も近い
+実在の学習行です。入力依存係数を、学習範囲と無関係な任意値で評価しないための選び方であり、選択値と
+入力単位はartifact metadataにも保存します。
+
 splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温度だけ異なる軌道は分離しません。
 学習は各epochで全caseを一度ずつ扱い、caseごとの全軌道Huber lossを均等に平均します。
 長大ログで計算量を制限するときだけ`training.horizon`へ区間数を指定し、観測可能な開始点から
 window rolloutを行います。model選択は完全なvalidation軌道を先頭観測だけから予測したcase平均
 `causal_rmse`です。`mean_case_conditional_rmse`も併記し、係数fitと初期化感度を分けて確認できます。
+保持caseがある場合は、同じ先頭観測・時刻境界でfitted RC、未学習engineering prior RC、最後の観測を
+保持するpersistenceを`model_comparison.csv`へ並べます。比較は先頭観測行を誤差から除き、worst sensor、
+peak温度、記録内部に真値peakがあるsensorだけのpeak時刻を示します。`test_prediction_timeseries.png`は
+fitted RCのworst test caseを全sensorで真値と比較し、`test_prediction_parity.png`は先頭観測行を除く全test
+予測を真値と比較してpooled R²を示します。R²だけで採否を決めず、過渡波形と`model_comparison.csv`の
+case別誤差を併読します。
 
-## TopCell外部benchmark
+## Benchmark evidence
 
 学習用228軌道と、学習探索先に含まれない外部forecast 12ケース・monitor 5ケースを分離して
-います。ケースの目的、合否条件、最新の基準結果は
-[TopCell benchmark](benchmarks/topcell/README.md)に集約しています。
+います。TopCell、線形COMSOL、非線形COMSOL、高忠実度CAEを混同しない現在値と利用限界は
+[problem setup figures](docs/benchmark_problem_setups.md)で入熱・冷却・計測位置と使用モデルを確認し、
+[benchmark evidence](docs/benchmark_evidence.md)で数値結果と利用限界を確認してください。TopCell固有のケースと合否条件は
+[TopCell benchmark](benchmarks/topcell/README.md)を参照してください。
 
 全benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、独立評価まで実行します。
 
 ```powershell
-py -3 benchmarks/topcell/run.py
+uv run --locked python -m benchmarks.topcell.run
 ```
 
 ## 検証
 
 ```powershell
-py -3 -m pytest -q
-py -3 quality.py fast
-py -3 quality.py pr
+uv run --locked pytest -q
+uv run --locked python quality.py fast
+uv run --locked python quality.py architecture
+uv run --locked python quality.py pr
 ```
+
+`architecture`はRuff、Pyrefly、import-linter、Radonをまとめて実行します。各ツールの責務と、
+外部CAE scriptを段階的に型検査へ移す方針は`docs/quality.md`を参照してください。
 
 単体試験はエネルギー保存、受動系の上下限、可変刻みsemigroup、actuator解析解、
 勾配、欠測observer、artifact round-tripを検証します。integration試験は
-`train -> forecast -> monitor`を公開APIで通し、別名sensorから未観測nodeを持つartifactの
+`analyze -> train -> forecast -> monitor`を公開APIで通し、別名sensorから未観測nodeを持つartifactの
 forecast、観測履歴からのhidden state推定、およびforecast境界後の実測を混入した入力を
 既存出力を壊さず拒否できることも確認します。
 

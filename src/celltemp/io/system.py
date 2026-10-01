@@ -20,6 +20,7 @@ from celltemp.domain import (
     SourceSpec,
     ThermalSystemSpec,
 )
+from celltemp.io._sensor_yaml import sensor_layout_from_mapping, sensor_layout_to_mapping
 
 
 def _mapping(value: object, owner: str) -> Mapping[str, Any]:
@@ -38,6 +39,14 @@ def _boolean(value: object, owner: str) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"{owner} must be boolean")
     return value
+
+
+def _optional_text(value: object, owner: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{owner} must be a non-empty string")
+    return value.strip()
 
 
 def _node_weights(
@@ -120,12 +129,14 @@ def _scalar_law(value: object, owner: str) -> ScalarLawSpec:
 
 def _actuator(value: object) -> ActuatorSpec:
     values = _mapping(value, "actuator")
-    _reject_unknown(values, {"name", "tau", "learnable"}, "actuator")
+    _reject_unknown(values, {"name", "tau", "learnable", "unit", "role"}, "actuator")
     learnable = values.get("learnable")
     return ActuatorSpec(
         name=str(values["name"]),
         tau=float(values.get("tau", 0.0)),
         learnable=(None if learnable is None else _boolean(learnable, "actuator.learnable")),
+        unit=_optional_text(values.get("unit"), "actuator.unit"),
+        role=_optional_text(values.get("role"), "actuator.role"),
     )
 
 
@@ -169,56 +180,6 @@ def _boundary(value: object, node_names: tuple[str, ...]) -> BoundarySpec:
     )
 
 
-def _sensor_item(
-    value: object,
-    node_names: tuple[str, ...],
-) -> tuple[str, str | None, tuple[float, ...] | None]:
-    if not isinstance(value, Mapping):
-        name = str(value)
-        return name, name, None
-    _reject_unknown(value, {"name", "node", "node_weights"}, "sensor")
-    name = str(value["name"])
-    if "node" in value and "node_weights" in value:
-        raise ValueError("sensor must use either node or node_weights")
-    if "node_weights" in value:
-        return name, None, _node_weights(value["node_weights"], node_names)
-    return name, str(value.get("node", name)), None
-
-
-def _sensor_layout(
-    values: object,
-    node_names: tuple[str, ...],
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[tuple[float, ...], ...]]:
-    if not values:
-        return (), (), ()
-    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-        raise ValueError("sensors must be a sequence")
-
-    names: list[str] = []
-    nodes: list[str | None] = []
-    weights: list[tuple[float, ...] | None] = []
-    for value in values:
-        name, node, weight = _sensor_item(value, node_names)
-        names.append(name)
-        nodes.append(node)
-        weights.append(weight)
-    if not any(weight is not None for weight in weights):
-        return tuple(names), tuple(str(node) for node in nodes), ()
-
-    node_index = {name: index for index, name in enumerate(node_names)}
-    dense_weights: list[tuple[float, ...]] = []
-    for node, weight in zip(nodes, weights, strict=True):
-        if weight is not None:
-            dense_weights.append(weight)
-            continue
-        row = [0.0] * len(node_names)
-        if node not in node_index:
-            raise ValueError(f"sensor mapping refers to unknown node {node}")
-        row[node_index[str(node)]] = 1.0
-        dense_weights.append(tuple(row))
-    return tuple(names), (), tuple(dense_weights)
-
-
 def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
     """Build a validated system definition from a compact mapping.
 
@@ -246,7 +207,9 @@ def system_spec_from_mapping(data: Mapping[str, Any]) -> ThermalSystemSpec:
     edges = tuple(_edge(item) for item in data.get("edges", ()))
     sources = tuple(_source(item, node_names) for item in data.get("sources", ()))
     boundaries = tuple(_boundary(item, node_names) for item in data.get("boundaries", ()))
-    sensor_names, sensor_nodes, sensor_weights = _sensor_layout(data.get("sensors", ()), node_names)
+    sensor_names, sensor_nodes, sensor_weights = sensor_layout_from_mapping(
+        data.get("sensors", ()), node_names
+    )
 
     return ThermalSystemSpec(
         node_names=node_names,
@@ -301,7 +264,13 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
             for name, capacity in zip(spec.node_names, spec.heat_capacity)
         ],
         "actuators": [
-            {"name": item.name, "tau": item.tau, "learnable": bool(item.learnable)}
+            {
+                "name": item.name,
+                "tau": item.tau,
+                "learnable": bool(item.learnable),
+                **({"unit": item.unit} if item.unit is not None else {}),
+                **({"role": item.role} if item.role is not None else {}),
+            }
             for item in spec.actuators
         ],
         "edges": [
@@ -332,17 +301,7 @@ def system_spec_to_mapping(spec: ThermalSystemSpec) -> dict[str, Any]:
             }
             for item in spec.boundaries
         ],
-        "sensors": (
-            [
-                {"name": name, "node_weights": weights(row)}
-                for name, row in zip(spec.sensor_names, spec.sensor_weights, strict=True)
-            ]
-            if spec.sensor_weights
-            else [
-                {"name": name, "node": node}
-                for name, node in zip(spec.sensor_names, spec.sensor_nodes, strict=True)
-            ]
-        ),
+        "sensors": sensor_layout_to_mapping(spec),
     }
 
 

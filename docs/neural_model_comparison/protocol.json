@@ -1,0 +1,43 @@
+{
+  "seed": 42,
+  "models": [
+    "mlp",
+    "cnn1d",
+    "tcn",
+    "gru",
+    "lstm"
+  ],
+  "history_steps": 8,
+  "target": "standardized temperature rate dT/dt",
+  "training_loss": "case-balanced one-step Huber",
+  "model_selection": "mean complete causal open-loop validation RMSE",
+  "internal_definition": "same configured data directory, whole-case train/validation/test split",
+  "internal_forecast": "time-index 0 temperature only, then commands and dt; future truth absent; index 0 excluded from metrics",
+  "primary_internal_result": "held-out test; unused by fitting and model selection",
+  "external_definition": "separate evaluation directories never passed to splitting, fitting, or model selection",
+  "external_forecast": "observed prefix then commands and dt only",
+  "observation_noise_screening": {
+    "scope": "fixed clean-trained models; Gaussian noise added only to causally observed temperature inputs; scored against clean truth",
+    "boundaries": [
+      "internal_test",
+      "external_core"
+    ],
+    "noise_std_k": [
+      0.0,
+      0.15,
+      0.5
+    ],
+    "positive_noise_repeats": 5,
+    "excluded_uncertainty": [
+      "training-label noise",
+      "command uncertainty",
+      "reference-truth noise",
+      "parameter uncertainty",
+      "model-form uncertainty"
+    ]
+  },
+  "metric_origin": "TopCell includes its estimated origin; COMSOL excludes initialization row",
+  "epochs_max": 300,
+  "device": "cpu",
+  "note": "TPU is not a model in repository history; TCN is evaluated."
+}

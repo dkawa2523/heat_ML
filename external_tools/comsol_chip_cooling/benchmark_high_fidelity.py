@@ -12,16 +12,35 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from celltemp.analysis import mae as _mae
+from celltemp.analysis import max_abs_error as _max_abs
+from celltemp.analysis import (
+    persistence_prediction,
+    prediction_comparison_rows,
+    prediction_error_metrics,
+    prediction_sensor_rows,
+    residual_dependence_rows,
+)
+from celltemp.analysis import rmse as _rmse
 from celltemp.artifact import fitted_parameters, load_artifact
 from celltemp.config import as_path, load_config
 from celltemp.engine import ThermalRCModel
 from celltemp.inference import forecast
 from celltemp.io import load_system_spec, trajectory_from_frame
 from celltemp.workflows import run_forecast, run_train
-from celltemp.workflows.common import staged_output_directory
+from external_tools.comsol_chip_cooling.benchmark_high_fidelity_output import publish_benchmark
+from external_tools.comsol_chip_cooling.evaluation_support import (
+    json_records,
+    percent_improvement,
+)
 
 SENSORS = ("chip", "sink_base", "fins")
 CONTROLS = ("chip_power", "coolant_temperature", "inlet_air_velocity")
+CONTROL_UNITS = {
+    "chip_power": "W",
+    "coolant_temperature": "degC",
+    "inlet_air_velocity": "m/s",
+}
 CASE_LOCATIONS = {
     "HV01_composite_conjugate": Path(
         "data/nonlinear_high_fidelity/dynamic/eval/forecast/HV01_composite_conjugate.csv"
@@ -36,28 +55,6 @@ RESPONSE_PHASES = (
     ("airflow_excitation", 120.0, 160.0),
     ("coupled_hot_low_flow", 160.0, 220.0),
 )
-
-
-def _rmse(values: np.ndarray) -> float:
-    array = np.asarray(values, dtype=np.float64)
-    return float(np.sqrt(np.mean(array**2)))
-
-
-def _mae(values: np.ndarray) -> float:
-    return float(np.mean(np.abs(np.asarray(values, dtype=np.float64))))
-
-
-def _max_abs(values: np.ndarray) -> float:
-    return float(np.max(np.abs(np.asarray(values, dtype=np.float64))))
-
-
-def _percent_improvement(prior: float, fitted: float) -> float:
-    return float(100.0 * (prior - fitted) / prior) if prior > 0.0 else 0.0
-
-
-def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    clean = frame.astype(object).where(pd.notna(frame), None)
-    return clean.to_dict(orient="records")
 
 
 def _request(case_id: str, frame: pd.DataFrame):
@@ -83,6 +80,8 @@ def _load_cases(root: Path) -> dict[str, pd.DataFrame]:
         *CONTROLS,
         *(f"truth_{sensor}" for sensor in SENSORS),
         "truth_chip_max",
+        "truth_pressure_drop",
+        "truth_radiative_heat_rate",
     }
     for case_id, frame in frames.items():
         missing = sorted(required - set(frame.columns))
@@ -101,13 +100,11 @@ def _validate_pair(frames: dict[str, pd.DataFrame]) -> bool:
     base = frames["HV01_composite_conjugate"]
     radiation = frames["HV02_composite_radiation"]
     columns = ["time", *CONTROLS]
-    return bool(
-        np.allclose(
-            base[columns].to_numpy(dtype=np.float64),
-            radiation[columns].to_numpy(dtype=np.float64),
-            rtol=0.0,
-            atol=1e-10,
-        )
+    return np.allclose(
+        base[columns].to_numpy(dtype=np.float64),
+        radiation[columns].to_numpy(dtype=np.float64),
+        rtol=0.0,
+        atol=1e-10,
     )
 
 
@@ -128,13 +125,11 @@ def _reference_quality(root: Path, frames: dict[str, pd.DataFrame]) -> dict[str,
     columns = ["time", *SENSORS, *CONTROLS]
     expected = radiation[["time", *(f"truth_{name}" for name in SENSORS), *CONTROLS]].copy()
     expected.columns = columns
-    reference_matches = bool(
-        np.allclose(
-            reference[columns].to_numpy(dtype=np.float64),
-            expected.to_numpy(dtype=np.float64),
-            rtol=0.0,
-            atol=1e-9,
-        )
+    reference_matches = np.allclose(
+        reference[columns].to_numpy(dtype=np.float64),
+        expected.to_numpy(dtype=np.float64),
+        rtol=0.0,
+        atol=1e-9,
     )
     uncertainty = {
         sensor: float(reference[f"mesh_uncertainty_{sensor}"].max()) for sensor in SENSORS
@@ -198,6 +193,7 @@ def _prediction_frame(
     source: pd.DataFrame,
     predicted: np.ndarray,
     prior: np.ndarray,
+    persistence: np.ndarray,
     uncertainty: dict[str, float],
 ) -> pd.DataFrame:
     result = source[["time", *CONTROLS]].copy()
@@ -207,6 +203,7 @@ def _prediction_frame(
         result[f"predicted_{sensor}"] = predicted[:, index]
         result[f"error_{sensor}"] = predicted[:, index] - truth
         result[f"prior_{sensor}"] = prior[:, index]
+        result[f"persistence_{sensor}"] = persistence[:, index]
         result[f"mesh_difference_{sensor}"] = uncertainty[sensor]
     result["truth_chip_max"] = source["truth_chip_max"]
     result["hotspot_underprediction"] = source["truth_chip_max"] - predicted[:, 0]
@@ -215,43 +212,79 @@ def _prediction_frame(
 
 def _sensor_rows(
     case_id: str,
+    time: np.ndarray,
     truth: np.ndarray,
     predicted: np.ndarray,
     prior: np.ndarray,
+    persistence: np.ndarray,
     uncertainty: dict[str, float],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for index, sensor in enumerate(SENSORS):
+    base_rows = prediction_sensor_rows(time[1:], truth[1:], predicted[1:], SENSORS)
+    for index, base in enumerate(base_rows):
+        sensor = SENSORS[index]
         error = predicted[1:, index] - truth[1:, index]
         prior_error = prior[1:, index] - truth[1:, index]
-        fitted_rmse = _rmse(error)
+        persistence_error = persistence[1:, index] - truth[1:, index]
+        fitted_rmse = float(base["rmse_k"])
         prior_rmse = _rmse(prior_error)
+        persistence_rmse = _rmse(persistence_error)
         mesh_difference = uncertainty[sensor]
         rows.append(
             {
                 "case_id": case_id,
-                "sensor": sensor,
-                "n_points": len(error),
-                "rmse_k": fitted_rmse,
-                "mae_k": _mae(error),
-                "bias_k": float(np.mean(error)),
-                "max_abs_error_k": _max_abs(error),
-                "terminal_error_k": float(error[-1]),
+                **base,
                 "prior_rmse_k": prior_rmse,
-                "rmse_improvement_percent": _percent_improvement(prior_rmse, fitted_rmse),
+                "persistence_rmse_k": persistence_rmse,
+                "rmse_improvement_percent": percent_improvement(prior_rmse, fitted_rmse),
+                "rmse_improvement_vs_persistence_percent": percent_improvement(
+                    persistence_rmse, fitted_rmse
+                ),
                 "mesh_difference_k": mesh_difference,
                 "rmse_over_mesh_difference": fitted_rmse / mesh_difference,
                 "max_abs_error_over_mesh_difference": _max_abs(error) / mesh_difference,
                 "fraction_abs_error_within_mesh_difference": float(
                     np.mean(np.abs(error) <= mesh_difference)
                 ),
-                "model_error_resolved_above_mesh_difference": bool(fitted_rmse > mesh_difference),
-                "pointwise_error_resolved_above_mesh_difference": bool(
+                "model_error_resolved_above_mesh_difference": fitted_rmse > mesh_difference,
+                "pointwise_error_resolved_above_mesh_difference": (
                     _max_abs(error) > mesh_difference
                 ),
             }
         )
     return rows
+
+
+def _residual_dependence(
+    case_id: str,
+    source: pd.DataFrame,
+    truth: np.ndarray,
+    predicted: np.ndarray,
+) -> list[dict[str, Any]]:
+    time = source["time"].to_numpy(dtype=np.float64)[1:]
+    conditions = {
+        control: (source[control].to_numpy(dtype=np.float64)[1:], CONTROL_UNITS[control])
+        for control in CONTROLS
+    }
+    conditions["pressure_drop"] = (
+        source["truth_pressure_drop"].to_numpy(dtype=np.float64)[1:],
+        "Pa",
+    )
+    conditions["radiative_heat_rate"] = (
+        source["truth_radiative_heat_rate"].to_numpy(dtype=np.float64)[1:],
+        "W",
+    )
+    return [
+        {"case_id": case_id, **row}
+        for row in residual_dependence_rows(
+            time,
+            truth[1:],
+            predicted[1:],
+            SENSORS,
+            conditions=conditions,
+            temperature_unit="degC",
+        )
+    ]
 
 
 def _case_row(
@@ -260,12 +293,16 @@ def _case_row(
     truth: np.ndarray,
     predicted: np.ndarray,
     prior: np.ndarray,
+    persistence: np.ndarray,
     uncertainty: dict[str, float],
 ) -> dict[str, Any]:
     error = predicted[1:] - truth[1:]
-    prior_error = prior[1:] - truth[1:]
-    fitted_rmse = _rmse(error)
-    prior_rmse = _rmse(prior_error)
+    fitted = prediction_error_metrics(truth[1:], predicted[1:])
+    prior_metrics = prediction_error_metrics(truth[1:], prior[1:])
+    persistence_metrics = prediction_error_metrics(truth[1:], persistence[1:])
+    fitted_rmse = float(fitted["rmse_k"])
+    prior_rmse = float(prior_metrics["rmse_k"])
+    persistence_rmse = float(persistence_metrics["rmse_k"])
     mesh = np.asarray([uncertainty[name] for name in SENSORS])
     hotspot_error = source["truth_chip_max"].to_numpy(dtype=np.float64)[1:] - predicted[1:, 0]
     return {
@@ -274,10 +311,14 @@ def _case_row(
         "n_forecast_timepoints": len(error),
         "n_scalar_predictions": int(error.size),
         "rmse_k": fitted_rmse,
-        "mae_k": _mae(error),
-        "max_abs_error_k": _max_abs(error),
+        "mae_k": fitted["mae_k"],
+        "max_abs_error_k": fitted["max_abs_error_k"],
         "prior_rmse_k": prior_rmse,
-        "rmse_improvement_percent": _percent_improvement(prior_rmse, fitted_rmse),
+        "persistence_rmse_k": persistence_rmse,
+        "rmse_improvement_percent": percent_improvement(prior_rmse, fitted_rmse),
+        "rmse_improvement_vs_persistence_percent": percent_improvement(
+            persistence_rmse, fitted_rmse
+        ),
         "rms_error_over_mesh_difference": _rmse(error / mesh),
         "max_abs_error_over_mesh_difference": float(np.max(np.abs(error) / mesh)),
         "fraction_abs_error_within_mesh_difference": float(np.mean(np.abs(error) <= mesh)),
@@ -355,8 +396,9 @@ def _truth_leakage_check(frames: dict[str, pd.DataFrame], model: ThermalRCModel)
     for case_id, source in frames.items():
         baseline = _predict(model, case_id, source)
         altered = source.copy()
-        truth_columns = [column for column in altered if column.startswith("truth_")]
-        altered[truth_columns] = altered[truth_columns] + 10_000.0
+        truth_columns = [column for column in altered.columns if column.startswith("truth_")]
+        for column in truth_columns:
+            altered[column] = source[column].to_numpy(dtype=np.float64) + 10_000.0
         if not np.array_equal(baseline, _predict(model, case_id, altered)):
             return False
     return True
@@ -376,7 +418,7 @@ def _input_coverage(
         result[control] = {
             "training_range": training_range,
             "evaluation_range": evaluation_range,
-            "within_training_range": bool(
+            "within_training_range": (
                 evaluation_range[0] >= training_range[0]
                 and evaluation_range[1] <= training_range[1]
             ),
@@ -406,6 +448,7 @@ def _summary(
     cases: pd.DataFrame,
     sensors: pd.DataFrame,
     phases: pd.DataFrame,
+    residual_dependence: pd.DataFrame,
     pair: pd.DataFrame,
     quality: dict[str, Any],
     predictions: dict[str, np.ndarray],
@@ -454,8 +497,8 @@ def _summary(
             "artifact_controls": list(artifact.control_names),
             "complete_external_control_boundary": controls_complete,
             "forecast_truth_is_not_an_input": leakage_free,
-            "all_predictions_finite": bool(
-                all(np.isfinite(value).all() for value in predictions.values())
+            "all_predictions_finite": all(
+                np.isfinite(value).all() for value in predictions.values()
             ),
         },
         "model": {
@@ -468,7 +511,7 @@ def _summary(
         },
         "training": {
             "data": "data/nonlinear/train/*.csv",
-            "split_assignment": _records(split[["case_id", "split"]]),
+            "split_assignment": json_records(split[["case_id", "split"]]),
             "best_epoch": artifact.metadata["training"]["best_epoch"],
             "best_causal_validation_rmse_k": artifact.metadata["training"][
                 "best_causal_validation_rmse"
@@ -476,16 +519,29 @@ def _summary(
             "metrics": training_metrics,
         },
         "evaluation": {
-            "cases": _records(cases),
-            "phases": _records(phases),
+            "cases": json_records(cases),
+            "phases": json_records(phases),
             "mean_case_rmse_k": float(cases["rmse_k"].mean()),
             "worst_case": str(cases.loc[cases["rmse_k"].idxmax(), "case_id"]),
             "worst_case_rmse_k": float(cases["rmse_k"].max()),
             "mean_prior_rmse_k": float(cases["prior_rmse_k"].mean()),
+            "mean_persistence_rmse_k": float(cases["persistence_rmse_k"].mean()),
             "model_adequacy_status": adequacy,
+            "residual_diagnostics": {
+                "sign_convention": "predicted_minus_truth",
+                "forecast_origin_excluded": True,
+                "quantities": list(residual_dependence["quantity"].drop_duplicates()),
+                "interpretation": (
+                    "descriptive screening only; correlation does not identify a missing law"
+                ),
+            },
+            "prediction_figures": {
+                "timeseries": "figures/prediction_timeseries.png",
+                "parity": "figures/prediction_parity.png",
+            },
         },
         "radiation_pair": {
-            "sensors": _records(pair),
+            "sensors": json_records(pair),
             "max_abs_truth_effect_k": float(pair["max_abs_truth_radiation_delta_k"].max()),
             "max_effect_over_mesh_difference": float(
                 pair["radiation_effect_over_mesh_difference"].max()
@@ -493,162 +549,6 @@ def _summary(
             "interpretation": "directional screening only",
         },
     }
-
-
-def _markdown_table(frame: pd.DataFrame, columns: list[str], decimals: int = 4) -> str:
-    header = "| " + " | ".join(columns) + " |"
-    divider = "|" + "|".join("---" for _ in columns) + "|"
-    rows = []
-    for record in frame[columns].to_dict(orient="records"):
-        values = [
-            f"{value:.{decimals}f}" if isinstance(value, float) else str(value)
-            for value in record.values()
-        ]
-        rows.append("| " + " | ".join(values) + " |")
-    return "\n".join([header, divider, *rows])
-
-
-def _report(
-    summary: dict[str, Any],
-    cases: pd.DataFrame,
-    sensors: pd.DataFrame,
-    phases: pd.DataFrame,
-    pair: pd.DataFrame,
-) -> str:
-    case_table = _markdown_table(
-        cases,
-        [
-            "case_id",
-            "rmse_k",
-            "prior_rmse_k",
-            "rms_error_over_mesh_difference",
-            "max_abs_error_k",
-            "max_abs_error_over_mesh_difference",
-            "max_hotspot_underprediction_k",
-        ],
-    )
-    sensor_table = _markdown_table(
-        sensors,
-        [
-            "case_id",
-            "sensor",
-            "rmse_k",
-            "bias_k",
-            "mesh_difference_k",
-            "rmse_over_mesh_difference",
-            "max_abs_error_over_mesh_difference",
-        ],
-    )
-    phase_table = _markdown_table(
-        phases,
-        ["case_id", "phase", "n_timepoints", "rmse_k", "max_abs_error_k"],
-    )
-    pair_table = _markdown_table(
-        pair,
-        [
-            "sensor",
-            "truth_terminal_radiation_delta_k",
-            "predicted_terminal_pair_delta_k",
-            "pair_delta_rmse_k",
-            "radiation_effect_over_mesh_difference",
-            "terminal_predicted_to_truth_delta_ratio_abs",
-        ],
-    )
-    evaluation = summary["evaluation"]
-    workflow = summary["workflow"]
-    quality = summary["data_quality"]
-    velocity_coupled = summary["model"]["inlet_air_velocity_coupled_to_physics"]
-    radiation_effect = summary["radiation_pair"]["max_abs_truth_effect_k"]
-    radiation_ratio = summary["radiation_pair"]["max_effect_over_mesh_difference"]
-    radiation_capture = float(pair["terminal_predicted_to_truth_delta_ratio_abs"].max())
-    training = summary["training"]["metrics"]
-    training_table = _markdown_table(
-        pd.DataFrame(
-            [
-                {"split": split, **metrics}
-                for split, metrics in summary["training"]["metrics"].items()
-            ]
-        ),
-        ["split", "n_cases", "mean_case_causal_rmse", "worst_case_causal_rmse"],
-    )
-    heldout_case = next(
-        row["case_id"] for row in summary["training"]["split_assignment"] if row["split"] == "test"
-    )
-    worst_point_error = float(cases["max_abs_error_k"].max())
-    worst_point_ratio = float(cases["max_abs_error_over_mesh_difference"].max())
-    resolution_statement = (
-        "一部時刻のモデル差はmesh差を超えます。"
-        if worst_point_ratio > 1.0
-        else "最大点誤差も保守的なmesh差を下回り、現データではモデル差を数値差から分離できません。"
-    )
-    return f"""# 高忠実度非線形CAEベンチマーク結果
-
-## 結論
-
-公開の学習・forecast workflowは正常完走し、予測値はfinite、時刻・入力はCAEと一致し、
-`truth_*`を変更しても予測が変わらないことを確認しました。workflow判定は
-**{workflow["status"]}**です。
-
-一方、局所mesh pairに対する流速依存3-node thermal networkのcase平均RMSEは
-**{evaluation["mean_case_rmse_k"]:.4f} K**、worstは
-**{evaluation["worst_case_rmse_k"]:.4f} K**でした。判定は
-**{evaluation["model_adequacy_status"]}**です。入口流速は評価境界に保持されていますが、
-共通power-law scalar lawを持つboundary conductanceへ結合されています
-(`{velocity_coupled}`)。残差は、固定係数ではなく
-この最小流速依存モデルで共役流れをどこまで集約できるかを示します。
-
-## 同定データ内のscreening
-
-{training_table}
-
-holdout `{heldout_case}` の因果RMSEは
-**{training["test"]["mean_case_causal_rmse"]:.4f} K**でした。
-これはcold/high-flowの組合せ汎化に対する最小thermal networkのscreening evidenceです。
-ただし、この10本はglobal-8 meshであり設計精度の絶対誤差判定には使いません。
-
-## ケース別
-
-{case_table}
-
-case RMSEは保守的な隣接mesh差内ですが、最大点誤差は **{worst_point_error:.4f} K**、
-mesh差に対する最大比は **{worst_point_ratio:.3f}**でした。したがって平均精度はmesh不確かさから
-分離できず、{resolution_statement}これは製品合否閾値ではありません。
-
-## センサ別
-
-{sensor_table}
-
-## 応答区間別
-
-{phase_table}
-
-区間はleft-ZOHに合わせ、行のcommandが次の区間を駆動した後の応答時刻で集計しています。初期化から
-power、airflow、hot/low-flow複合条件へ進むにつれて、モデル誤差が増える箇所を分離しています。
-
-## 放射ペア
-
-{pair_table}
-
-放射による最大温度差は **{radiation_effect:.4f} K**、隣接mesh差に対する最大比は
-**{radiation_ratio:.3f}**です。放射項を持たない現行thermal networkで終端まで残った
-初期差由来の予測pair差は、
-真の終端差の最大 **{radiation_capture:.3%}**に留まりました。CAE pairから放射の方向性は
-確認できますが、mesh収束した
-効果量の確定や現行モデルによる放射応答の再現はできません。
-
-## 利用境界
-
-- local-medium meshはbenchmark用途には合格: `{quality["benchmark_qualified"]}`
-- 厳格mesh収束: `{quality["mesh_qualified"]}`
-- 独立時間刻み収束: `{quality["temporal_qualified"]}`
-- 同一境界の実験比較実施: `{quality["experiment_compared"]}`
-- 同一境界の実験妥当化: `{quality["experiment_validated"]}`
-
-本結果はmodel-form screeningには利用できますが、絶対温度保証、hotspot安全判定、製品設計認証には
-利用できません。本結果だけを根拠に空気状態や放射項をcoreへ追加しません。次の基盤評価は、目的対象である
-半導体製造装置のwafer/chuck・stage・coolant・process入力を同じ外部評価境界で扱うCAE/実験datasetで
-行います。本ケース側では過渡時間刻み収束と実測値による妥当化が未完です。
-"""
 
 
 def run_benchmark(config_path: Path, output: Path) -> dict[str, Any]:
@@ -668,25 +568,73 @@ def run_benchmark(config_path: Path, output: Path) -> dict[str, Any]:
     prediction_frames: dict[str, pd.DataFrame] = {}
     case_rows: list[dict[str, Any]] = []
     sensor_rows: list[dict[str, Any]] = []
+    comparison_rows: list[dict[str, Any]] = []
     phase_rows: list[dict[str, Any]] = []
+    residual_dependence_rows_output: list[dict[str, Any]] = []
     uncertainty = quality["mesh_difference_k"]
     for case_id, source in frames.items():
         predicted = _saved_prediction(case_id, source, forecast_dirs[case_id], artifact.model)
         prior_prediction = _predict(prior, case_id, source)
         truth = source[[f"truth_{name}" for name in SENSORS]].to_numpy(dtype=np.float64)
+        observed = source[list(SENSORS)].to_numpy(dtype=np.float64)
+        persistence = persistence_prediction(observed, np.isfinite(observed), origin=0)
         predictions[case_id] = predicted
         prediction_frames[case_id] = _prediction_frame(
-            source, predicted, prior_prediction, uncertainty
+            source, predicted, prior_prediction, persistence, uncertainty
         )
         case_rows.append(
-            _case_row(case_id, source, truth, predicted, prior_prediction, uncertainty)
+            _case_row(
+                case_id,
+                source,
+                truth,
+                predicted,
+                prior_prediction,
+                persistence,
+                uncertainty,
+            )
         )
-        sensor_rows.extend(_sensor_rows(case_id, truth, predicted, prior_prediction, uncertainty))
+        time = source["time"].to_numpy(dtype=np.float64)
+        sensor_rows.extend(
+            _sensor_rows(
+                case_id,
+                time,
+                truth,
+                predicted,
+                prior_prediction,
+                persistence,
+                uncertainty,
+            )
+        )
+        comparison_rows.extend(
+            {
+                "case_id": case_id,
+                "case_group": (
+                    "radiation" if bool(source["radiation_enabled"].iat[0]) else "conjugate_flow"
+                ),
+                "radiation_enabled": bool(source["radiation_enabled"].iat[0]),
+                **comparison,
+            }
+            for comparison in prediction_comparison_rows(
+                source["time"].to_numpy(dtype=np.float64)[1:],
+                truth[1:],
+                {
+                    "fitted_rc": predicted[1:],
+                    "engineering_prior_rc": prior_prediction[1:],
+                    "persistence": persistence[1:],
+                },
+                SENSORS,
+            )
+        )
         phase_rows.extend(_phase_rows(case_id, source, truth, predicted))
+        residual_dependence_rows_output.extend(
+            _residual_dependence(case_id, source, truth, predicted)
+        )
 
     cases = pd.DataFrame(case_rows)
     sensors = pd.DataFrame(sensor_rows)
+    model_comparison = pd.DataFrame(comparison_rows)
     phases = pd.DataFrame(phase_rows)
+    residual_dependence = pd.DataFrame(residual_dependence_rows_output)
     pair = _pair_rows(frames, predictions, uncertainty)
     summary = _summary(
         run_dir,
@@ -695,43 +643,23 @@ def run_benchmark(config_path: Path, output: Path) -> dict[str, Any]:
         cases,
         sensors,
         phases,
+        residual_dependence,
         pair,
         quality,
         predictions,
     )
-    with staged_output_directory(output.resolve(), overwrite=True) as target:
-        cases.to_csv(
-            target / "case_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
-        )
-        sensors.to_csv(
-            target / "sensor_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
-        )
-        phases.to_csv(
-            target / "phase_metrics.csv", index=False, float_format="%.10g", lineterminator="\n"
-        )
-        pair.to_csv(
-            target / "radiation_pair_metrics.csv",
-            index=False,
-            float_format="%.10g",
-            lineterminator="\n",
-        )
-        prediction_dir = target / "predictions"
-        prediction_dir.mkdir()
-        for case_id, frame in prediction_frames.items():
-            frame.to_csv(
-                prediction_dir / f"{case_id}.csv",
-                index=False,
-                float_format="%.10g",
-                lineterminator="\n",
-            )
-        (target / "summary.json").write_text(
-            json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False),
-            encoding="utf-8",
-            newline="\n",
-        )
-        (target / "report.md").write_text(
-            _report(summary, cases, sensors, phases, pair), encoding="utf-8", newline="\n"
-        )
+    publish_benchmark(
+        output,
+        case_metrics=cases,
+        sensor_metrics=sensors,
+        model_comparison=model_comparison,
+        phase_metrics=phases,
+        residual_dependence=residual_dependence,
+        radiation_pair_metrics=pair,
+        prediction_frames=prediction_frames,
+        summary=summary,
+        sensor_names=SENSORS,
+    )
     return summary
 
 

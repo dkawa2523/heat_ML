@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 _TOP_LEVEL_OPTIONS = {
+    "analysis",
     "artifact",
     "data",
     "engine",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from .config import load_config
-from .workflows import run_forecast, run_monitor, run_train
+from .workflows import run_analysis, run_forecast, run_monitor, run_train
 
 
 def main() -> None:
@@ -22,6 +22,13 @@ def main() -> None:
     p_monitor.add_argument("--config", required=True)
     p_monitor.add_argument("overrides", nargs="*")
 
+    p_analysis = sub.add_parser(
+        "analyze",
+        help="summarize thermal response waveforms and create case figures",
+    )
+    p_analysis.add_argument("--config", required=True)
+    p_analysis.add_argument("overrides", nargs="*")
+
     args = parser.parse_args()
     cfg = load_config(args.config, args.overrides)
     if args.command == "train":
@@ -33,6 +40,9 @@ def main() -> None:
     elif args.command == "monitor":
         out_dir = run_monitor(cfg, args.config)
         print(f"saved monitoring results: {out_dir}")
+    elif args.command == "analyze":
+        out_dir = run_analysis(cfg, args.config)
+        print(f"saved thermal analysis: {out_dir}")
 
 
 if __name__ == "__main__":
