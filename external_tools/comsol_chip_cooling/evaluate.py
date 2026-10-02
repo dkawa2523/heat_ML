@@ -11,6 +11,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from benchmarks.validation_figures import (
+    VALIDATION_FIGURE_DIRECTORY,
+    validation_figure_reference,
+)
 from celltemp.artifact import fitted_parameters, load_artifact
 from celltemp.engine import ThermalRCModel
 from celltemp.io import load_system_spec
@@ -177,6 +181,12 @@ def _summary(
             "max_hotspot_underprediction_k": float(
                 forecast_cases["max_hotspot_underprediction_k"].max()
             ),
+            "prediction_figures": {
+                "timeseries": validation_figure_reference(
+                    "linear_comsol_prediction_timeseries.png"
+                ),
+                "parity": validation_figure_reference("linear_comsol_prediction_parity.png"),
+            },
         },
         "monitor": {
             "case_metrics": json_records(monitor_cases),
@@ -219,10 +229,10 @@ def evaluate(root: Path, output: Path) -> dict[str, Any]:
         table.to_csv(output / name, index=False, float_format="%.10g")
     write_prediction_figures(
         prediction_cases,
-        output / "figures",
+        VALIDATION_FIGURE_DIRECTORY,
         sensor_names=SENSORS,
         title="Linear COMSOL external forecast",
-        file_prefix="prediction",
+        file_prefix="linear_comsol_prediction",
     )
     (output / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False), encoding="utf-8"

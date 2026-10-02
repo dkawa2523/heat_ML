@@ -230,7 +230,7 @@ causal open-loop RMSEで選びます。このため「次の1点だけ当たる�
 
 内部／外部を分ける実際のdata flowとcase数は次の図を正とします。
 
-![内部予測と外部予測を分けるデータ境界](neural_model_comparison/figures/00_internal_external_definition.png)
+![内部予測と外部予測を分けるデータ境界](validation_figures/00_internal_external_definition.png)
 
 300 epoch上限とearly stoppingによる内部held-out testのcase平均RMSE [K]は次の通りです。testはweight更新にも
 epoch選択にも使わず、時刻0以後の温度真値を隠して評価しています。

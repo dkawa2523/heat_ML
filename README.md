@@ -77,7 +77,8 @@ measurement = H T + sensor_bias + noise
 [model_methods_explained.md](docs/model_methods_explained.md) に日本語で図解しています。比較modelは現時点では
 benchmark専用で、通常のproduct APIへは追加していません。数値・波形・R²は
 [neural_model_comparison](docs/neural_model_comparison/)を参照してください。内部train / validation / held-out testと、
-学習に未投入の外部caseの境界は同directoryの`evaluation_boundaries.csv`と先頭図へ固定しています。
+学習に未投入の外部caseの境界は同directoryの`evaluation_boundaries.csv`へ固定し、公開する検証図は
+[validation figures](docs/validation_figures/)へ集約しています。
 
 ## 構成
 
@@ -405,7 +406,8 @@ case別誤差を併読します。
 学習用228軌道と、学習探索先に含まれない外部forecast 12ケース・monitor 5ケースを分離して
 います。TopCell、線形COMSOL、非線形COMSOL、高忠実度CAEを混同しない現在値と利用限界は
 [problem setup figures](docs/benchmark_problem_setups.md)で入熱・冷却・計測位置と使用モデルを確認し、
-[benchmark evidence](docs/benchmark_evidence.md)で数値結果と利用限界を確認してください。TopCell固有のケースと合否条件は
+[benchmark evidence](docs/benchmark_evidence.md)で数値結果と利用限界、
+[validation figures](docs/validation_figures/)で波形と真値–予測散布図を確認してください。TopCell固有のケースと合否条件は
 [TopCell benchmark](benchmarks/topcell/README.md)を参照してください。
 
 全benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、独立評価まで実行します。

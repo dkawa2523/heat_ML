@@ -37,7 +37,7 @@ TopCellの別枠negative controlは温度依存熱損失を持ち、fitted RCの
 
 ## 内部予測と外部予測の境界
 
-![内部予測と外部予測を分けるデータ境界](neural_model_comparison/figures/00_internal_external_definition.png)
+![内部予測と外部予測を分けるデータ境界](validation_figures/00_internal_external_definition.png)
 
 - **内部**は各configの`data.directory`へ入ったcase集合です。一度だけcase単位でtrain / validation / testへ
   分割し、testは係数・weight更新にもbest epoch選択にも使いません。
@@ -79,7 +79,7 @@ MLP、1D-CNN、TCN、GRU、LSTMを、現行RCと同じcase split・forecast orig
 
 ## 観測noiseと未知物理は別に判定する
 
-![観測prefixの測定ばらつきに対する予測感度](neural_model_comparison/figures/13_observation_noise_sensitivity.png)
+![観測prefixの測定ばらつきに対する予測感度](validation_figures/13_observation_noise_sensitivity.png)
 
 cleanで学習済みのmodelを固定し、予測開始までの観測温度だけへGaussian noiseを追加しました。内部testは時刻0、
 外部coreはdataset所定の観測prefixを摂動し、将来のclean truthへ採点しています。0.15 Kは既存monitor設定と同じ
@@ -105,7 +105,7 @@ cleanで学習済みのmodelを固定し、予測開始までの観測温度だ�
 0.147 Kに対してposterior physical RMSE 0.067 K、線形COMSOLは0.154 Kに対して0.051 Kでした。これは新観測で
 逐次補正できるobserverの結果で、将来観測を使わないopen-loop forecastやニューラルmodelの結果ではありません。
 
-![未知物理を加えたときの物理RC誤差](neural_model_comparison/figures/14_rc_unknown_physics_risk.png)
+![未知物理を加えたときの物理RC誤差](validation_figures/14_rc_unknown_physics_risk.png)
 
 未知項の危険性はnoise試験よりmodel-gap試験に現れます。物理RCの通常coreからmodel-gapへの平均RMSE増加は、
 TopCell温度依存熱損失で68.7倍（0.143 -> 9.823 K）、非線形COMSOL表面間放射で23.9倍
@@ -166,7 +166,8 @@ sensor不足、sensor biasとの非識別性では誤帰属し得るため、こ
 
 ## 予測図の読み方
 
-各benchmarkは`figures/*prediction_timeseries.png`と`figures/*prediction_parity.png`を出力します。
+各benchmarkの公開図は[`validation_figures/`](validation_figures/)へ集約し、元のJSON / CSVは各benchmarkの
+出力先に残します。`*_prediction_timeseries.png`は時系列、`*_prediction_parity.png`は散布図です。
 時系列図は、評価対象内でfitted RCのRMSEが最大だったcaseを恣意的に選ばず表示し、全sensorについて真値と
 因果open-loop予測を重ねます。散布図はforecast originを除く全case・全sensorを用い、同一軸、`y=x`線、
 pooled R²、評価点数を示します。放射model gapは通常caseへ混ぜず別図にします。

@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from benchmarks.validation_figures import validation_figure_reference
 from celltemp.analysis import max_abs_error as _max_abs
 from celltemp.analysis import (
     persistence_prediction,
@@ -380,10 +381,18 @@ def _summary(
                 ),
             },
             "prediction_figures": {
-                "non_radiation_timeseries": "figures/core_prediction_timeseries.png",
-                "non_radiation_parity": "figures/core_prediction_parity.png",
-                "radiation_model_gap_timeseries": "figures/model_gap_prediction_timeseries.png",
-                "radiation_model_gap_parity": "figures/model_gap_prediction_parity.png",
+                "non_radiation_timeseries": validation_figure_reference(
+                    "nonlinear_comsol_core_prediction_timeseries.png"
+                ),
+                "non_radiation_parity": validation_figure_reference(
+                    "nonlinear_comsol_core_prediction_parity.png"
+                ),
+                "radiation_model_gap_timeseries": validation_figure_reference(
+                    "nonlinear_comsol_model_gap_prediction_timeseries.png"
+                ),
+                "radiation_model_gap_parity": validation_figure_reference(
+                    "nonlinear_comsol_model_gap_prediction_parity.png"
+                ),
             },
         },
         "radiation_pairs": {

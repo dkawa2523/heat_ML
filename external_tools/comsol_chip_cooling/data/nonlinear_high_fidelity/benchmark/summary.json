@@ -345,8 +345,8 @@
       "interpretation": "descriptive screening only; correlation does not identify a missing law"
     },
     "prediction_figures": {
-      "timeseries": "figures/prediction_timeseries.png",
-      "parity": "figures/prediction_parity.png"
+      "timeseries": "docs/validation_figures/high_fidelity_comsol_prediction_timeseries.png",
+      "parity": "docs/validation_figures/high_fidelity_comsol_prediction_parity.png"
     }
   },
   "radiation_pair": {

@@ -8,6 +8,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from benchmarks.validation_figures import (
+    VALIDATION_FIGURE_DIRECTORY,
+    validation_figure_reference,
+)
 from celltemp.analysis import (
     persistence_prediction,
     prediction_comparison_rows,
@@ -157,18 +161,18 @@ def _write_evidence_figures(
     model_gap = [case for case in cases if groups[case.case_id] == "model_gap"]
     write_prediction_figures(
         core,
-        OUTPUT_DIR / "figures",
+        VALIDATION_FIGURE_DIRECTORY,
         sensor_names=sensor_names,
         title="TopCell external forecast — core cases",
-        file_prefix="core_prediction",
+        file_prefix="topcell_core_prediction",
     )
     if model_gap:
         write_prediction_figures(
             model_gap,
-            OUTPUT_DIR / "figures",
+            VALIDATION_FIGURE_DIRECTORY,
             sensor_names=sensor_names,
             title="TopCell external forecast — nonlinear model gap",
-            file_prefix="model_gap_prediction",
+            file_prefix="topcell_model_gap_prediction",
         )
 
 
@@ -412,6 +416,18 @@ def main() -> None:
             "mean_prior_rmse": float(core["prior_rmse"].mean()),
             "mean_persistence_rmse": float(core["persistence_rmse"].mean()),
             "model_gap_rmse": float(_row_by_group(forecasts, "model_gap")["learned_rmse"]),
+            "prediction_figures": {
+                "core_timeseries": validation_figure_reference(
+                    "topcell_core_prediction_timeseries.png"
+                ),
+                "core_parity": validation_figure_reference("topcell_core_prediction_parity.png"),
+                "model_gap_timeseries": validation_figure_reference(
+                    "topcell_model_gap_prediction_timeseries.png"
+                ),
+                "model_gap_parity": validation_figure_reference(
+                    "topcell_model_gap_prediction_parity.png"
+                ),
+            },
         },
         "monitor": {
             "n_cases": len(monitors),

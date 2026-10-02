@@ -41,7 +41,7 @@ uv run --locked --with-editable . python -m benchmarks.neural_comparison.run `
 
 ## 内部予測と外部予測の境界
 
-![内部予測と外部予測を分けるデータ境界](../../docs/neural_model_comparison/figures/00_internal_external_definition.png)
+![内部予測と外部予測を分けるデータ境界](../../docs/validation_figures/00_internal_external_definition.png)
 
 | 境界 | dataの所在 | 係数・weight更新 | epoch選択 | 予測時の温度観測 | 役割 |
 |---|---|---:|---:|---|---|
@@ -139,20 +139,20 @@ basis上でのみ外乱を推定できます。basis外の発熱分布、sensor�
 - `prediction_points.csv`: 外部波形・parity図の元data
 - `training_history.csv`: causal open-loop validation履歴
 - `training_summary.csv`: best epoch、parameter数、学習時間
-- `figures/00_internal_external_definition.png`: 内部／外部を分けるdata flow
-- `figures/01_external_rmse_overview.png`: RCとの外部RMSE比較
-- `figures/02_training_validation_history.png`: 学習が進んだことを示す検証曲線
-- `figures/08_internal_rmse_by_split.png`: train / validation / testのopen-loop誤差
-- `figures/09–11_*_internal_test_timeseries.png`: 内部testの真値–予測時系列
-- `figures/09–11_*_internal_test_parity.png`: 内部test全点の真値–予測とR²
-- `figures/12_internal_test_vs_external_core.png`: 内部testと外部coreを混ぜない並列比較
+- `docs/validation_figures/00_internal_external_definition.png`: 内部／外部を分けるdata flow
+- `docs/validation_figures/01_external_rmse_overview.png`: RCとの外部RMSE比較
+- `docs/validation_figures/02_training_validation_history.png`: 学習が進んだことを示す検証曲線
+- `docs/validation_figures/08_internal_rmse_by_split.png`: train / validation / testのopen-loop誤差
+- `docs/validation_figures/09–11_*_internal_test_timeseries.png`: 内部testの真値–予測時系列
+- `docs/validation_figures/09–11_*_internal_test_parity.png`: 内部test全点の真値–予測とR²
+- `docs/validation_figures/12_internal_test_vs_external_core.png`: 内部testと外部coreを混ぜない並列比較
 - `noise_case_metrics.csv`: 観測noiseのcase・realization別RMSE、MAE、最大誤差
 - `noise_summary.csv`: 観測noise標準偏差ごとの平均、反復分散、worst、clean比
 - `rc_model_gap_summary.csv`: 物理RCの通常coreと既知model-gapの対比較
-- `figures/13_observation_noise_sensitivity.png`: 内部test・外部coreの観測noise感度
-- `figures/14_rc_unknown_physics_risk.png`: 通常性能と未知物理caseの物理RC誤差差
-- `figures/03–06_*`: 外部caseの時系列とparity図
-- `figures/07_model_gap_rmse.png`: 通常性能と混ぜないmodel-gap比較
+- `docs/validation_figures/13_observation_noise_sensitivity.png`: 内部test・外部coreの観測noise感度
+- `docs/validation_figures/14_rc_unknown_physics_risk.png`: 通常性能と未知物理caseの物理RC誤差差
+- `docs/validation_figures/03–06_*`: 外部caseの時系列とparity図
+- `docs/validation_figures/07_model_gap_rmse.png`: 通常性能と混ぜないmodel-gap比較
 
 学習済みweightは再現用に`benchmarks/neural_comparison/work/`へ保存しますが、派生物なのでGit管理外です。
 

@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from benchmarks.validation_figures import validation_figure_reference
 from celltemp.analysis import mae as _mae
 from celltemp.analysis import max_abs_error as _max_abs
 from celltemp.analysis import (
@@ -536,8 +537,10 @@ def _summary(
                 ),
             },
             "prediction_figures": {
-                "timeseries": "figures/prediction_timeseries.png",
-                "parity": "figures/prediction_parity.png",
+                "timeseries": validation_figure_reference(
+                    "high_fidelity_comsol_prediction_timeseries.png"
+                ),
+                "parity": validation_figure_reference("high_fidelity_comsol_prediction_parity.png"),
             },
         },
         "radiation_pair": {

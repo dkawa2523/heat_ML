@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from benchmarks.validation_figures import VALIDATION_FIGURE_DIRECTORY
 from celltemp.workflows.common import staged_output_directory
 from celltemp.workflows.prediction_figures import PredictionCase, write_prediction_figures
 
@@ -65,10 +66,10 @@ def publish_benchmark(
 
         write_prediction_figures(
             _prediction_cases(prediction_frames, sensor_names),
-            target / "figures",
+            VALIDATION_FIGURE_DIRECTORY,
             sensor_names=sensor_names,
             title="High-fidelity COMSOL external forecast",
-            file_prefix="prediction",
+            file_prefix="high_fidelity_comsol_prediction",
         )
         (target / "summary.json").write_text(
             json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False),

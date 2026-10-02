@@ -97,11 +97,11 @@ work/outputs/benchmark/
   monitor_by_case.csv
   parameter_recovery.csv
   benchmark_summary.json
-  figures/
-    core_prediction_timeseries.png       core中worst caseの真値・予測波形
-    core_prediction_parity.png           全core予測の真値–予測散布図とR²
-    model_gap_prediction_timeseries.png  非線形negative controlの真値・予測波形
-    model_gap_prediction_parity.png      negative controlの真値–予測散布図とR²
+docs/validation_figures/
+  topcell_core_prediction_timeseries.png       core中worst caseの真値・予測波形
+  topcell_core_prediction_parity.png           全core予測の真値–予測散布図とR²
+  topcell_model_gap_prediction_timeseries.png  非線形negative controlの真値・予測波形
+  topcell_model_gap_prediction_parity.png      negative controlの真値–予測散布図とR²
 ```
 
 `model_comparison.csv`は1 case × 1 modelで、aggregate誤差、worst sensor、peak温度誤差、peak時刻誤差を

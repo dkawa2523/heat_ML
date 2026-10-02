@@ -58,9 +58,9 @@ uv run --locked --with-editable . python -m `
 予測します。case/sensor別誤差、persistence・未学習prior・fitted RC比較、mesh差との比、放射pair差、truth非参照確認を
 `data/nonlinear_high_fidelity/benchmark/`へ保存します。3 baselineのcase別worst sensor・peak値・適格な
 peak時刻は`model_comparison.csv`が正本です。時間・温度・入力・圧力損失・放射熱量に対する
-記述的な残差依存は`residual_dependence.csv`、protocol区間に沿った残差波形は
-`figures/prediction_timeseries.png`はworst外部caseの真値・予測波形、
-`figures/prediction_parity.png`は全外部点の真値–予測散布図とR²です。相関は因果や追加物理の採用判定と
+記述的な残差依存は`residual_dependence.csv`へ保存します。protocol区間に沿ったworst外部caseの波形は
+`docs/validation_figures/high_fidelity_comsol_prediction_timeseries.png`、全外部点の真値–予測散布図とR²は
+`docs/validation_figures/high_fidelity_comsol_prediction_parity.png`です。相関は因果や追加物理の採用判定と
 しては扱いません。
 
 ```powershell
@@ -70,7 +70,8 @@ uv run --locked --with-editable . python -m `
 
 global-8の外部14ケース（内外挿、短pulse、hot start、放射pair）を同じモデルで広くscreeningする場合は
 次を実行します。結果は`data/nonlinear/benchmark/`のCSV/JSONと、非放射・放射model gapを分けた
-真値–予測時系列図およびparity plotへ保存し、外部report builderは使いません。case/sensor表と予測時系列には
+真値–予測時系列図およびparity plotへ保存し、公開図は`docs/validation_figures/`へ集約します。外部report
+builderは使いません。case/sensor表と予測時系列には
 persistence、engineering prior、fitted RCを並べ、case別の
 worst sensor・peak比較は`model_comparison.csv`へ一本化します。
 
@@ -193,9 +194,9 @@ uv run --locked --with-editable . python -m external_tools.comsol_chip_cooling.e
 NIS alert、校正済み`fins`を基準とするsensor bias、欠測区間、未command発熱の物理帰属を別々に
 評価し、`truth_*`列を
 変えてもforecastが変わらないことも
-確認します。`figures/prediction_timeseries.png`と`figures/prediction_parity.png`は外部8 caseの真値・予測を
-波形とR²付き散布図で示します。判定値は線形COMSOL v1のscreening用であり、実chipの製品許容温度では
-ありません。
+確認します。`docs/validation_figures/linear_comsol_prediction_timeseries.png`と
+`docs/validation_figures/linear_comsol_prediction_parity.png`は外部8 caseの真値・予測を波形とR²付き散布図で
+示します。判定値は線形COMSOL v1のscreening用であり、実chipの製品許容温度ではありません。
 
 ## 現在の基準結果
 

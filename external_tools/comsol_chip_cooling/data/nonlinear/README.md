@@ -36,8 +36,8 @@ trainingは全観測を持ちます。forecastとmodel-gapは初期行だけ観�
 `benchmark/`は`benchmark_nonlinear.py`が生成します。case/group/sensor別にfitted RC、engineering
 prior、persistenceを同じ表へ置き、条件別残差、5つのradiation pair、各baselineのaligned predictionを
 CSV/JSONへ保存します。`model_comparison.csv`は1 case × 1 modelのworst sensor・peak温度・適格なpeak時刻を
-比較する正本です。図は放射なしholdoutとradiation model gapを
-別scaleで表示し、平均へ混ぜません。外部report builderや派生Markdownは正本にしません。
+比較する正本です。図は`docs/validation_figures/`へ集約し、放射なしholdoutとradiation model gapを
+別scaleで表示して平均へ混ぜません。外部report builderや派生Markdownは正本にしません。
 
 旧global mesh level比較は局所解像度を評価できないため公開後処理から退役させました。現在のmesh収束
 評価と実験受入境界は、別用途として

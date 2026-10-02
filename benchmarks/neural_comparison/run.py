@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from benchmarks.validation_figures import VALIDATION_FIGURE_DIRECTORY
 from celltemp.analysis import prediction_error_metrics
 from celltemp.artifact import load_artifact
 from celltemp.config import as_path, load_config
@@ -659,7 +660,7 @@ def run(output_directory: Path, *, epochs: int) -> Path:
         evaluation_boundaries,
         noise_summary,
         rc_model_gap_summary,
-        output_directory / "figures",
+        VALIDATION_FIGURE_DIRECTORY,
     )
     return output_directory
 

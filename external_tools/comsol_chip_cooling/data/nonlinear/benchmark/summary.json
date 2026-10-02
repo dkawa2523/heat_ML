@@ -177,10 +177,10 @@
       "interpretation": "descriptive screening only; protocol covariation prevents causal attribution"
     },
     "prediction_figures": {
-      "non_radiation_timeseries": "figures/core_prediction_timeseries.png",
-      "non_radiation_parity": "figures/core_prediction_parity.png",
-      "radiation_model_gap_timeseries": "figures/model_gap_prediction_timeseries.png",
-      "radiation_model_gap_parity": "figures/model_gap_prediction_parity.png"
+      "non_radiation_timeseries": "docs/validation_figures/nonlinear_comsol_core_prediction_timeseries.png",
+      "non_radiation_parity": "docs/validation_figures/nonlinear_comsol_core_prediction_parity.png",
+      "radiation_model_gap_timeseries": "docs/validation_figures/nonlinear_comsol_model_gap_prediction_timeseries.png",
+      "radiation_model_gap_parity": "docs/validation_figures/nonlinear_comsol_model_gap_prediction_parity.png"
     }
   },
   "radiation_pairs": {

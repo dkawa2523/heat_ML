@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from benchmarks.validation_figures import VALIDATION_FIGURE_DIRECTORY
 from celltemp.workflows.common import staged_output_directory
 from celltemp.workflows.prediction_figures import PredictionCase, write_prediction_figures
 
@@ -69,17 +70,17 @@ def publish_benchmark(
         radiation = [case for case in cases if groups[case.case_id] == "radiation"]
         write_prediction_figures(
             non_radiation,
-            target / "figures",
+            VALIDATION_FIGURE_DIRECTORY,
             sensor_names=sensor_names,
             title="Nonlinear COMSOL forecast — non-radiation cases",
-            file_prefix="core_prediction",
+            file_prefix="nonlinear_comsol_core_prediction",
         )
         write_prediction_figures(
             radiation,
-            target / "figures",
+            VALIDATION_FIGURE_DIRECTORY,
             sensor_names=sensor_names,
             title="Nonlinear COMSOL forecast — radiation model gap",
-            file_prefix="model_gap_prediction",
+            file_prefix="nonlinear_comsol_model_gap_prediction",
         )
         (target / "summary.json").write_text(
             json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False),
