@@ -131,7 +131,7 @@ def monitor(
     posterior_physical = [model.observe(state.temperature)]
     reconstructed_measurements = [resolved_observer.predicted_measurement(state)]
     nodes = [state.temperature]
-    actuators = [state.actuator]
+    actuators = [model.point_actuator(state.actuator, commands[0])]
     disturbances = [resolved_observer.node_heat_disturbance(state)]
     biases = [resolved_observer.sensor_bias(state)]
     innovations = [nan_sensor]
@@ -173,7 +173,8 @@ def monitor(
         posterior_physical.append(model.observe(state.temperature))
         reconstructed_measurements.append(resolved_observer.predicted_measurement(state))
         nodes.append(state.temperature)
-        actuators.append(state.actuator)
+        point_command = commands[min(index + 1, len(commands) - 1)]
+        actuators.append(model.point_actuator(state.actuator, point_command))
         disturbances.append(resolved_observer.node_heat_disturbance(state))
         biases.append(resolved_observer.sensor_bias(state))
         innovations.append(innovation)

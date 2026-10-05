@@ -34,6 +34,11 @@ from external_tools.comsol_chip_cooling.evaluation_support import (
     json_records,
     percent_improvement,
 )
+from external_tools.comsol_chip_cooling.qualification_support import (
+    load_verified_dynamic_reference,
+    true_values,
+    validate_radiation_pair,
+)
 
 SENSORS = ("chip", "sink_base", "fins")
 CONTROLS = ("chip_power", "coolant_temperature", "inlet_air_velocity")
@@ -100,13 +105,11 @@ def _load_cases(root: Path) -> dict[str, pd.DataFrame]:
 def _validate_pair(frames: dict[str, pd.DataFrame]) -> bool:
     base = frames["HV01_composite_conjugate"]
     radiation = frames["HV02_composite_radiation"]
-    columns = ["time", *CONTROLS]
-    return np.allclose(
-        base[columns].to_numpy(dtype=np.float64),
-        radiation[columns].to_numpy(dtype=np.float64),
-        rtol=0.0,
-        atol=1e-10,
-    )
+    try:
+        validate_radiation_pair(base, radiation)
+    except ValueError:
+        return False
+    return True
 
 
 def _experiment_status(root: Path) -> tuple[bool, bool]:
@@ -120,28 +123,19 @@ def _experiment_status(root: Path) -> tuple[bool, bool]:
 
 
 def _reference_quality(root: Path, frames: dict[str, pd.DataFrame]) -> dict[str, Any]:
-    path = root / "data/nonlinear_high_fidelity/dynamic/cae_reference.csv"
-    reference = pd.read_csv(path)
     radiation = frames["HV02_composite_radiation"]
-    columns = ["time", *SENSORS, *CONTROLS]
-    expected = radiation[["time", *(f"truth_{name}" for name in SENSORS), *CONTROLS]].copy()
-    expected.columns = columns
-    reference_matches = np.allclose(
-        reference[columns].to_numpy(dtype=np.float64),
-        expected.to_numpy(dtype=np.float64),
-        rtol=0.0,
-        atol=1e-9,
-    )
+    validate_radiation_pair(frames["HV01_composite_conjugate"], radiation)
+    reference = load_verified_dynamic_reference(root / "data/nonlinear_high_fidelity", radiation)
     uncertainty = {
         sensor: float(reference[f"mesh_uncertainty_{sensor}"].max()) for sensor in SENSORS
     }
     experiment_compared, experiment_validated = _experiment_status(root)
     return {
-        "dynamic_reference_matches_hv02": reference_matches,
+        "dynamic_reference_matches_hv02": True,
         "mesh_profile": str(reference["mesh_profile"].iat[0]),
-        "mesh_qualified": bool(reference["mesh_qualified"].all()),
-        "benchmark_qualified": bool(reference["benchmark_qualified"].all()),
-        "temporal_qualified": bool(reference["temporal_qualified"].all()),
+        "mesh_qualified": bool(true_values(reference["mesh_qualified"]).all()),
+        "benchmark_qualified": bool(true_values(reference["benchmark_qualified"]).all()),
+        "temporal_qualified": bool(true_values(reference["temporal_qualified"]).all()),
         "experiment_compared": experiment_compared,
         "experiment_validated": experiment_validated,
         "mesh_difference_k": uncertainty,
@@ -177,10 +171,10 @@ def _saved_prediction(
     directory: Path,
     model: ThermalRCModel,
 ) -> np.ndarray:
-    result = pd.read_csv(directory / f"{case_id}.csv")
+    result = pd.read_csv(directory / "cases" / f"{case_id}.csv")
     if not np.allclose(result["time"], frame["time"], rtol=0.0, atol=1e-10):
         raise ValueError(f"{case_id}: forecast output is not time-aligned")
-    columns = [f"temperature_{sensor}" for sensor in SENSORS]
+    columns = [f"sensor.{sensor}.temperature" for sensor in SENSORS]
     saved = result[columns].to_numpy(dtype=np.float64)
     direct = _predict(model, case_id, frame)
     if not np.allclose(saved, direct, rtol=1e-10, atol=1e-10):

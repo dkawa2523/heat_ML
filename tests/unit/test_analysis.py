@@ -41,6 +41,8 @@ def test_prediction_error_metrics_use_aligned_finite_pairs() -> None:
     metrics = prediction_error_metrics(truth, predicted)
 
     assert metrics["n_points"] == 5
+    assert metrics["n_truth_points"] == 5
+    assert metrics["prediction_coverage_fraction"] == 1.0
     assert metrics["rmse_k"] == pytest.approx(np.sqrt(11.0 / 5.0))
     assert metrics["mae_k"] == pytest.approx(1.4)
     assert metrics["bias_k"] == pytest.approx(-0.2)
@@ -51,6 +53,56 @@ def test_prediction_error_metrics_use_aligned_finite_pairs() -> None:
 def test_prediction_error_metrics_reject_empty_arrays() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         prediction_error_metrics(np.empty((0, 2)), np.empty((0, 2)))
+
+
+@pytest.mark.parametrize("failed_value", [np.nan, np.inf, -np.inf])
+@pytest.mark.parametrize("missing_truth", [False, True])
+def test_prediction_error_metrics_reject_failed_predictions(
+    failed_value: float, missing_truth: bool
+) -> None:
+    truth = np.array([[20.0], [np.nan if missing_truth else 21.0]])
+    predicted = np.array([[20.0], [failed_value]])
+
+    with pytest.raises(ValueError, match="predicted temperatures must all be finite"):
+        prediction_error_metrics(truth, predicted)
+
+
+@pytest.mark.parametrize("failed_value", [np.nan, np.inf, -np.inf])
+def test_prediction_diagnostics_reject_failed_predictions(failed_value: float) -> None:
+    time = np.array([0.0, 1.0, 2.0])
+    truth = np.array([[20.0], [21.0], [22.0]])
+    predicted = np.array([[20.0], [failed_value], [22.0]])
+
+    with pytest.raises(ValueError, match="must all be finite"):
+        prediction_sensor_rows(time, truth, predicted, ("chip",))
+    with pytest.raises(ValueError, match="must all be finite"):
+        residual_dependence_rows(time, truth, predicted, ("chip",))
+
+
+def test_prediction_error_metrics_require_truth_and_reject_infinite_truth() -> None:
+    with pytest.raises(ValueError, match="at least one observed truth"):
+        prediction_error_metrics(np.full((2, 1), np.nan), np.zeros((2, 1)))
+    with pytest.raises(ValueError, match="cannot contain infinity"):
+        prediction_error_metrics(np.array([20.0, np.inf]), np.array([20.0, 21.0]))
+
+
+def test_prediction_error_metrics_reject_subtraction_overflow() -> None:
+    with pytest.raises(ValueError, match="prediction errors must be finite"):
+        prediction_error_metrics(np.array([-1e308]), np.array([1e308]))
+
+
+def test_prediction_error_metrics_reject_metric_overflow() -> None:
+    with pytest.raises(ValueError, match="error metrics must remain finite"):
+        prediction_error_metrics(np.zeros(2), np.full(2, 1e200))
+
+
+def test_prediction_error_metrics_preserve_missing_terminal_truth() -> None:
+    metrics = prediction_error_metrics(np.array([20.0, np.nan]), np.array([21.0, 22.0]))
+
+    assert metrics["n_points"] == metrics["n_truth_points"] == 1
+    assert metrics["rmse_k"] == 1.0
+    assert metrics["prediction_coverage_fraction"] == 1.0
+    assert np.isnan(float(metrics["terminal_rmse_k"]))
 
 
 def test_persistence_prediction_uses_latest_causal_observation() -> None:
@@ -187,6 +239,45 @@ def test_range_coverage_reports_known_and_unknown_envelopes() -> None:
     assert coverage_status([rows[0]]) == ("outside", "heater")
 
 
+@pytest.mark.parametrize(
+    ("lower", "upper", "expected"),
+    [
+        (25.0 - 1.2e-12, 80.0 + 1.2e-12, True),
+        (25.0 - 1e-8, 80.0, False),
+        (25.0, 80.0 + 1e-8, False),
+    ],
+)
+def test_range_coverage_distinguishes_roundoff_from_actual_extrapolation(
+    lower: float, upper: float, expected: bool
+) -> None:
+    row = range_coverage(
+        {"ranges": {"temperature": [25.0, 80.0]}},
+        "ranges",
+        "predicted_temperature",
+        ("temperature",),
+        np.array([[lower], [upper]]),
+    )[0]
+
+    assert row["within_training_range"] is expected
+    tolerance = row["comparison_tolerance"]
+    assert isinstance(tolerance, float)
+    assert 0.0 < tolerance < 1e-10
+
+
+@pytest.mark.parametrize("bounds", [[np.nan, 80.0], [25.0, np.inf], [80.0, 25.0]])
+def test_invalid_training_envelopes_are_unknown(bounds: list[float]) -> None:
+    row = range_coverage(
+        {"ranges": {"temperature": bounds}},
+        "ranges",
+        "predicted_temperature",
+        ("temperature",),
+        np.array([[30.0], [40.0]]),
+    )[0]
+
+    assert row["within_training_range"] is None
+    assert row["comparison_tolerance"] is None
+
+
 def test_temporal_coverage_uses_only_the_forecast_interval() -> None:
     trajectory = Trajectory(
         case_id="variable",
@@ -233,7 +324,8 @@ def test_prediction_diagnostics_report_peak_timing_and_residual_memory() -> None
 def test_prediction_diagnostics_do_not_bridge_missing_intervals() -> None:
     time = np.arange(5, dtype=np.float64)
     truth = np.arange(5, dtype=np.float64)[:, None]
-    predicted = truth + np.array([[0.0], [1.0], [np.nan], [3.0], [4.0]])
+    predicted = truth + np.arange(5, dtype=np.float64)[:, None]
+    truth[2] = np.nan
 
     row = prediction_sensor_rows(time, truth, predicted, ("chip",))[0]
 

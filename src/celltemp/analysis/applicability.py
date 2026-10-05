@@ -15,7 +15,8 @@ def _numeric_range(value: object) -> tuple[float, float] | None:
     lower, upper = value
     if any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value):
         return None
-    return float(lower), float(upper)
+    bounds = float(lower), float(upper)
+    return bounds if np.isfinite(bounds).all() and bounds[0] <= bounds[1] else None
 
 
 def _range_row(
@@ -29,9 +30,16 @@ def _range_row(
     train_max = saved_range[1] if saved_range is not None else None
     request_min = float(values.min())
     request_max = float(values.max())
-    within = (
-        request_min >= train_min and request_max <= train_max
+    # The engine can land a few ulps outside a boundary after matrix exponentials.
+    # This is numerical roundoff, not a physical tolerance or an expanded envelope.
+    tolerance = (
+        float(128.0 * np.finfo(np.float64).eps * max(1.0, abs(train_min), abs(train_max)))
         if train_min is not None and train_max is not None
+        else None
+    )
+    within = (
+        request_min >= train_min - tolerance and request_max <= train_max + tolerance
+        if train_min is not None and train_max is not None and tolerance is not None
         else None
     )
     return {
@@ -41,6 +49,7 @@ def _range_row(
         "train_max": train_max,
         "request_min": request_min,
         "request_max": request_max,
+        "comparison_tolerance": tolerance,
         "within_training_range": within,
     }
 

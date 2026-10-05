@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
+from numbers import Real
 
 import numpy as np
 import torch
@@ -13,12 +14,12 @@ from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 
 from .objective import (
-    actuator_before_interval,
-    initial_observation_rmse,
+    _predict_prepared_initial_observation,
+    _prepare_trajectory,
+    _PreparedTrajectory,
+    _profile_initial_temperature,
+    _trajectory_rmse,
     masked_huber_loss,
-    profiled_initial_temperature,
-    trajectory_initial_actuator,
-    trajectory_tensors,
 )
 
 _LOG_MULTIPLIER_LIMIT = 4.0
@@ -39,31 +40,37 @@ class TrainingConfig:
     seed: int = 42
 
     def __post_init__(self) -> None:
-        positive = {
+        integers = {
             "epochs": self.epochs,
             "batch_size": self.batch_size,
-            "learning_rate": self.learning_rate,
-            "huber_delta": self.huber_delta,
-            "initial_temperature_prior_std": self.initial_temperature_prior_std,
             "validation_every": self.validation_every,
             "patience": self.patience,
         }
+        if self.horizon is not None:
+            integers["horizon"] = self.horizon
         invalid = [
-            name for name, value in positive.items() if not math.isfinite(value) or value <= 0
+            name
+            for name, value in integers.items()
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0
         ]
         if invalid:
-            raise ValueError(f"training values must be positive and finite: {invalid}")
-        if self.horizon is not None and (not math.isfinite(self.horizon) or self.horizon <= 0):
-            raise ValueError("training horizon must be positive and finite or null")
-        non_negative = {
+            raise ValueError(f"training values must be positive integers: {invalid}")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("training seed must be a non-negative integer")
+        real_values = {
+            "learning_rate": self.learning_rate,
+            "huber_delta": self.huber_delta,
+            "initial_temperature_prior_std": self.initial_temperature_prior_std,
             "prior_weight": self.prior_weight,
             "gradient_clip": self.gradient_clip,
         }
-        invalid = [
-            name for name, value in non_negative.items() if not math.isfinite(value) or value < 0
-        ]
-        if invalid:
-            raise ValueError(f"training values must be non-negative and finite: {invalid}")
+        positive = {"learning_rate", "huber_delta", "initial_temperature_prior_std"}
+        for name, value in real_values.items():
+            bound = "positive" if name in positive else "non-negative"
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+                raise ValueError(f"training {name} must be a {bound} finite number")
+            if value < 0 or (name in positive and value == 0):
+                raise ValueError(f"training {name} must be {bound} and finite")
 
 
 @dataclass(frozen=True)
@@ -128,6 +135,7 @@ def _rollout_case_losses(
     *,
     huber_delta: float,
     initial_temperature_prior_std: float,
+    prepared: dict[int, _PreparedTrajectory] | None = None,
 ) -> torch.Tensor:
     """Roll out equal-length groups and return one equally weighted loss per case."""
     by_length: dict[int, list[tuple[Trajectory, int, int]]] = {}
@@ -142,50 +150,65 @@ def _rollout_case_losses(
         dt_windows: list[torch.Tensor] = []
         targets: list[torch.Tensor] = []
         masks: list[torch.Tensor] = []
-        for trajectory, start, stop in group:
-            observed, commands, dt, mask = trajectory_tensors(model, trajectory)
-            starting_actuator = trajectory_initial_actuator(model, trajectory, commands)
-            initial_temperatures.append(
-                profiled_initial_temperature(
-                    model,
-                    observed,
-                    commands,
-                    dt,
-                    mask,
-                    start=start,
-                    stop=stop,
-                    prior_std=initial_temperature_prior_std,
-                    initial_actuator=starting_actuator,
-                )
+        predictions: dict[int, torch.Tensor] = {}
+        direct_indices: list[int] = []
+        for index, (trajectory, start, stop) in enumerate(group):
+            inputs = (
+                _prepare_trajectory(model, trajectory)
+                if prepared is None
+                else prepared[id(trajectory)]
             )
-            initial_actuators.append(
-                actuator_before_interval(model, commands, dt, start, starting_actuator)
+            profile = _profile_initial_temperature(
+                model,
+                inputs.observed,
+                inputs.commands,
+                inputs.dt,
+                inputs.mask,
+                start=start,
+                stop=stop,
+                prior_std=initial_temperature_prior_std,
+                initial_actuator=inputs.initial_actuator,
             )
-            command_windows.append(commands[start:stop])
-            dt_windows.append(dt[start:stop])
-            targets.append(observed[start + 1 : stop + 1])
-            masks.append(mask[start + 1 : stop + 1])
+            if profile.sensor_temperature is None:
+                direct_indices.append(index)
+                initial_temperatures.append(profile.initial_temperature)
+                initial_actuators.append(profile.initial_actuator)
+                command_windows.append(inputs.commands[start:stop])
+                dt_windows.append(inputs.dt[start:stop])
+            else:
+                predictions[index] = profile.sensor_temperature[1:]
+            targets.append(inputs.observed[start + 1 : stop + 1])
+            masks.append(inputs.mask[start + 1 : stop + 1])
 
-        states, _ = model.forward_batch(
-            torch.stack(initial_temperatures),
-            torch.stack(command_windows),
-            torch.stack(dt_windows),
-            torch.stack(initial_actuators),
-        )
-        predicted = model.observe(states[:, 1:])
+        if direct_indices:
+            states, _ = model.forward_batch(
+                torch.stack(initial_temperatures),
+                torch.stack(command_windows),
+                torch.stack(dt_windows),
+                torch.stack(initial_actuators),
+            )
+            predicted = model.observe(states[:, 1:])
+            predictions.update(zip(direct_indices, predicted.unbind(), strict=True))
         case_losses.extend(
-            masked_huber_loss(predicted[index], target, mask, delta=huber_delta)
+            masked_huber_loss(predictions[index], target, mask, delta=huber_delta)
             for index, (target, mask) in enumerate(zip(targets, masks, strict=True))
         )
     return torch.stack(case_losses)
 
 
+@torch.no_grad()
 def _causal_validation_rmse(
     model: ThermalRCModel,
     trajectories: list[Trajectory],
+    *,
+    prepared: dict[int, _PreparedTrajectory],
 ) -> float:
     """Select deployed parameters using a future-blind initialization metric."""
-    values = [initial_observation_rmse(model, trajectory) for trajectory in trajectories]
+    values = []
+    for trajectory in trajectories:
+        inputs = prepared[id(trajectory)]
+        predicted = _predict_prepared_initial_observation(model, inputs)
+        values.append(_trajectory_rmse(inputs.observed, predicted, inputs.mask))
     return float(np.mean(values))
 
 
@@ -202,6 +225,16 @@ def _validate_observations(trajectories: list[Trajectory]) -> None:
         raise ValueError(
             f"training trajectories need an observation after the initial row: {missing_targets}"
         )
+
+
+def _prepare_fit_inputs(
+    model: ThermalRCModel, trajectories: list[Trajectory]
+) -> dict[int, _PreparedTrajectory]:
+    prepared: dict[int, _PreparedTrajectory] = {}
+    for trajectory in trajectories:
+        if id(trajectory) not in prepared:
+            prepared[id(trajectory)] = _prepare_trajectory(model, trajectory)
+    return prepared
 
 
 def _checked_backward(loss: torch.Tensor, model: ThermalRCModel, epoch: int) -> None:
@@ -227,7 +260,9 @@ def fit_thermal_model(
         raise ValueError("at least one training trajectory is required")
     config = config or TrainingConfig()
     validation = validation_trajectories or train_trajectories
-    _validate_observations([*train_trajectories, *validation])
+    all_inputs = [*train_trajectories, *validation]
+    _validate_observations(all_inputs)
+    prepared = _prepare_fit_inputs(model, all_inputs)
     rng = np.random.default_rng(config.seed)
     torch.manual_seed(config.seed)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -254,6 +289,7 @@ def fit_thermal_model(
                 selected,
                 huber_delta=config.huber_delta,
                 initial_temperature_prior_std=config.initial_temperature_prior_std,
+                prepared=prepared,
             )
             data_loss = case_losses.mean()
             loss = data_loss + config.prior_weight * _parameter_prior(model)
@@ -275,6 +311,7 @@ def fit_thermal_model(
             causal_validation_rmse = _causal_validation_rmse(
                 model,
                 validation,
+                prepared=prepared,
             )
             if not math.isfinite(causal_validation_rmse):
                 raise FloatingPointError(f"non-finite validation RMSE at epoch {epoch}")

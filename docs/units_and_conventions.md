@@ -6,7 +6,7 @@
 | Quantity | Unit | Convention |
 |---|---|---|
 | time, `dt`, actuator `tau` | s | strictly increasing timestamps |
-| temperature | °C or K | one consistent absolute scale per project; differences are K |
+| temperature | °C by default; K with `project.temperature_unit: K` | one absolute scale per project; differences are K |
 | heat capacity | J/K | positive and normally fixed during identification |
 | edge/boundary conductance | W/K | non-negative scalar law output |
 | source heat rate | W | non-negative commanded source output |
@@ -18,10 +18,23 @@
 | bias process std | K/√s | continuous-time sensor-bias random-walk intensity |
 | sensor bias | K | relative to the reported bias gauge |
 
+`project.temperature_unit`は`degC`（既定）または`K`です。CSVのsensor温度、node初期温度、
+reservoir温度のinterceptと温度controlを同じ尺度に揃えます。設定は値を変換せず、artifact・manifestと
+図のラベルへ伝えます。Kのartifactを運用するときはartifactの単位をそのまま使い、runtimeで別尺度へ
+変更しません。既存のunit metadataを持たないartifactは従来のdegCとして読みます。
+
+forecastの`sensor.<名前>.std`は状態推定の不確かさ、`sensor_std`はsensor間の温度のばらつきです。
+前者は予測区間、後者は温度均一性の補助値であり、同じ標準偏差でも目的が異なります。
+通常の均一性判断には`maximum_sensor_span`と元波形を使います。
+
 熱収支ではsourceとboundaryの符号を「thermal nodeへ入る向きが正」とします。したがって冷却中の
-`boundary_*_w`は負です。`edge_<node_a>_to_<node_b>_w`は`node_a`から`node_b`へ流れる向きを正、
-`storage_<node>_w`は`C*dT/dt`を正とします。`balance_residual_*_w`は
+`boundary.<名前>.heat_w`は負です。`edge.<index>.heat_w`はartifactの`system.edges`順で、定義した最初のnodeから次のnodeへ流れる向きを正、
+`node.<名前>.storage_w`は`C*dT/dt`を正とします。`node.<名前>.balance_residual_w`は
 `internal + source + boundary - storage`で、数値的に0であるべきです。
+
+point出力の`control.<名前>.effective`と熱流は、その時刻から始まる区間の入力を使います。`tau=0`は
+`commands[k]`へ即時切替し、正のtauのstateは時刻境界で連続です。最終時刻だけは最後のcommandを
+保持します。これによりstep入力と瞬間熱流の時刻が一致し、可変dtでも1行前の入力を表示しません。
 
 各actuatorは`system.yaml`で任意の`unit`と`role`を持てます。`unit`はCSVと図表に表示する入力単位、
 `role`は人が入力目的を読むための短い説明です。どちらも自由文字列で、coreは単位変換や計算分岐に
@@ -38,12 +51,12 @@ monitorの未知発熱basisはsourceがあればそのsource weight行です。s
 `run_manifest.json`へ保存されます。source分布が互いにほぼ線形従属する場合は外乱を一意に分離できない
 ため、system定義側で物理的に区別できる最小の分布へ整理してください。
 
-forecastの`temperature_std`と95%区間は、潜在的な物理温度の状態・process不確かさです。将来の
+forecastの`sensor.<名前>.std`と95%区間は、潜在的な物理温度の状態・process不確かさです。将来の
 測定noise、同定パラメータ、入力、model-formの不確かさは含みません。
 
-`thermal_paths.csv`はnode capacityをJ/K、edge/boundary conductanceをW/K、resistanceをK/W、
+任意診断の`diagnostics/thermal_paths.csv`はnode capacityをJ/K、edge/boundary conductanceをW/K、resistanceをK/W、
 source heatをWで保存します。lawのoffset/scaleはそのpath出力単位を基準とし、threshold/referenceは
-併記したcontrol unitを基準とします。`thermal_modes.csv`のpoleは1/s、time constantはsです。両表の
+併記したcontrol unitを基準とします。`diagnostics/thermal_modes.csv`のpoleは1/s、time constantはsです。両表の
 代表運転点は、成分別中央値に最も近い実在の学習command行を定常actuator値として評価したものです。
 
 `thermal_impedance.csv`の`heat_step_w`は、生のcommand差ではなく対象へ吸収された熱量の変化です。

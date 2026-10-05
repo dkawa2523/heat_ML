@@ -1,0 +1,13 @@
+# Paths are relative to this file. All other options use the documented defaults.
+system: system.yaml
+
+project:
+  run_name: thermal_network_minimal
+  output_dir: work/outputs/runs
+
+data:
+  directory: data/raw
+
+forecast:
+  input_dir: data/pred/forecast
+  output_dir: work/outputs/forecast_minimal

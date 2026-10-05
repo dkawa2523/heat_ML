@@ -16,9 +16,9 @@ CSV / DataFrame ── Trajectory ── ThermalSystemSpec
 学習、予測、監視で別々の遅れ処理、rollout、補正器を持たないことが重要です。
 
 利用者の基本経路は`analyze -> train -> forecast`です。`monitor`は逐次観測同化が必要な設備だけで使い、
-基本経路の前提にしません。各workflowの出力は「dataset/case要約 → 判断用の主要図・比較表 → sensor別・
-履歴・manifest等の詳細」の順で読みます。新しいindex生成層やreport builderは置かず、各workflowが
-自分の出力directoryと正本CSV/JSONを所有します。
+基本経路の前提にしません。trainとforecastは、score・正本CSV・metadata/artifactを先に保存します。
+比較表、熱経路、熱収支、図は`project.diagnostics: true`で要求した場合だけ別の`diagnostics/`へ保存します。
+新しいindex生成層やreport builderは置かず、各workflowが自分の出力directoryを所有します。
 
 ## 2. Domain
 
@@ -47,6 +47,8 @@ controlを持つため、別索引、ファイル名regex、暗黙の定数contr
 `commands[k]`は`[time[k], time[k+1])`にのみ対応します。可変時間刻みは
 `dt = diff(time)`として保持し、再サンプリングで情報を落としません。
 学習、forecast、monitorはいずれもこの同じ型を受け取り、schedule専用の並行表現は持ちません。
+観測prefixと将来suffixの境界は`domain.forecast_origin_index`が所有します。最初の全sensor欠測行より後に
+観測が再登場する入力は拒否し、既存の`celltemp.inference.forecast_origin_index`はre-exportとして維持します。
 
 ### ThermalSystemSpec
 
@@ -81,7 +83,7 @@ backside gas、接触、冷媒、RF、plasmaなどをcoreの列挙型へ追加�
 
 ### 熱方程式
 
-各edge `(i,j)`は単一の`G_ij(a) > 0`を共有し、Laplacianを構成します。
+各edge `(i,j)`は単一の`G_ij(a) >= 0`を共有し、Laplacianを構成します。
 
 ```text
 q_ij = G_ij (T_j - T_i)
@@ -140,8 +142,11 @@ x_next = Phi(dt) x + Gamma(dt) c
 
 `F`を逆行列化しないため、閉じた熱回路や遅れなしactuatorを含む特異系でも安定です。
 一次遅れactuatorがsource thresholdを横切る場合は解析的な交差時刻で区間を分割します。
-同じ`dt`、source activity、system matrixを変えるlaw入力を持つbatchは`Phi/Gamma`を再利用します。大規模系向けには
+同じ`dt`、source activity、system matrixを変えるlaw入力を持つbatchは`Phi/Gamma`を再利用します。
+rollout内ではtauを一度だけ計算・検証し、検証済みの入力と演算結果は内部経路で再利用します。
+cacheは同じ実行中の数値と勾配の有効範囲に限定し、学習parameterが変わった後の演算子を使い回しません。
 A-stable implicit Eulerも選べます。
+公開数値境界は入力・dtと計算結果の有限性を検査し、発散した温度を欠測として流しません。
 単一軌道もbatch次元を1として`forward_batch`を通すため、学習用と推論用に別rolloutはありません。
 
 ## 4. Identification
@@ -166,21 +171,41 @@ caseごとに独立した有効長と観測可能なshooting pointを使いま�
 validationは設定した学習horizonに関係なく完全な軌道で計算し、先頭観測だけからの因果的な
 open-loop RMSE平均でmodel stateを選択します。条件付きprofile RMSEも保存し、係数fitと初期状態推定を
 監査できます。長いcaseや観測点の多いcaseだけが過大な重みを持たない設計です。
+不変なtrajectoryの入力Tensorは一つのfit内で一度だけ準備します。hidden初期状態のprofileでは、
+候補軌道のbaselineと線形感度から補正後の全状態・sensor予測を得て、同じ軌道を再積分しません。
+開始点までのactuator再生も共有し、温度のaffine性、autograd、補正後の有限性を維持します。
 
 `workflows/train.py`は設定解決、trajectory読込、case split、同定の調停だけを所有します。同定後の
-case/sensor評価、保持caseのfitted RC・engineering prior RC・persistence因果比較、validation overview、
-学習範囲metadata、thermal path/mode表、CSV/JSONとartifact保存は
-`workflows/train_output.py`が所有します。評価表を束ねる内部型は同moduleの外へ出さず、利用者向けAPIや
-artifact schemaを増やしません。`learning`は表やfilesystemへ依存しません。
+case/sensor評価、学習範囲metadata、基本CSV/JSONとartifact保存は`workflows/train_output.py`が所有します。
+基本runの原子的な保存後、diagnosticsを要求した場合だけ保持caseのengineering prior RC・persistence比較、
+thermal path/mode表、test予測CSV・図を`<run>/diagnostics/`へ別transactionで生成します。
+diagnostics失敗時も保存済みの基本runは残ります。内部の評価recordは公開APIやartifact schemaへ追加せず、
+`learning`は表やfilesystemへ依存しません。
 
 capacityは既定で固定します。`C`とすべての`G/q`を同じ倍率で変える尺度不定性を避け、
 同定されたconductanceとsource heat rate係数を解釈可能に保つためです。
 
+初期観測の逆問題は、平均温度を中心とする拡張QR最小二乗で解きます。正規方程式を作らず、
+float32の場合はこの小さい逆問題だけfloat64の作業精度を使い、戻り値のdtypeと勾配を維持します。
+artifactの`training_inputs`は全splitのcase、実際に読み込んだCSVのSHA-256、相対pathを保存します。
+ニューラル比較でRCを再利用する前に、入力・split・seed・system・積分法を照合し、古い成果物を拒否します。
+
 ## 5. Analysis
 
-`celltemp.analysis`はNumPy配列から波形・均一性・誤差・熱回路指標を計算する純粋関数だけを持ちます。
-CSV/YAMLの読込、設定解決、表と図の保存は`workflows`側に残し、学習済みmodelへの依存を追加しません。
+`celltemp.analysis`の配列APIはNumPyから波形・均一性・誤差を計算し、Torchなしでimport・実行できます。
+熱経路・modeなどのmodel inspectionだけは要求時に`analysis.model`をlazy importします。
+CSV/YAMLの読込、設定解決、表と図の保存は`workflows`側に残します。
+基本波形表は開始・最後の有効温度、変化、min/maxと時刻、最大昇温/冷却速度を保存します。
+観測不足でも行を残し、観測点数と`response_status`を保存します。算出できない速度は空欄になります。
+単一stepの10–90%、63.2%、整定、overshootは、利用者が`analysis.response`にcaseと区間を明示した場合だけ
+`response_metrics.csv`へ保存します。基本波形に定常到達や物理時定数の意味を自動付与しません。
+指定区間と有効観測範囲を別々に保存し、63.2%到達・整定時間は最初の有効観測から計算します。
+配列APIでは`sensor_waveform_rows`が基本表、`response_metrics`が明示区間の詳細解析を所有します。
+analysisはsystemによる列定義、または`analysis.sensors/controls`による列名だけの入力を選べます。
+波形解析には熱容量・熱経路や先頭観測を要求せず、学習・運用の初期化条件を混ぜません。
 そのため、生のCAE/実験trajectoryとforecast結果に同じ指標定義を適用できます。
+analysisの既定出力先は学習runと兄弟の`project.output_dir/<run_name>_analysis`です。
+trainによるrunの置換でanalysis成果物が失われない配置とし、明示した`analysis.output_dir`で変更できます。
 
 thermal impedanceは一般recipeから自動検出しません。利用者がcase、対象control、transition区間、既知の
 吸収熱変化を明示した場合だけ、基準温度のdrift/noise、入力の単独性、sample数を確認して
@@ -188,17 +213,34 @@ thermal impedanceは一般recipeから自動検出しません。利用者がcas
 dimensionless操作量を誤ってWとして扱いません。定常Rthは終端Zth勾配がproject固有の明示閾値を満たす
 sensorだけに出し、有限時間の最終値を無条件に定常値と呼びません。
 
+### 設定と出力の一貫性
+
+共通CSV形式は`data.time_col/sep/control_convention/dt`が所有し、analysis/forecast/monitorの明示指定が
+これを上書きします。artifact単独運用では学習時の指令規約を既定として使います。解決後の設定を
+読込とmanifestへ同じ値で渡し、設定を独立に再解釈しません。
+`project.temperature_unit`はdegC/Kを一度だけ指定し、artifactから運用出力へ引き継ぎます。
+
+case CSVのquantityは`sensor.<名前>.temperature/std/lower95/upper95`、
+`node.<名前>.temperature/std`、`control.<名前>.command/effective`の末尾に固定します。
+node/sensor名にstd_やdotが含まれても異なるquantityの列と衝突しません。旧列を二重保存せず、
+consumer、図、評価は同じ命名へ移行します。manifestの出力versionはこの変更を識別します。
+monitorは同じ命名でmeasured/prior_physical/posterior_physical等を使い、commandも同じ表へ保存します。
+
 ## 6. Forecast
 
 forecastは先頭から連続するsensor履歴を物理observerへ通し、履歴末端のposterior node温度と
 effective actuatorから、command scheduleだけでopen-loop積分します。先頭1行だけの観測も
 同じ処理の最小ケースです。安定性はclipではなく、正のcapacity/conductanceと安定積分で
 確保します。
+履歴の状態推定は観測prefixだけをTensor化します。将来平均は共通のphysical rolloutで求め、
+同じeffective actuatorとdtからcovarianceを独立に伝播します。過去の未知熱・biasの平均は未来forcingへ
+持ち越さず、posterior covarianceと状態間の相関は保持します。
 
 開始直前の実効actuatorが既知なら、trajectory CSV先頭行の`initial_effective_<control>`を使用します。
 省略時だけ最初のcommandへ整定済みと仮定します。
 
-入力はtrain、monitorと同じtrajectory CSVです。観測は先頭から連続するprefix、最初の
+入力はtrain、monitorと同じtrajectory CSVです。重複ヘッダとinitial_effective_のcontrol誤記は
+読込時に拒否し、truthなど他用途の追加列は保持できます。観測は先頭から連続するprefix、最初の
 全sensor空欄行以後は将来です。個別sensorの欠測は許しますが、forecast境界後に観測が再登場する
 入力は拒否します。その1ファイルが履歴、時間軸、将来commandをすべて表し、条件一覧から
 scheduleファイルを参照する二段構成は持ちません。出力はposterior handoff時刻から始まり、
@@ -215,14 +257,13 @@ process noiseは保持データの残差を使って用途ごとに調整しま�
 workflowを呼ぶのではなく、両者が`celltemp.analysis`の純粋関数を共有するため、workflow間の依存や
 暗黙の追加設定はありません。
 
-case別の主要予測図`figures/forecast_<case_id>.png`は、保存対象と同じforecast DataFrameから予測sensor
-温度・95%状態区間・command・sensor spanだけを表示します。図のためにmodelを再実行したり、将来truth、
-誤差、設定optionを追加したりしません。
-
-熱収支は`energy_balance.csv`を数値の正本とし、同じ表からcase別の
-`figures/energy_balance_<case_id>.png`を出力します。図はsource・boundaryの符号付き熱流、
-`source + boundary`とstorage、数値残差の3段だけを示します。engineは熱流計算、workflow出力層は
-表と可視化を所有し、図のためのmodel計算、設定option、workflow間依存は追加しません。
+基本出力は`cases/*.csv`、summary、coverage、case/sensor/control指標、manifestです。これらを保存した後、
+`project.diagnostics: true`の場合だけ`workflows/forecast_diagnostics.py`が保存済みCSVをcase単位で読み、
+熱収支と図を`<forecast>/diagnostics/`へ生成します。全caseの予測DataFrameを保持せず、再推論もしません。
+`diagnostics/figures/forecast_<case_id>.png`は予測sensor温度・95%状態区間・command・sensor spanを示します。
+`diagnostics/energy_balance.csv`は保存されたnode温度・effective actuatorから同じengineの熱流則で計算し、
+`diagnostics/figures/energy_balance_<case_id>.png`へsource・boundary、net入力とstorage、残差を示します。
+diagnosticsの別transactionが失敗しても、基本予測出力は保持します。
 
 状態推定の公開importは`celltemp.inference`で維持し、内部は`settings`、`initialization`、`forecast`、
 `monitor`へ分けます。forecastとmonitorは同じobserver設定解決と初期化関数を共有しますが、互いを
@@ -241,6 +282,8 @@ monitorは後付け補正ではなく、拡張状態`[T, unknown_heat, sensor_bi
 
 未知熱とsensor biasの連続時間process noiseは、`exact`では熱方程式を含むVan Loan離散化、
 `implicit`では同じbackward-Euler遷移を通す離散化で共分散へ変換します。
+長いexact区間では短区間のVan Loan演算子を求め、物理遷移と共分散をdoublingで合成します。
+逆符号の補助行列を長い区間で指数化することによる、疎なログでの共分散overflowを避けます。
 出力はprior physical temperature、predicted measurement、posterior physical temperature、
 reconstructed measurement、node未知熱、sensor bias、bias gauge、innovation、full innovation
 covariance、NISです。
@@ -273,16 +316,25 @@ SHA-256をmetadataと照合し、同じshapeでも内容や来歴が異なる混
 ## 9. Config and output boundary
 
 用途ごとに1つの`config.yaml`だけを持ち、学習・forecast・monitorが共有します。すべての相対パスは
-configの親ディレクトリ基準、乱数seedはtop-levelの1箇所です。出力は隣接する一時directoryへ
-全ファイルを書き終えてから置換するため、入力不正や処理失敗で直前の正常出力を壊しません。
+configの親ディレクトリ基準、乱数seedはtop-levelの1箇所です。各出力transactionは隣接する一時directoryへ
+対象ファイルを書き終えてから置換するため、入力不正や処理失敗で直前の正常出力を壊しません。
+`project.diagnostics`はYAML booleanで既定`false`です。train/forecastの基本出力を先に確定し、
+`true`の場合だけその配下の`diagnostics/`を別transactionで生成します。文字列の`"false"`等は拒否します。
 相対`output_dir`はconfigの親directory配下に限定し、外部storageは絶対パスで明示します。
 project root、そのancestor、filesystem rootそのものは置換対象にできません。既存結果はbackupへ
 移してから新結果へ切り替えるため、置換失敗時にもrollbackできます。
+入力やartifactと重なる出力先も拒否します。forecastとmonitorのcase別CSVは`cases/`へ保存し、
+summaryには出力directoryからの相対pathを記録します。集計表とcase名の衝突は起こりません。
+読込時と保存時で入力hashを照合し、処理中にデータが変わった場合は置換を中止します。
 
-sensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。artifactも既定では
+学習・運用のsensor/control名は`system.yaml`を唯一の定義元とし、configへ重複させません。波形解析だけは
+`analysis.sensors/controls`を使えます。専門解析は必要なprojectだけ独立した`analysis.yaml`へ置き、
+既存CLIへ直接渡します。configの継承・merge・scenario登録機構は追加しません。artifactも既定では
 `project.output_dir/project.run_name/artifact`から導出し、別runを読む場合だけ明示します。
 forecastとmonitorは同じobserver設定解決と初回観測更新を使い、入力・artifact hash、解決済み設定を
 共通の`run_manifest.json`へ保存します。
+`config.snapshot.yaml`は監査用の設定記録です。相対pathは元config directory基準のままなので、snapshotを
+単体で移動した後の再実行は保証しません。metadataのconfig basenameも元directoryを復元する情報ではありません。
 
 ## 10. Dependency direction
 
@@ -318,10 +370,15 @@ CSV・YAML、指標計算、物理計算の境界を明確にしています。
 NIS・sensor bias・未知熱eventの評価を所有します。両者は表を返すだけで、互いを呼び出さず、
 合否値やfilesystem出力も持ちません。
 
+TopCellのproduct採点は、forecast/monitorが保存したcase CSVとmanifestを入力・artifactへ照合して行います。
+実行条件も確認し、fitted modelを評価器で再実行してworkflow出力を代用しません。config hashは来歴記録として
+残しますが、diagnostics設定などの変更だけを理由に保存済み予測を拒否しません。
+
 mesh収束評価では、`run_mesh_convergence.py`のCLIがcase/profileを選び、runtime準備、mesh QoI収集、
 evidence公開を順に調停します。runtime準備だけが既存raw・meshの再利用可否とCOMSOL起動を判断し、
-QoI収集は既存`run_nonlinear.py`のsolve/mesh機能を再利用します。収束閾値と隣接mesh比較は同じ評価module、
-原子的なCSV保存は公開処理に閉じるため、solver実行と合否判定を混在させません。
+QoI収集は既存`run_nonlinear.py`のsolve/mesh機能を再利用します。収束閾値とmesh/time-step比較は
+公開の純粋比較module`qualification.py`、入力証拠への結び付けは`qualification_support.py`が所有します。
+設定・file読込と公開はentry point側に閉じ、比較moduleからrunner/CLIをimportしない一方向依存にします。
 
 過渡時間刻み収束では、`run_time_step_convergence.py`だけが同一HV02 scheduleを初期pairの最大BDF刻み
 2 s / 1 s、必要時は次の隣接細分化で実行し、同一出力時刻の8 QoIを比較します。solver optionは既存
@@ -347,6 +404,21 @@ frameworkには統合しません。両出力moduleは評価値を再計算せ�
 `domain`は物理構造と参照整合性、`engine`は解法適合性と時間発展、`learning`は係数同定、
 `inference`は状態推定、`analysis`は波形指標、`workflows`は入出力のオーケストレーションだけを
 担当します。
+
+### COMSOLからの導入
+
+`external_tools/comsol_import.py`が保存済み3D過渡モデルを既存system YAMLとtrajectory CSVへ変換します。
+利用者は通常形式の熱回路template、代表nodeとdomain selection、controlとCOMSOL式の対応を指定します。
+縮約した熱結合・実効conductance・学習対象・観測対応はtemplateが所有し、抽出側で推測しません。
+`comsol_extract.py`とJavaは保存解の評価・数値と単位変換、`comsol_runtime.py`は起動だけを所有します。
+importerは最初の保存時刻の熱容量を補完し、既存system parserとtrajectory IOを使って検証・保存します。
+容量で重み付けした領域温度をtemplateの観測行列へ投影し、sensor温度を生成します。
+保存時刻の指令は保持し、既存の`data.control_convention`で区間へ対応付けます。
+過渡datasetが一つなら自動選択、複数なら利用者が指定します。新しいscenario/config体系はありません。
+生成物は通常の手書き設定と同じ形式で、本体はCOMSOLに依存しません。手順・適用範囲は
+[取り込みREADME](../external_tools/comsol/README.md)を正本とします。
+モデル読込には[COMSOL Java API](https://doc.comsol.com/6.4/doc/com.comsol.help.comsol/api/com/comsol/model/util/ModelUtil.html)
+を使い、解析済み結果の読込と新しいsolveを分けます。
 
 ## 12. Core extension rule
 

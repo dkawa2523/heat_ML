@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from celltemp.inference import forecast_origin_index
+from celltemp.domain import forecast_origin_index
 
 from .cases import Case
 from .dataset_support import left_limits

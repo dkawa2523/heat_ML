@@ -36,6 +36,10 @@ Git管理せず、毎回generatorから再構築します。
 uv run --locked python -m benchmarks.topcell.run
 ```
 
+採点は公開workflowが保存した`cases/*.csv`を読みます。入力CSV・artifact・実行条件をmanifestへ照合し、
+fitted RCのforecastとmonitorを採点のために再実行しません。engineering priorだけ同じ条件で計算します。
+config hashは来歴記録であり、診断設定の変更だけで保存済み結果を拒否しません。
+
 ## 基準実行結果
 
 以下はseed 42でのreference resultです。再実行後の判定と完全精度は
@@ -87,6 +91,7 @@ parameter一致は副指標であり、外部trajectory
 
 ```text
 work/outputs/runs/topcell/  学習artifactと内部split評価
+  diagnostics/             任意の比較・熱経路・保持test図
 work/outputs/forecast/      公開forecast workflow出力
 work/outputs/monitor/       公開monitor workflow出力
 work/outputs/benchmark/
@@ -103,6 +108,10 @@ docs/validation_figures/
   topcell_model_gap_prediction_timeseries.png  非線形negative controlの真値・予測波形
   topcell_model_gap_prediction_parity.png      negative controlの真値–予測散布図とR²
 ```
+
+公開forecast/monitorのcase CSVは`sensor.<名前>.<量>`、`node.<名前>.<量>`、`control.<名前>.<量>`です。
+manifest version 3の列形式・単位と来歴を照合してから評価します。以前の保存CSVはforecast/monitorを再実行し、
+単一の現行形式へ更新してください。artifactのモデル値はそのまま再利用できます。
 
 `model_comparison.csv`は1 case × 1 modelで、aggregate誤差、worst sensor、peak温度誤差、peak時刻誤差を
 同じ列に揃えます。真値peakが記録区間端にあるsensorは時刻評価から除外し、

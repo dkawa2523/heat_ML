@@ -13,6 +13,7 @@ from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 from celltemp.inference import forecast
 
+from .evaluation import validate_case_metrics
 from .internal import initial_condition_request
 from .training import NeuralTrainingResult, SequencePreprocessor, forecast_sequence
 
@@ -150,6 +151,7 @@ def evaluate_observation_noise(
 
 def summarize_observation_noise(case_metrics: pd.DataFrame) -> pd.DataFrame:
     """Aggregate case errors without mixing internal and external boundaries."""
+    validate_case_metrics(case_metrics)
     keys = ["evaluation", "boundary", "category", "model", "noise_std_k"]
     repeat_keys = [*keys, "repeat"]
     repeat_summary = (

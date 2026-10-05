@@ -66,7 +66,12 @@ hotspot安全判定へ昇格させません。
 
 `dynamic/cae_reference.csv`は放射を含む`HV02`を実験比較用の過渡境界へ変換した表です。過渡条件は
 MC01/MC02の発熱上限・入口温度・流速範囲内に置き、各温度のmesh不確かさには両定常点の
-local-medium対local-fine差の最大値を保守的に付与します。2 s / 1 sの独立時間刻み比較は実施済みですが
+実際の採用meshとその直後の既知meshとの差の最大値を保守的に付与します。採否は
+`mesh_acceptance.csv`と元の`mesh_convergence.csv`・差分表を照合して再計算し、定常参照表の資格を
+別meshへ転写しません。入力範囲、原本model、放射率、hidden power、実効流速が検証境界から
+外れた場合もbenchmark資格は付与しません。証拠がないmeshの不確かさは算出不能として残します。
+この定常証拠による過渡の資格はmodel-form screening用途に限り、`mesh_qualified=false`を維持します。
+2 s / 1 sの独立時間刻み比較は実施済みですが
 事前基準に未達なので、`temporal_qualified=false`を保持し、動的な設計保証には使いません。
 
 ## 2026-08-30の収束結果
@@ -141,10 +146,22 @@ heat sink温度を下げて空気側へ熱を移す方向性の確認には使�
 | 圧力差、放射熱量 | fine側peakの0.5% |
 
 比較は同じ時刻を直接結合し、補間しません。8 quantityがすべて合格した場合だけ
-`temporal_qualified=true`とし、3領域平均温度の最大差を`temporal_uncertainty_*`へ保持します。
+比較のfine結果を時間刻み資格の候補とします。`temporal_qualified=true`を実際の過渡参照へ付与するには、
+case、mesh、最大BDF step、時刻・control・8評価量・物理設定のデータ署名が、その検証済みfine結果と
+完全に一致する必要があります。異なるadaptive solveへ合格や差分を転写しません。
+比較にはcoarse/fine CSVの相対path、SHA-256、数値・物理設定の署名を保存し、再集計時に両CSVから
+差分と事前の受入値を再検証します。参照がfine結果と一致した場合だけ、3領域平均温度の最大差を
+`temporal_uncertainty_*`へ保持します。比較が不合格でも、そのfine結果自体の診断用差分は保持できます。
 未実行または一部だけの結果ではfalseのままです。不合格時は基準を変更せず、fine側を次のcoarse側として
 さらに半分の最大刻みを解きます。各隣接pairは`temporal/comparison_<coarse>_to_<fine>.csv`へ残し、
 `time_step_convergence.csv`は資格判定に使う最新pairを保持します。
+
+新しいsolveはraw、完了log、schedule、実行したJava source、mesh、最大BDF stepを
+`work/nonlinear/.../raw/<case>.txt.provenance.json`へ結び付けます。`--reuse-raw`は固定stepのlog宣言を
+確認し、記録済みのfileや設定が変わった場合は停止します。来歴記録のない過去rawはscreeningの再集計に
+利用できますが、新しい時間資格を付与しません。過去logを読んだだけで来歴記録を後付けしません。
+`run_high_fidelity --maximum-time-step <秒>`は両過渡caseに同じ固定stepを使用し、検証状態を公開CSVに
+残します。比較pairの合格によって既存のadaptive過渡値が自動で置換されることはありません。
 
 2026-09-30に2 s / 1 sを完了し、結果は次のとおりでした。
 
@@ -161,6 +178,9 @@ heat sink温度を下げて空気側へ熱を移す方向性の確認には使�
 
 したがって時間離散化は未資格です。1 s / 0.5 sの追加比較は後日実施し、それまでは2 s / 1 sを正本と
 します。受入値の緩和や未完了solveの部分値による代用は行いません。
+現在公開しているHV01/HV02は独立のadaptive solveであり、2 s / 1 sのfine値そのものではありません。
+このため時間資格はfalseで、比較pairの差分は`time_step_convergence.csv`に保持し、adaptive参照の時間
+不確かさには流用しません。公開済み温度・controlの値は維持しています。
 
 ```powershell
 uv run --locked --with-editable . python -m `

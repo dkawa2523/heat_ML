@@ -44,11 +44,10 @@ def persistence_prediction(
     return np.repeat(latest[None, :], len(values) - origin, axis=0)
 
 
-def prediction_error_metrics(
-    truth: np.ndarray,
-    predicted: np.ndarray,
-) -> dict[str, float | int]:
-    """Return aggregate temperature-error metrics for aligned prediction arrays."""
+def validate_prediction_arrays(
+    truth: np.ndarray, predicted: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Validate aligned arrays, permitting missing truth but requiring finite predictions."""
     truth_values = np.asarray(truth, dtype=np.float64)
     predicted_values = np.asarray(predicted, dtype=np.float64)
     if (
@@ -57,18 +56,64 @@ def prediction_error_metrics(
         or not len(truth_values)
     ):
         raise ValueError("truth and predicted must be equal non-empty arrays")
-    paired = np.isfinite(truth_values) & np.isfinite(predicted_values)
-    error = np.where(paired, predicted_values - truth_values, np.nan)
+    if np.isinf(truth_values).any():
+        raise ValueError(
+            "truth may contain NaN for missing observations, but cannot contain infinity"
+        )
+    if not np.isfinite(predicted_values).all():
+        raise ValueError(
+            "predicted temperatures must all be finite, including where truth is missing"
+        )
+    return truth_values, predicted_values
+
+
+def _validated_prediction_values(
+    truth: np.ndarray, predicted: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Calculate finite errors only where validated truth is observed."""
+    truth_values, predicted_values = validate_prediction_arrays(truth, predicted)
+    observed = np.isfinite(truth_values)
+    error = np.full(truth_values.shape, np.nan, dtype=np.float64)
+    with np.errstate(over="ignore", invalid="ignore"):
+        np.subtract(predicted_values, truth_values, out=error, where=observed)
+    if not np.isfinite(error[observed]).all():
+        raise ValueError("prediction errors must be finite at every observed truth value")
+    return truth_values, predicted_values, error
+
+
+def prediction_error_metrics(
+    truth: np.ndarray,
+    predicted: np.ndarray,
+) -> dict[str, float | int]:
+    """Score every observed truth value; reject failed predictions instead of dropping them."""
+    truth_values, _, error = _validated_prediction_values(truth, predicted)
     finite_error = error[np.isfinite(error)]
+    if not len(finite_error):
+        raise ValueError("prediction evaluation needs at least one observed truth value")
     terminal_error = np.atleast_1d(error[-1])
     return {
-        "n_points": int(paired.sum()),
-        "rmse_k": rmse(error),
-        "mae_k": mae(error),
-        "bias_k": float(np.mean(finite_error)) if len(finite_error) else float("nan"),
-        "max_abs_error_k": max_abs_error(error),
-        "terminal_rmse_k": rmse(terminal_error),
+        "n_points": len(finite_error),
+        "n_truth_points": int(np.isfinite(truth_values).sum()),
+        "prediction_coverage_fraction": 1.0,
+        **_checked_error_metrics(finite_error),
+        "terminal_rmse_k": _checked_error_metrics(terminal_error[np.isfinite(terminal_error)])[
+            "rmse_k"
+        ],
     }
+
+
+def _checked_error_metrics(error: np.ndarray) -> dict[str, float]:
+    """Distinguish an unavailable score from overflow of observed finite errors."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        metrics = {
+            "rmse_k": rmse(error),
+            "mae_k": mae(error),
+            "bias_k": float(np.mean(error)) if len(error) else float("nan"),
+            "max_abs_error_k": max_abs_error(error),
+        }
+    if len(error) and not all(np.isfinite(value) for value in metrics.values()):
+        raise ValueError("prediction error metrics must remain finite at observed truth values")
+    return metrics
 
 
 def _prediction_arrays(
@@ -78,8 +123,7 @@ def _prediction_arrays(
     sensor_names: tuple[str, ...],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     sample_time = np.asarray(time, dtype=np.float64)
-    truth_values = np.asarray(truth, dtype=np.float64)
-    predicted_values = np.asarray(predicted, dtype=np.float64)
+    truth_values, predicted_values, _ = _validated_prediction_values(truth, predicted)
     if sample_time.ndim != 1:
         raise ValueError("time must be one-dimensional")
     expected_shape = (len(sample_time), len(sensor_names))
@@ -113,7 +157,8 @@ def prediction_sensor_rows(
 ) -> list[dict[str, float | int | str]]:
     """Summarize prediction error for each sensor.
 
-    Residuals use ``predicted - truth``. Metrics use only aligned finite pairs;
+    Residuals use ``predicted - truth``. NaN truth is an unavailable observation;
+    all predictions must remain finite, including at unavailable observations.
     lag-1 correlation additionally requires adjacent original samples so a missing
     interval is not treated as one time step.
     """
@@ -122,7 +167,7 @@ def prediction_sensor_rows(
     )
     rows: list[dict[str, float | int | str]] = []
     for index, sensor in enumerate(sensor_names):
-        paired = np.isfinite(truth_values[:, index]) & np.isfinite(predicted_values[:, index])
+        paired = np.isfinite(truth_values[:, index])
         paired_time = sample_time[paired]
         paired_truth = truth_values[paired, index]
         paired_predicted = predicted_values[paired, index]
@@ -133,7 +178,6 @@ def prediction_sensor_rows(
             truth_peak_at_boundary = truth_peak_index in (0, len(paired_truth) - 1)
             predicted_peak_at_boundary = predicted_peak_index in (0, len(paired_predicted) - 1)
             terminal_error = float(error[-1])
-            bias = float(np.mean(error))
             peak_temperature_error = float(
                 paired_predicted[predicted_peak_index] - paired_truth[truth_peak_index]
             )
@@ -144,7 +188,6 @@ def prediction_sensor_rows(
             truth_peak_at_boundary = False
             predicted_peak_at_boundary = False
             terminal_error = float("nan")
-            bias = float("nan")
             peak_temperature_error = float("nan")
             peak_time_error = float("nan")
 
@@ -155,10 +198,9 @@ def prediction_sensor_rows(
             {
                 "sensor": sensor,
                 "n_points": len(error),
-                "rmse_k": rmse(error),
-                "mae_k": mae(error),
-                "bias_k": bias,
-                "max_abs_error_k": max_abs_error(error),
+                "n_truth_points": len(error),
+                "prediction_coverage_fraction": 1.0 if len(error) else float("nan"),
+                **_checked_error_metrics(error),
                 "terminal_error_k": terminal_error,
                 "peak_temperature_error_k": peak_temperature_error,
                 "peak_time_error_s": peak_time_error,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import torch
 from torch.nn import functional as F
@@ -11,16 +12,34 @@ from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 
 
+@dataclass(frozen=True)
+class _PreparedTrajectory:
+    """Model-device copies of immutable inputs, reusable throughout one fit."""
+
+    observed: torch.Tensor
+    commands: torch.Tensor
+    dt: torch.Tensor
+    mask: torch.Tensor
+    initial_actuator: torch.Tensor
+
+
+@dataclass(frozen=True)
+class _InitialTemperatureProfile:
+    initial_temperature: torch.Tensor
+    initial_actuator: torch.Tensor
+    sensor_temperature: torch.Tensor | None
+
+
 def trajectory_tensors(
     model: ThermalRCModel, trajectory: Trajectory
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     trajectory.require_layout(model.spec.sensor_names, model.spec.control_names)
     device = model.capacity.device
     dtype = model.capacity.dtype
-    temperature = torch.tensor(trajectory.temperature.copy(), dtype=dtype, device=device)
-    commands = torch.tensor(trajectory.commands.copy(), dtype=dtype, device=device)
-    dt = torch.tensor(trajectory.dt.copy(), dtype=dtype, device=device)
-    mask = torch.tensor(trajectory.mask.copy(), dtype=torch.bool, device=device)
+    temperature = torch.tensor(trajectory.temperature, dtype=dtype, device=device)
+    commands = torch.tensor(trajectory.commands, dtype=dtype, device=device)
+    dt = torch.tensor(trajectory.dt, dtype=dtype, device=device)
+    mask = torch.tensor(trajectory.mask, dtype=torch.bool, device=device)
     return temperature, commands, dt, mask
 
 
@@ -47,9 +66,20 @@ def trajectory_initial_actuator(
     if trajectory.initial_actuator is None:
         return commands[0]
     return torch.tensor(
-        trajectory.initial_actuator.copy(),
+        trajectory.initial_actuator,
         dtype=model.capacity.dtype,
         device=model.capacity.device,
+    )
+
+
+def _prepare_trajectory(model: ThermalRCModel, trajectory: Trajectory) -> _PreparedTrajectory:
+    observed, commands, dt, mask = trajectory_tensors(model, trajectory)
+    return _PreparedTrajectory(
+        observed,
+        commands,
+        dt,
+        mask,
+        trajectory_initial_actuator(model, trajectory, commands),
     )
 
 
@@ -75,6 +105,32 @@ def profiled_initial_temperature(
     Gaussian prior around the observed-temperature initialization prevents weakly
     observable modes from taking implausibly large values.
     """
+    return _profile_initial_temperature(
+        model,
+        observed,
+        commands,
+        dt,
+        mask,
+        start=start,
+        stop=stop,
+        prior_std=prior_std,
+        initial_actuator=initial_actuator,
+    ).initial_temperature
+
+
+def _profile_initial_temperature(
+    model: ThermalRCModel,
+    observed: torch.Tensor,
+    commands: torch.Tensor,
+    dt: torch.Tensor,
+    mask: torch.Tensor,
+    *,
+    start: int,
+    stop: int,
+    prior_std: float,
+    initial_actuator: torch.Tensor | None,
+) -> _InitialTemperatureProfile:
+    """Retain the affine sensor rollout already computed while profiling."""
     if not math.isfinite(prior_std) or prior_std <= 0.0:
         raise ValueError("initial temperature prior std must be positive and finite")
     initial = model.initialize_temperature(observed[start], mask[start])
@@ -84,26 +140,20 @@ def profiled_initial_temperature(
     rank = int(torch.sum(singular_values > tolerance).detach().cpu().item())
     basis = right_vectors[rank:].T
     latent_count = basis.shape[1]
+    shooting_actuator = actuator_before_interval(model, commands, dt, start, initial_actuator)
     if not latent_count:
-        return initial
+        return _InitialTemperatureProfile(initial, shooting_actuator, None)
 
     profile_count = latent_count + 1
     candidate_initials = torch.cat(
         [initial.unsqueeze(0), initial.unsqueeze(0) + basis.T],
         dim=0,
     )
-    initial_actuator = actuator_before_interval(
-        model,
-        commands,
-        dt,
-        start,
-        initial_actuator,
-    )
     states, _ = model.forward_batch(
         candidate_initials,
         commands[start:stop].unsqueeze(0).expand(profile_count, -1, -1),
         dt[start:stop].unsqueeze(0).expand(profile_count, -1),
-        initial_actuator.unsqueeze(0).expand(profile_count, -1),
+        shooting_actuator.unsqueeze(0).expand(profile_count, -1),
     )
     sensor_states = model.observe(states)
     baseline = sensor_states[0]
@@ -120,7 +170,60 @@ def profiled_initial_temperature(
         gram + ridge * torch.eye(latent_count, dtype=initial.dtype, device=initial.device),
         design.T @ residual,
     )
-    return initial + basis @ correction
+    profiled_initial = initial + basis @ correction
+    # Temperature dynamics are affine too; keep the former rollout's finite-state
+    # check for hidden nodes even when a sensor would not expose their overflow.
+    state_sensitivity = (states[1:] - states[0]).movedim(0, -1)
+    profiled_states = states[0] + state_sensitivity @ correction
+    predicted = model.observe(profiled_states)
+    if (
+        not bool(torch.isfinite(profiled_initial).all())
+        or not bool(torch.isfinite(profiled_states).all())
+        or not bool(torch.isfinite(predicted).all())
+    ):
+        raise ValueError("profiled temperatures must be finite")
+    return _InitialTemperatureProfile(profiled_initial, shooting_actuator, predicted)
+
+
+def _selection_stop(prepared: _PreparedTrajectory, start: int, stop: int | None) -> int:
+    interval_count = len(prepared.dt)
+    stop = interval_count if stop is None else stop
+    if not 0 <= start < stop <= interval_count:
+        raise ValueError("start/stop must select at least one valid interval")
+    if not torch.any(prepared.mask[start]):
+        raise ValueError("the shooting-point row must contain at least one observation")
+    return stop
+
+
+def _predict_prepared_trajectory(
+    model: ThermalRCModel,
+    prepared: _PreparedTrajectory,
+    *,
+    start: int = 0,
+    stop: int | None = None,
+    initial_temperature_prior_std: float = 50.0,
+) -> torch.Tensor:
+    stop = _selection_stop(prepared, start, stop)
+    profile = _profile_initial_temperature(
+        model,
+        prepared.observed,
+        prepared.commands,
+        prepared.dt,
+        prepared.mask,
+        start=start,
+        stop=stop,
+        prior_std=initial_temperature_prior_std,
+        initial_actuator=prepared.initial_actuator,
+    )
+    if profile.sensor_temperature is not None:
+        return profile.sensor_temperature
+    state, _ = model.forward_trajectory(
+        profile.initial_temperature,
+        prepared.commands[start:stop],
+        prepared.dt[start:stop],
+        profile.initial_actuator,
+    )
+    return model.observe(state)
 
 
 def predict_trajectory(
@@ -132,32 +235,13 @@ def predict_trajectory(
     initial_temperature_prior_std: float = 50.0,
 ) -> torch.Tensor:
     """Return a conditional fit after profiling hidden shooting-point temperatures."""
-    observed, commands, dt, mask = trajectory_tensors(model, trajectory)
-    starting_actuator = trajectory_initial_actuator(model, trajectory, commands)
-    stop = len(trajectory.time) - 1 if stop is None else stop
-    if not 0 <= start < stop <= len(trajectory.time) - 1:
-        raise ValueError("start/stop must select at least one valid interval")
-    if not torch.any(mask[start]):
-        raise ValueError("the shooting-point row must contain at least one observation")
-    initial_temperature = profiled_initial_temperature(
+    return _predict_prepared_trajectory(
         model,
-        observed,
-        commands,
-        dt,
-        mask,
+        _prepare_trajectory(model, trajectory),
         start=start,
         stop=stop,
-        prior_std=initial_temperature_prior_std,
-        initial_actuator=starting_actuator,
+        initial_temperature_prior_std=initial_temperature_prior_std,
     )
-    initial_actuator = actuator_before_interval(model, commands, dt, start, starting_actuator)
-    state, _ = model.forward_trajectory(
-        initial_temperature,
-        commands[start:stop],
-        dt[start:stop],
-        initial_actuator,
-    )
-    return model.observe(state)
 
 
 def predict_from_initial_observation(
@@ -168,19 +252,29 @@ def predict_from_initial_observation(
     stop: int | None = None,
 ) -> torch.Tensor:
     """Roll out using only observations available at the shooting-point row."""
-    observed, commands, dt, mask = trajectory_tensors(model, trajectory)
-    starting_actuator = trajectory_initial_actuator(model, trajectory, commands)
-    stop = len(trajectory.time) - 1 if stop is None else stop
-    if not 0 <= start < stop <= len(trajectory.time) - 1:
-        raise ValueError("start/stop must select at least one valid interval")
-    if not torch.any(mask[start]):
-        raise ValueError("the shooting-point row must contain at least one observation")
-    initial_temperature = model.initialize_temperature(observed[start], mask[start])
-    initial_actuator = actuator_before_interval(model, commands, dt, start, starting_actuator)
+    return _predict_prepared_initial_observation(
+        model, _prepare_trajectory(model, trajectory), start=start, stop=stop
+    )
+
+
+def _predict_prepared_initial_observation(
+    model: ThermalRCModel,
+    prepared: _PreparedTrajectory,
+    *,
+    start: int = 0,
+    stop: int | None = None,
+) -> torch.Tensor:
+    stop = _selection_stop(prepared, start, stop)
+    initial_temperature = model.initialize_temperature(
+        prepared.observed[start], prepared.mask[start]
+    )
+    initial_actuator = actuator_before_interval(
+        model, prepared.commands, prepared.dt, start, prepared.initial_actuator
+    )
     state, _ = model.forward_trajectory(
         initial_temperature,
-        commands[start:stop],
-        dt[start:stop],
+        prepared.commands[start:stop],
+        prepared.dt[start:stop],
         initial_actuator,
     )
     return model.observe(state)
@@ -211,11 +305,11 @@ def trajectory_loss(
     initial_temperature_prior_std: float = 50.0,
 ) -> torch.Tensor:
     """Case-balanced rollout loss measured directly in Kelvin."""
-    observed, _, _, mask = trajectory_tensors(model, trajectory)
-    stop = len(trajectory.time) - 1 if stop is None else stop
-    predicted = predict_trajectory(
+    prepared = _prepare_trajectory(model, trajectory)
+    stop = len(prepared.dt) if stop is None else stop
+    predicted = _predict_prepared_trajectory(
         model,
-        trajectory,
+        prepared,
         start=start,
         stop=stop,
         initial_temperature_prior_std=initial_temperature_prior_std,
@@ -223,8 +317,8 @@ def trajectory_loss(
     offset = 0 if include_initial else 1
     return masked_huber_loss(
         predicted[offset:],
-        observed[start + offset : stop + 1],
-        mask[start + offset : stop + 1],
+        prepared.observed[start + offset : stop + 1],
+        prepared.mask[start + offset : stop + 1],
         delta=huber_delta,
     )
 
@@ -250,18 +344,18 @@ def trajectory_rmse(
     initial_temperature_prior_std: float = 50.0,
 ) -> float:
     """Return conditional-fit RMSE after profiling hidden initial temperatures."""
-    observed, _, _, mask = trajectory_tensors(model, trajectory)
-    predicted = predict_trajectory(
+    prepared = _prepare_trajectory(model, trajectory)
+    predicted = _predict_prepared_trajectory(
         model,
-        trajectory,
+        prepared,
         initial_temperature_prior_std=initial_temperature_prior_std,
     )
-    return _trajectory_rmse(observed, predicted, mask)
+    return _trajectory_rmse(prepared.observed, predicted, prepared.mask)
 
 
 @torch.no_grad()
 def initial_observation_rmse(model: ThermalRCModel, trajectory: Trajectory) -> float:
     """Return open-loop RMSE initialized only from the first observation row."""
-    observed, _, _, mask = trajectory_tensors(model, trajectory)
-    predicted = predict_from_initial_observation(model, trajectory)
-    return _trajectory_rmse(observed, predicted, mask)
+    prepared = _prepare_trajectory(model, trajectory)
+    predicted = _predict_prepared_initial_observation(model, prepared)
+    return _trajectory_rmse(prepared.observed, predicted, prepared.mask)

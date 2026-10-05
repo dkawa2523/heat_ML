@@ -14,6 +14,8 @@ from celltemp.domain import (
     ScalarLawSpec,
 )
 
+from .validation import require_finite
+
 _CONSTANT = 0
 _POSITIVE_PART = 1
 _POWER_LAW = 2
@@ -111,6 +113,16 @@ class ScalarLawSet(nn.Module):
         self.log_offset_multiplier = nn.Parameter(torch.zeros(len(self.specs), dtype=dtype))
         self.log_scale_multiplier = nn.Parameter(torch.zeros(len(self.specs), dtype=dtype))
         self.log_exponent_multiplier = nn.Parameter(torch.zeros(len(self.specs), dtype=dtype))
+        self._has_dependent = any(index >= 0 for index in control_index)
+        self._has_positive = _POSITIVE_PART in kind
+        self._has_power = _POWER_LAW in kind
+        self._positive_indices = tuple(
+            index for index, value in enumerate(kind) if value == _POSITIVE_PART
+        )
+        self._control_indices = tuple(control_index)
+        self._offset_learnable = any(offset_learnable)
+        self._scale_learnable = any(scale_learnable)
+        self._exponent_learnable = any(exponent_learnable)
 
     def __len__(self) -> int:
         return len(self.specs)
@@ -120,8 +132,9 @@ class ScalarLawSet(nn.Module):
         prior: torch.Tensor,
         raw: torch.Tensor,
         learnable: torch.Tensor,
+        enabled: bool,
     ) -> torch.Tensor:
-        if not torch.any(learnable):
+        if not enabled:
             return prior
         value = prior.clone()
         value[learnable] = prior[learnable] * torch.exp(raw[learnable])
@@ -132,6 +145,7 @@ class ScalarLawSet(nn.Module):
             self.offset_prior,
             self.log_offset_multiplier,
             self.offset_learn_mask,
+            self._offset_learnable,
         )
 
     def scale(self) -> torch.Tensor:
@@ -139,6 +153,7 @@ class ScalarLawSet(nn.Module):
             self.scale_prior,
             self.log_scale_multiplier,
             self.scale_learn_mask,
+            self._scale_learnable,
         )
 
     def exponent(self) -> torch.Tensor:
@@ -146,6 +161,7 @@ class ScalarLawSet(nn.Module):
             self.exponent_prior,
             self.log_exponent_multiplier,
             self.exponent_learn_mask,
+            self._exponent_learnable,
         )
 
     @property
@@ -158,15 +174,25 @@ class ScalarLawSet(nn.Module):
 
     def forward(self, actuator: torch.Tensor | None = None) -> torch.Tensor:
         """Return values with shape ``[..., n_laws]``."""
-        dependent = self.dependent_mask
         if actuator is None:
-            if torch.any(dependent):
+            if self._has_dependent:
                 raise ValueError("actuator is required for an input-dependent scalar law")
-            selected = self.offset_prior.new_zeros((len(self),))
         else:
             if actuator.shape[-1] != self.n_controls:
                 raise ValueError("actuator has the wrong number of controls")
-            if torch.any(dependent):
+            require_finite(actuator, "actuator")
+        value = self._evaluate(actuator)
+        return value
+
+    def _evaluate(self, actuator: torch.Tensor | None) -> torch.Tensor:
+        """Evaluate inputs already validated by the enclosing model operation."""
+        if not self.specs:
+            batch_shape = () if actuator is None else actuator.shape[:-1]
+            return self.offset_prior.new_empty((*batch_shape, 0))
+        if actuator is None:
+            selected = self.offset_prior.new_zeros((len(self),))
+        else:
+            if self._has_dependent:
                 safe_index = torch.clamp(self.control_index, min=0)
                 selected = actuator[..., safe_index]
             else:
@@ -174,12 +200,12 @@ class ScalarLawSet(nn.Module):
 
         response = torch.zeros_like(selected)
         positive = self.positive_part_mask
-        if torch.any(positive):
+        if self._has_positive:
             positive_response = torch.relu(selected[..., positive] - self.threshold[positive])
             response[..., positive] = positive_response
 
         power = self.kind == _POWER_LAW
-        if torch.any(power):
+        if self._has_power:
             drive = torch.clamp(selected[..., power], min=0.0) / self.reference[power]
             safe_drive = torch.clamp(drive, min=torch.finfo(drive.dtype).tiny)
             power_response = torch.where(
@@ -188,7 +214,9 @@ class ScalarLawSet(nn.Module):
                 torch.zeros_like(drive),
             )
             response[..., power] = power_response
-        return self.offset() + self.scale() * response
+        value = self.offset() + self.scale() * response
+        require_finite(value, "scalar law response", computed=True)
+        return value
 
     def log_parameter_multipliers(self) -> tuple[torch.Tensor, ...]:
         return (

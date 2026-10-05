@@ -104,7 +104,8 @@ Run dependent stages sequentially and stop at the first nonzero exit code. Do no
 from file existence alone.
 
 - **Train:** inspect `metrics_summary.json`, `metrics_by_case.csv`, `split.csv`,
-  `thermal_paths.csv`, `thermal_modes.csv`, and artifact `metadata.json`. Report causal and
+  and artifact `metadata.json`. When `project.diagnostics: true`, also inspect
+  `diagnostics/thermal_paths.csv`, `diagnostics/thermal_modes.csv`, comparison tables, and figures. Report causal and
   conditional metrics separately; model selection uses causal validation RMSE. Treat the path and
   mode tables as a representative observed training-command operating point, not every operating
   condition.
@@ -114,6 +115,8 @@ from file existence alone.
   configured, also inspect `thermal_impedance.csv` and `thermal_impedance_qualification.csv`;
   report transient Zth and steady-Rth qualification separately.
 - **Forecast:** inspect `forecast_summary.csv`, `forecast_coverage.csv`, and `run_manifest.json`.
+  Case columns use `sensor.<name>.<quantity>`, `node.<name>.<quantity>`, and `control.<name>.<quantity>`.
+  Read the recorded temperature unit; input values are never implicitly converted.
   Surface control, predicted-temperature, timestep, horizon, and slew OOD warnings. An OOD warning
   is not automatically a command failure, but it limits interpretation.
 - **Monitor:** inspect `monitor_summary.csv` and `run_manifest.json`. Report the bias gauge,

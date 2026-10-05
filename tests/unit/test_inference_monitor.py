@@ -4,8 +4,13 @@ import numpy as np
 import pytest
 
 from celltemp.domain import (
+    ActuatorSpec,
+    PositivePartLawSpec,
+    SourceSpec,
+    ThermalSystemSpec,
     Trajectory,
 )
+from celltemp.engine import ThermalRCModel
 from celltemp.inference import (
     build_observer,
     forecast,
@@ -125,3 +130,29 @@ def test_forecast_and_monitor_reject_mismatched_names() -> None:
     )
     with pytest.raises(ValueError, match="sensors"):
         monitor(model, trajectory)
+
+
+@pytest.mark.parametrize("integrator", ["exact", "implicit"])
+def test_monitor_zero_tau_point_inputs_match_applied_schedule(integrator: str) -> None:
+    model = ThermalRCModel(
+        ThermalSystemSpec(
+            node_names=("body",),
+            heat_capacity=(1.0,),
+            edges=(),
+            actuators=(ActuatorSpec("heater"),),
+            sources=(SourceSpec("heat", (1.0,), PositivePartLawSpec("heater", 1.0)),),
+        ),
+        integrator=integrator,
+    )
+    trajectory = Trajectory(
+        case_id="switched",
+        time=np.array([0.0, 1.0, 3.0, 3.5]),
+        temperature=np.array([[20.0], [20.0], [40.0], [40.0]]),
+        commands=np.array([[0.0], [10.0], [0.0]]),
+        sensor_names=("body",),
+        control_names=("heater",),
+        initial_actuator=np.array([99.0]),
+    )
+    result = monitor(model, trajectory)
+    np.testing.assert_array_equal(result.actuator[:, 0], [0.0, 10.0, 0.0, 0.0])
+    np.testing.assert_allclose(result.posterior_node_temperature[:, 0], [20.0, 20.0, 40.0, 40.0])

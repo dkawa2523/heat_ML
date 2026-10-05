@@ -28,6 +28,11 @@ from .nonlinear_dataset import (
     truth_frame,
     validate_dataset_frame,
 )
+from .qualification_support import (
+    raw_provenance_verified,
+    verify_transient_solver_settings,
+    write_raw_provenance,
+)
 
 TOOL_ROOT = Path(__file__).resolve().parent
 JAVA_SOURCE = TOOL_ROOT / "comsol" / "RunChipCoolingNonlinearCase.java"
@@ -81,7 +86,20 @@ def solve_case(
     schedule = schedule_frame(case)
     schedule.to_csv(schedule_path, index=False, float_format="%.10g")
     if reuse_raw and raw_path.is_file():
-        return parse_comsol_table(raw_path, case)
+        if maximum_time_step_s is not None:
+            verify_transient_solver_settings(
+                log_path, mesh_profile=mesh_profile, maximum_time_step_s=maximum_time_step_s
+            )
+        parsed = parse_comsol_table(raw_path, case)
+        parsed.attrs["solver_settings_verified"] = raw_provenance_verified(
+            raw_path,
+            log_path,
+            schedule_path,
+            JAVA_SOURCE,
+            mesh_profile=mesh_profile,
+            maximum_time_step_s=maximum_time_step_s,
+        )
+        return parsed
     if runtime is None:
         raise RuntimeError(f"{case.case_id}: reusable raw table is unavailable")
 
@@ -110,8 +128,20 @@ def solve_case(
             expected_output=pending_path,
             label=f"case {case.case_id}",
         )
+        verify_transient_solver_settings(
+            log_path, mesh_profile=mesh_profile, maximum_time_step_s=maximum_time_step_s
+        )
         parsed = parse_comsol_table(pending_path, case)
         pending_path.replace(raw_path)
+        write_raw_provenance(
+            raw_path,
+            log_path,
+            schedule_path,
+            JAVA_SOURCE,
+            mesh_profile=mesh_profile,
+            maximum_time_step_s=maximum_time_step_s,
+        )
+        parsed.attrs["solver_settings_verified"] = True
         return parsed
     finally:
         pending_path.unlink(missing_ok=True)
@@ -194,6 +224,7 @@ def build_dataset(
     mesh_profile: str,
     reuse_raw: bool,
     overwrite: bool,
+    maximum_time_step_s: float | None = None,
 ) -> pd.DataFrame:
     summaries: list[dict[str, object]] = []
     for index, case in enumerate(cases, start=1):
@@ -206,8 +237,12 @@ def build_dataset(
             runtime=runtime,
             mesh_profile=mesh_profile,
             reuse_raw=reuse_raw,
+            maximum_time_step_s=maximum_time_step_s,
         )
         truth = truth_frame(raw, case, mesh_profile=mesh_profile)
+        if maximum_time_step_s is not None:
+            truth["maximum_time_step_s"] = maximum_time_step_s
+            truth["solver_settings_verified"] = bool(raw.attrs.get("solver_settings_verified"))
         published = _publish_frame(truth, case)
         target = published_path(data_root, case)
         if target.exists() and not overwrite:

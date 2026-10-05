@@ -6,7 +6,12 @@ import pytest
 import torch
 
 from benchmarks.neural_comparison.internal import initial_condition_request
-from benchmarks.neural_comparison.models import MODEL_TYPES, SequenceModelSpec, build_model
+from benchmarks.neural_comparison.models import (
+    MODEL_TYPES,
+    SequenceModelSpec,
+    SequenceUpdateModel,
+    build_model,
+)
 from benchmarks.neural_comparison.reporting import (
     INTERNAL_DATASETS,
     MODEL_ORDER,
@@ -137,6 +142,7 @@ def test_noise_summary_keeps_clean_baseline_and_boundary_separate() -> None:
                 "repeat": 0,
                 "case_id": "clean",
                 "rmse_k": clean,
+                "n_points": 1,
                 "realized_noise_rmse_k": 0.0,
             }
         )
@@ -151,6 +157,7 @@ def test_noise_summary_keeps_clean_baseline_and_boundary_separate() -> None:
                     "repeat": repeat,
                     "case_id": "noisy",
                     "rmse_k": noisy,
+                    "n_points": 1,
                     "realized_noise_rmse_k": 0.15,
                 }
             )
@@ -160,6 +167,25 @@ def test_noise_summary_keeps_clean_baseline_and_boundary_separate() -> None:
     noisy_rows = summary[summary["noise_std_k"] == 0.15].set_index("boundary")
     assert noisy_rows.loc["internal_test", "ratio_to_clean"] == pytest.approx(2.0)
     assert noisy_rows.loc["external_core", "ratio_to_clean"] == pytest.approx(2.0)
+
+
+class _NonFiniteModel(SequenceUpdateModel):
+    def forward(self, history: torch.Tensor, query: torch.Tensor) -> torch.Tensor:
+        return torch.full((len(history), 1), torch.nan)
+
+
+def test_neural_forecast_rejects_a_failed_future_rate() -> None:
+    training = _trajectory("training", np.linspace(20.0, 25.0, 9)[:, None])
+    request = initial_condition_request(training)
+
+    with pytest.raises(ValueError, match="predicted rate must be finite"):
+        forecast_sequence(
+            _NonFiniteModel(),
+            request,
+            SequencePreprocessor.fit([training]),
+            history_steps=4,
+            origin=0,
+        )
 
 
 def test_internal_summary_figures_render_all_data_boundaries(tmp_path: Path) -> None:

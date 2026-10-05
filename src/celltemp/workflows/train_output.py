@@ -19,7 +19,7 @@ from celltemp.analysis import (
     thermal_path_rows,
 )
 from celltemp.artifact import save_artifact
-from celltemp.config import save_yaml
+from celltemp.config import save_yaml, temperature_unit_label
 from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 from celltemp.learning import (
@@ -28,10 +28,18 @@ from celltemp.learning import (
     predict_from_initial_observation,
     predict_trajectory,
 )
-from celltemp.workflows.prediction_figures import PredictionCase, write_prediction_figures
+
+from .common import input_file_records, project_options
 
 _OPERATING_POINT = "representative_training_command"
-_TestPrediction = tuple[Trajectory, np.ndarray, np.ndarray]
+
+
+@dataclass(frozen=True)
+class _CasePrediction:
+    trajectory: Trajectory
+    split: str
+    conditional: np.ndarray
+    causal: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -41,11 +49,9 @@ class _TrainingEvidence:
     metrics: pd.DataFrame
     sensor_metrics: pd.DataFrame
     summary: dict[str, dict[str, float | int]]
-    model_comparison: pd.DataFrame
-    test_predictions: tuple[_TestPrediction, ...]
+    predictions: tuple[_CasePrediction, ...]
     operating_point: np.ndarray
-    thermal_paths: pd.DataFrame
-    thermal_modes: pd.DataFrame
+    temperature_unit: str = "degC"
 
 
 def _rollout_errors(
@@ -142,18 +148,13 @@ def _build_training_evidence(
     trajectories: dict[str, list[Trajectory]],
     *,
     initial_temperature_prior_std: float,
+    keep_predictions: bool = False,
+    temperature_unit: str = "degC",
 ) -> _TrainingEvidence:
-    """Evaluate every split and characterize the fitted thermal network."""
-    prior_model = ThermalRCModel(
-        model.spec,
-        integrator=model.integrator,
-        dtype=model.capacity.dtype,
-    ).to(model.capacity.device)
-    prior_model.eval()
+    """Evaluate the selected model, retaining held-out arrays only for diagnostics."""
     case_rows: list[dict[str, Any]] = []
     sensor_rows: list[dict[str, Any]] = []
-    comparison_rows: list[dict[str, Any]] = []
-    test_predictions: list[_TestPrediction] = []
+    predictions: list[_CasePrediction] = []
     for split_name, items in trajectories.items():
         for trajectory in items:
             predicted, error, initial_prediction, initial_error, mask = _rollout_errors(
@@ -163,45 +164,10 @@ def _build_training_evidence(
             )
             case_rows.append(_evaluate_case(trajectory, split_name, error, initial_error, mask))
             sensor_rows.extend(_sensor_metrics(trajectory, split_name, error, initial_error, mask))
-            if split_name in {"val", "test"}:
-                with torch.no_grad():
-                    prior_prediction = (
-                        predict_from_initial_observation(prior_model, trajectory)
-                        .detach()
-                        .cpu()
-                        .numpy()
-                    )
-                persistence = persistence_prediction(
-                    trajectory.temperature,
-                    trajectory.mask,
-                    origin=0,
+            if keep_predictions and split_name in {"val", "test"}:
+                predictions.append(
+                    _CasePrediction(trajectory, split_name, predicted, initial_prediction)
                 )
-                predictions = {
-                    "fitted_rc": initial_prediction,
-                    "engineering_prior_rc": prior_prediction,
-                    "persistence": persistence,
-                }
-                comparison_truth = np.where(
-                    trajectory.mask,
-                    trajectory.temperature,
-                    np.nan,
-                )
-                comparison_truth[0] = np.nan
-                comparison_rows.extend(
-                    {
-                        "split": split_name,
-                        "case_id": trajectory.case_id,
-                        **comparison,
-                    }
-                    for comparison in prediction_comparison_rows(
-                        trajectory.time,
-                        comparison_truth,
-                        predictions,
-                        trajectory.sensor_names,
-                    )
-                )
-            if split_name == "test":
-                test_predictions.append((trajectory, predicted, initial_prediction))
 
     metrics = pd.DataFrame(case_rows)
     operating_point = representative_command(trajectories["train"])
@@ -209,30 +175,59 @@ def _build_training_evidence(
         metrics=metrics,
         sensor_metrics=pd.DataFrame(sensor_rows),
         summary=_summary(metrics),
-        model_comparison=pd.DataFrame(comparison_rows),
-        test_predictions=tuple(test_predictions),
+        predictions=tuple(predictions),
         operating_point=operating_point,
-        thermal_paths=pd.DataFrame(
-            thermal_path_rows(model, operating_point, operating_point=_OPERATING_POINT)
-        ),
-        thermal_modes=pd.DataFrame(
-            thermal_mode_rows(model, operating_point, operating_point=_OPERATING_POINT)
-        ),
+        temperature_unit=temperature_unit,
     )
 
 
+def _model_comparison(
+    model: ThermalRCModel, predictions: tuple[_CasePrediction, ...]
+) -> pd.DataFrame:
+    prior_model = ThermalRCModel(
+        model.spec, integrator=model.integrator, dtype=model.capacity.dtype
+    ).to(model.capacity.device)
+    prior_model.eval()
+    rows: list[dict[str, Any]] = []
+    for item in predictions:
+        trajectory = item.trajectory
+        with torch.no_grad():
+            prior = predict_from_initial_observation(prior_model, trajectory).cpu().numpy()
+        truth = np.where(trajectory.mask, trajectory.temperature, np.nan)
+        truth[0] = np.nan
+        rows.extend(
+            {"split": item.split, "case_id": trajectory.case_id, **row}
+            for row in prediction_comparison_rows(
+                trajectory.time,
+                truth,
+                {
+                    "fitted_rc": item.causal,
+                    "engineering_prior_rc": prior,
+                    "persistence": persistence_prediction(
+                        trajectory.temperature, trajectory.mask, origin=0
+                    ),
+                },
+                trajectory.sensor_names,
+            )
+        )
+    return pd.DataFrame(rows)
+
+
 def _write_test_prediction_figures(evidence: _TrainingEvidence, target: Path) -> None:
-    if not evidence.test_predictions:
+    from .prediction_figures import PredictionCase, write_prediction_figures
+
+    predictions = [item for item in evidence.predictions if item.split == "test"]
+    if not predictions:
         return
-    first_trajectory = evidence.test_predictions[0][0]
+    first_trajectory = predictions[0].trajectory
     cases = [
         PredictionCase(
-            case_id=trajectory.case_id,
-            time=trajectory.time,
-            truth=np.where(trajectory.mask, trajectory.temperature, np.nan),
-            predicted=initial_prediction,
+            case_id=item.trajectory.case_id,
+            time=item.trajectory.time,
+            truth=np.where(item.trajectory.mask, item.trajectory.temperature, np.nan),
+            predicted=item.causal,
         )
-        for trajectory, _, initial_prediction in evidence.test_predictions
+        for item in predictions
     ]
     write_prediction_figures(
         cases,
@@ -240,6 +235,7 @@ def _write_test_prediction_figures(evidence: _TrainingEvidence, target: Path) ->
         sensor_names=first_trajectory.sensor_names,
         title="Held-out test prediction",
         file_prefix="test_prediction",
+        temperature_unit=temperature_unit_label(evidence.temperature_unit),
     )
 
 
@@ -295,6 +291,12 @@ def _artifact_metadata(
         "run_name": run_name,
         "seed": seed,
         "control_convention": control_convention,
+        "temperature_unit": evidence.temperature_unit,
+        "training_inputs": [
+            {**record, "split": name}
+            for name, cases in trajectories.items()
+            for record in input_file_records(cases, Path(config_path).resolve().parent)
+        ],
         "config_source": {
             "path": Path(config_path).resolve().name,
             "relative_paths_from": "config_directory",
@@ -337,15 +339,19 @@ def _artifact_metadata(
     }
 
 
-def _write_test_predictions(predictions: tuple[_TestPrediction, ...], target: Path) -> None:
+def _write_test_predictions(predictions: tuple[_CasePrediction, ...], target: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
-    for trajectory, predicted, initial_prediction in predictions:
+    for item in predictions:
+        if item.split != "test":
+            continue
+        trajectory = item.trajectory
         frame = pd.DataFrame({"time": trajectory.time})
         for index, sensor in enumerate(trajectory.sensor_names):
-            frame[f"observed_{sensor}"] = trajectory.temperature[:, index]
-            frame[f"predicted_{sensor}"] = predicted[:, index]
-            frame[f"predicted_from_initial_observation_{sensor}"] = initial_prediction[:, index]
-            frame[f"error_{sensor}"] = predicted[:, index] - trajectory.temperature[:, index]
+            observed = np.where(trajectory.mask[:, index], trajectory.temperature[:, index], np.nan)
+            frame[f"sensor.{sensor}.observed"] = observed
+            frame[f"sensor.{sensor}.conditional"] = item.conditional[:, index]
+            frame[f"sensor.{sensor}.causal"] = item.causal[:, index]
+            frame[f"sensor.{sensor}.error"] = item.conditional[:, index] - observed
         frame.to_csv(target / f"{trajectory.case_id}.csv", index=False)
 
 
@@ -389,12 +395,15 @@ def write_training_outputs(
     trajectories: dict[str, list[Trajectory]],
     training: TrainingConfig,
     result: TrainingResult,
-) -> None:
-    """Write the stable training evidence schema and portable model artifact."""
+    diagnostics: bool = False,
+) -> _TrainingEvidence:
+    """Write core scores, provenance, and a portable model independently of diagnostics."""
     evidence = _build_training_evidence(
         model,
         trajectories,
         initial_temperature_prior_std=training.initial_temperature_prior_std,
+        keep_predictions=diagnostics,
+        temperature_unit=project_options(cfg)["temperature_unit"],
     )
     metadata = _artifact_metadata(
         config_path=config_path,
@@ -409,7 +418,6 @@ def write_training_outputs(
     )
     evidence.metrics.to_csv(target / "metrics_by_case.csv", index=False)
     evidence.sensor_metrics.to_csv(target / "metrics_by_sensor.csv", index=False)
-    evidence.model_comparison.to_csv(target / "model_comparison.csv", index=False)
     pd.DataFrame(result.history).to_csv(target / "training_history.csv", index=False)
     (target / "metrics_summary.json").write_text(
         json.dumps(evidence.summary, indent=2, ensure_ascii=False, allow_nan=False),
@@ -417,9 +425,23 @@ def write_training_outputs(
     )
     _write_split(trajectories, target / "split.csv")
     _write_data_summary(all_trajectories, target / "data_summary.csv")
-    evidence.thermal_paths.to_csv(target / "thermal_paths.csv", index=False)
-    evidence.thermal_modes.to_csv(target / "thermal_modes.csv", index=False)
-    _write_test_prediction_figures(evidence, target / "figures")
     save_yaml(cfg, target / "config.snapshot.yaml")
-    _write_test_predictions(evidence.test_predictions, target / "test_predictions")
     save_artifact(target / "artifact", model, metadata=metadata)
+    return evidence
+
+
+def write_training_diagnostics(
+    target: Path, model: ThermalRCModel, evidence: _TrainingEvidence
+) -> None:
+    """Write optional comparisons and model inspection after the core run is saved."""
+    _model_comparison(model, evidence.predictions).to_csv(
+        target / "model_comparison.csv", index=False
+    )
+    pd.DataFrame(
+        thermal_path_rows(model, evidence.operating_point, operating_point=_OPERATING_POINT)
+    ).to_csv(target / "thermal_paths.csv", index=False)
+    pd.DataFrame(
+        thermal_mode_rows(model, evidence.operating_point, operating_point=_OPERATING_POINT)
+    ).to_csv(target / "thermal_modes.csv", index=False)
+    _write_test_predictions(evidence.predictions, target / "test_predictions")
+    _write_test_prediction_figures(evidence, target / "figures")

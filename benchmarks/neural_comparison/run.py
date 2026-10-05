@@ -14,14 +14,15 @@ import torch
 
 from benchmarks.validation_figures import VALIDATION_FIGURE_DIRECTORY
 from celltemp.analysis import prediction_error_metrics
-from celltemp.artifact import load_artifact
+from celltemp.artifact import ThermalArtifact, load_artifact
 from celltemp.config import as_path, load_config
 from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
 from celltemp.inference import forecast
-from celltemp.io import load_system_spec, load_trajectories
+from celltemp.io import load_split_assignments, load_system_spec, load_trajectories
 from celltemp.learning import split_trajectories
 
+from .evaluation import validate_matching_splits, validate_training_inputs
 from .internal import evaluate_internal_splits
 from .models import MODEL_TYPES, SequenceModelSpec
 from .reporting import summarize_internal_predictions, summarize_predictions, write_figures
@@ -175,7 +176,15 @@ def _load_training_problem(spec: BenchmarkSpec) -> TrainingProblem:
         system.control_names,
     )
     trajectories = load_trajectories(data_config, config_root)
-    splits = split_trajectories(trajectories, config.get("split"), seed=int(config["seed"]))
+    split_config = config.get("split", {})
+    assignments = (
+        load_split_assignments(as_path(str(split_config["table"]), config_root))
+        if split_config.get("method") == "explicit"
+        else None
+    )
+    splits = split_trajectories(
+        trajectories, split_config, seed=int(config["seed"]), assignments=assignments
+    )
     return TrainingProblem(
         config=config,
         sensor_names=system.sensor_names,
@@ -183,6 +192,32 @@ def _load_training_problem(spec: BenchmarkSpec) -> TrainingProblem:
         splits=splits,
         source_directory=as_path(str(config["data"]["directory"]), config_root).resolve(),
     )
+
+
+def _validate_rc_training_boundary(
+    spec: BenchmarkSpec, problem: TrainingProblem, artifact: ThermalArtifact
+) -> None:
+    """Require the reused RC artifact to share the current fitting boundary."""
+    saved = pd.read_csv(spec.artifact_path.parent / "split.csv")
+    expected = {split: [case.case_id for case in cases] for split, cases in problem.splits.items()}
+    validate_matching_splits(expected, saved)
+    expected_inputs = {
+        case.case_id: (split, str(case.metadata["sha256"]))
+        for split, cases in problem.splits.items()
+        for case in cases
+    }
+    validate_training_inputs(expected_inputs, artifact.metadata.get("training_inputs"))
+    if artifact.metadata.get("seed") != int(problem.config["seed"]):
+        raise ValueError("RC artifact seed differs from the neural benchmark; retrain RC first")
+    convention = str(problem.config["data"].get("control_convention", "left"))
+    if artifact.metadata.get("control_convention") != convention:
+        raise ValueError("RC artifact control convention differs from the neural benchmark")
+    system = load_system_spec(as_path(str(problem.config["system"]), spec.config_path.parent))
+    if artifact.model.spec != system:
+        raise ValueError("RC artifact system differs from the neural benchmark; retrain RC first")
+    integrator = str(problem.config.get("engine", {}).get("integrator", "exact"))
+    if artifact.model.integrator != integrator:
+        raise ValueError("RC artifact integrator differs from the neural benchmark")
 
 
 def _training_history_rows(
@@ -513,9 +548,13 @@ def run(output_directory: Path, *, epochs: int) -> Path:
     all_internal_test_points: list[dict[str, object]] = []
     all_boundary_rows: list[dict[str, object]] = []
     all_noise_case_rows: list[dict[str, object]] = []
+    training_seeds: dict[str, int] = {}
 
     for spec_index, spec in enumerate(benchmark_specs()):
         problem = _load_training_problem(spec)
+        artifact = load_artifact(spec.artifact_path)
+        _validate_rc_training_boundary(spec, problem, artifact)
+        training_seeds[spec.dataset] = int(problem.config["seed"])
         trained, preprocessor, model_spec, history_rows, training_rows = _train_benchmark(
             spec,
             problem,
@@ -524,7 +563,6 @@ def run(output_directory: Path, *, epochs: int) -> Path:
         )
         all_history_rows.extend(history_rows)
         all_training_rows.extend(training_rows)
-        artifact = load_artifact(spec.artifact_path)
         internal_case_rows, internal_test_points = evaluate_internal_splits(
             spec.dataset,
             artifact.model,
@@ -604,7 +642,7 @@ def run(output_directory: Path, *, epochs: int) -> Path:
     noise_summary.to_csv(output_directory / "noise_summary.csv", index=False)
     rc_model_gap_summary.to_csv(output_directory / "rc_model_gap_summary.csv", index=False)
     protocol = {
-        "seed": 42,
+        "seeds_by_training_dataset": training_seeds,
         "models": list(MODEL_NAMES),
         "history_steps": 8,
         "target": "standardized temperature rate dT/dt",

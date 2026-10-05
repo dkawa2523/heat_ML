@@ -244,8 +244,12 @@ def _group_open_loop_rmse(
         )
         query = torch.tensor(query_values, dtype=torch.float32)
         rate_scaled = model(history, query).cpu().numpy()
+        if not np.isfinite(rate_scaled).all():
+            raise ValueError("neural validation predicted rates must be finite")
         rate = preprocessor.inverse_rate(rate_scaled)
         current = current + rate * dt[:, index, None]
+        if not np.isfinite(current).all():
+            raise ValueError("neural validation predicted temperatures must be finite")
         error = current - truth[:, index + 1]
         squared_error += np.sum(error**2, axis=1)
         value_count += error.shape[1]
@@ -260,7 +264,10 @@ def _group_open_loop_rmse(
             )
             next_tensor = torch.tensor(next_features[:, None, :], dtype=torch.float32)
             history = torch.cat([history[:, 1:], next_tensor], dim=1)
-    return np.sqrt(squared_error / value_count)
+    scores = np.sqrt(squared_error / value_count)
+    if not np.isfinite(scores).all():
+        raise ValueError("neural validation error metrics must be finite")
+    return scores
 
 
 def causal_validation_rmse(
@@ -322,6 +329,8 @@ def fit_model(
             ).mean(dim=1)
             weight = data.case_weight[indices]
             loss = torch.sum(sample_loss * weight) / torch.sum(weight)
+            if not bool(torch.isfinite(loss)):
+                raise ValueError(f"{name}: neural training loss is non-finite")
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip)
@@ -418,7 +427,11 @@ def forecast_sequence(
         )
         query = torch.tensor(query_values[None, :], dtype=torch.float32)
         rate_scaled = model(history, query).cpu().numpy()[0]
+        if not np.isfinite(rate_scaled).all():
+            raise ValueError(f"{trajectory.case_id}: neural predicted rate must be finite")
         current = current + preprocessor.inverse_rate(rate_scaled) * trajectory.dt[index]
+        if not np.isfinite(current).all():
+            raise ValueError(f"{trajectory.case_id}: neural predicted temperature must be finite")
         predicted.append(current.copy())
         if index + 1 < len(trajectory.commands):
             next_feature = np.concatenate(

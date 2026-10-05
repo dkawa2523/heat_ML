@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from celltemp.domain import ActuatorSpec, PositivePartLawSpec, SourceSpec, ThermalSystemSpec
 from celltemp.engine import ThermalRCModel, ThermalState
 from celltemp.engine.integrator import exact_affine_step, implicit_euler_step
 from tests.unit._engine_cases import DTYPE, conduction_model
@@ -68,3 +69,53 @@ def test_state_rejects_nonfinite_and_mismatched_batches() -> None:
         ThermalState(torch.zeros((2, 1)), torch.zeros((3, 1)))
     with pytest.raises(ValueError, match="finite"):
         ThermalState(torch.tensor([float("nan")]), torch.zeros(1))
+
+
+@pytest.mark.parametrize("integrator", ["exact", "implicit"])
+def test_point_actuators_apply_zero_tau_command_without_an_artificial_delay(
+    integrator: str,
+) -> None:
+    model = ThermalRCModel(
+        ThermalSystemSpec(
+            node_names=("body",),
+            heat_capacity=(1.0,),
+            edges=(),
+            actuators=(ActuatorSpec("heater"), ActuatorSpec("lagged", tau=2.0)),
+            sources=(SourceSpec("heater", (1.0,), PositivePartLawSpec("heater", 1.0)),),
+        ),
+        integrator=integrator,
+    )
+    temperature, effective = model.forward_trajectory(
+        torch.tensor([20.0], dtype=DTYPE),
+        torch.tensor([[0.0, 10.0], [10.0, 0.0], [0.0, 10.0]], dtype=DTYPE),
+        torch.tensor([1.0, 2.0, 0.5], dtype=DTYPE),
+        torch.tensor([99.0, 0.0], dtype=DTYPE),
+    )
+    torch.testing.assert_close(effective[:, 0], torch.tensor([0.0, 10.0, 0.0, 0.0], dtype=DTYPE))
+    torch.testing.assert_close(
+        temperature[:, 0], torch.tensor([20.0, 20.0, 40.0, 40.0], dtype=DTYPE)
+    )
+    assert effective[0, 1] == 0.0
+    assert 0.0 < effective[1, 1] < 10.0
+
+
+@pytest.mark.parametrize("dt", [-1.0, float("nan"), float("inf")])
+@pytest.mark.parametrize("integrator", [exact_affine_step, implicit_euler_step])
+def test_integrators_reject_invalid_time_before_calculation(integrator, dt: float) -> None:
+    with pytest.raises(ValueError, match="dt must be non-negative and finite"):
+        integrator(
+            torch.tensor([20.0], dtype=DTYPE),
+            torch.tensor([[-1.0]], dtype=DTYPE),
+            torch.tensor([0.0], dtype=DTYPE),
+            dt,
+        )
+
+
+def test_integrator_rejects_unrepresentable_state_instead_of_returning_nan() -> None:
+    with pytest.raises(FloatingPointError, match="non-finite"):
+        exact_affine_step(
+            torch.tensor([1.0], dtype=DTYPE),
+            torch.tensor([[1.0]], dtype=DTYPE),
+            torch.tensor([0.0], dtype=DTYPE),
+            1000.0,
+        )

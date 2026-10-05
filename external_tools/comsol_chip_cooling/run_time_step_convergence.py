@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import argparse
-import math
 from dataclasses import replace
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from .comsol_runtime import ComsolRuntime, select_comsol
 from .dataset_support import write_csv_atomic
 from .nonlinear_cases import NonlinearCase, high_fidelity_cases
-from .nonlinear_dataset import CONTROLS, truth_frame
-from .run_high_fidelity import _require_qualified
+from .nonlinear_dataset import truth_frame
+from .qualification import (
+    compare_time_steps as compare_time_steps,
+)
+from .qualification import (
+    validate_time_step_limits,
+)
+from .qualification_support import file_sha256, require_mesh_qualified
 from .run_nonlinear import JAVA_SOURCE, raw_tables_available, solve_case
 from .summarize_high_fidelity import summarize
 
@@ -23,34 +27,6 @@ DEFAULT_DATA_ROOT = TOOL_ROOT / "data" / "nonlinear_high_fidelity"
 SOURCE_CASE_ID = "HV02_composite_radiation"
 DEFAULT_COARSE_MAX_STEP_S = 2.0
 DEFAULT_FINE_MAX_STEP_S = 1.0
-
-# The transient numerical budget is intentionally smaller than the strict mesh
-# budget: 20% of the 0.25/0.50 K mesh limits and 25% of the 2% relative limits.
-TEMPERATURE_LIMITS_K = {
-    "truth_chip": 0.05,
-    "truth_sink_base": 0.05,
-    "truth_fins": 0.05,
-    "truth_chip_max": 0.10,
-    "truth_fins_max": 0.10,
-    "truth_outlet_air_temperature": 0.05,
-}
-RELATIVE_LIMITS = {
-    "truth_pressure_drop": 0.005,
-    "truth_radiative_heat_rate": 0.005,
-}
-UNITS = {
-    **dict.fromkeys(TEMPERATURE_LIMITS_K, "K"),
-    "truth_pressure_drop": "Pa",
-    "truth_radiative_heat_rate": "W",
-}
-
-
-def _validate_steps(coarse_max_step_s: float, fine_max_step_s: float) -> None:
-    values = (coarse_max_step_s, fine_max_step_s)
-    if any(isinstance(value, bool) or not math.isfinite(value) or value <= 0.0 for value in values):
-        raise ValueError("time-step limits must be positive and finite")
-    if fine_max_step_s >= coarse_max_step_s:
-        raise ValueError("fine maximum time step must be smaller than the coarse value")
 
 
 def _step_tag(value: float) -> str:
@@ -71,91 +47,39 @@ def _variant(source: NonlinearCase, maximum_time_step_s: float) -> NonlinearCase
     )
 
 
-def _validate_common_boundary(coarse: pd.DataFrame, fine: pd.DataFrame) -> None:
-    required = {
-        "time",
-        *CONTROLS,
-        *TEMPERATURE_LIMITS_K,
-        *RELATIVE_LIMITS,
-    }
-    for label, frame in (("coarse", coarse), ("fine", fine)):
-        missing = required - set(frame)
-        if missing:
-            raise ValueError(f"{label} time-step result is missing columns: {sorted(missing)}")
-        if not np.isfinite(frame[list(required)].to_numpy(dtype=np.float64)).all():
-            raise ValueError(f"{label} time-step result contains non-finite values")
-    boundary = ["time", *CONTROLS]
-    if coarse.shape[0] != fine.shape[0] or not np.allclose(
-        coarse[boundary].to_numpy(dtype=np.float64),
-        fine[boundary].to_numpy(dtype=np.float64),
-        rtol=0.0,
-        atol=1e-10,
-    ):
-        raise ValueError("time-step results do not share identical output times and controls")
-
-
-def compare_time_steps(
-    coarse: pd.DataFrame,
-    fine: pd.DataFrame,
+def _publish_time_step_results(
+    results: list[pd.DataFrame],
     *,
+    steps: tuple[float, float],
+    data_root: Path,
     source_case_id: str,
     mesh_profile: str,
-    coarse_max_step_s: float,
-    fine_max_step_s: float,
-) -> pd.DataFrame:
-    """Compare identical output knots without interpolating either transient."""
-    _validate_steps(coarse_max_step_s, fine_max_step_s)
-    _validate_common_boundary(coarse, fine)
-    rows: list[dict[str, object]] = []
-    for quantity, limit in TEMPERATURE_LIMITS_K.items():
-        difference = np.abs(
-            coarse[quantity].to_numpy(dtype=np.float64) - fine[quantity].to_numpy(dtype=np.float64)
-        )
-        maximum = float(difference.max())
-        rows.append(
-            {
-                "case_id": source_case_id,
-                "mesh_profile": mesh_profile,
-                "coarse_max_time_step_s": coarse_max_step_s,
-                "fine_max_time_step_s": fine_max_step_s,
-                "quantity": quantity.removeprefix("truth_"),
-                "unit": UNITS[quantity],
-                "comparison_metric": "max_abs_difference",
-                "max_abs_difference": maximum,
-                "fine_reference_peak_abs": float(
-                    np.abs(fine[quantity].to_numpy(dtype=np.float64)).max()
-                ),
-                "observed_value": maximum,
-                "acceptance_limit": limit,
-                "passed": maximum <= limit,
-            }
-        )
-    for quantity, limit in RELATIVE_LIMITS.items():
-        difference = np.abs(
-            coarse[quantity].to_numpy(dtype=np.float64) - fine[quantity].to_numpy(dtype=np.float64)
-        )
-        maximum = float(difference.max())
-        reference_peak = float(np.abs(fine[quantity].to_numpy(dtype=np.float64)).max())
-        if reference_peak <= 1e-12:
-            raise ValueError(f"fine time-step result has no scale for {quantity}")
-        relative = maximum / reference_peak
-        rows.append(
-            {
-                "case_id": source_case_id,
-                "mesh_profile": mesh_profile,
-                "coarse_max_time_step_s": coarse_max_step_s,
-                "fine_max_time_step_s": fine_max_step_s,
-                "quantity": quantity.removeprefix("truth_"),
-                "unit": UNITS[quantity],
-                "comparison_metric": "max_abs_difference_over_fine_peak",
-                "max_abs_difference": maximum,
-                "fine_reference_peak_abs": reference_peak,
-                "observed_value": relative,
-                "acceptance_limit": limit,
-                "passed": relative <= limit,
-            }
-        )
-    return pd.DataFrame(rows)
+) -> tuple[pd.DataFrame, Path]:
+    """Keep exact result files, file hashes, and comparison in one provenance chain."""
+    temporal_root = data_root / "temporal"
+    paths = [temporal_root / f"max_step_{_step_tag(step)}.csv" for step in steps]
+    for result, path in zip(results, paths, strict=True):
+        write_csv_atomic(result, path)
+    # Compare publication values so the recorded comparison can be recomputed
+    # exactly from the portable files, without access to a COMSOL installation.
+    published = [pd.read_csv(path) for path in paths]
+    evidence = compare_time_steps(
+        published[0],
+        published[1],
+        source_case_id=source_case_id,
+        mesh_profile=mesh_profile,
+        coarse_max_step_s=steps[0],
+        fine_max_step_s=steps[1],
+    )
+    for label, path in zip(("coarse", "fine"), paths, strict=True):
+        evidence[f"{label}_result_path"] = path.relative_to(data_root).as_posix()
+        evidence[f"{label}_result_sha256"] = file_sha256(path)
+    comparison_path = temporal_root / (
+        f"comparison_{_step_tag(steps[0])}_to_{_step_tag(steps[1])}.csv"
+    )
+    write_csv_atomic(evidence, comparison_path)
+    write_csv_atomic(evidence, data_root / "time_step_convergence.csv")
+    return evidence, comparison_path
 
 
 def _source_case() -> NonlinearCase:
@@ -194,9 +118,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    _validate_steps(args.coarse_max_step, args.fine_max_step)
+    validate_time_step_limits(args.coarse_max_step, args.fine_max_step)
     data_root = args.data_root.resolve()
-    _require_qualified(args.mesh_profile, data_root)
+    require_mesh_qualified(args.mesh_profile, data_root)
     source = _source_case()
     steps = (args.coarse_max_step, args.fine_max_step)
     variants = [_variant(source, step) for step in steps]
@@ -223,27 +147,20 @@ def main() -> int:
         result = truth_frame(raw, variant, mesh_profile=args.mesh_profile)
         result["source_case_id"] = source.case_id
         result["maximum_time_step_s"] = maximum_step
+        result["solver_settings_verified"] = bool(raw.attrs.get("solver_settings_verified"))
         results.append(result)
 
-    evidence = compare_time_steps(
-        results[0],
-        results[1],
+    evidence, comparison_path = _publish_time_step_results(
+        results,
+        steps=steps,
+        data_root=data_root,
         source_case_id=source.case_id,
         mesh_profile=args.mesh_profile,
-        coarse_max_step_s=steps[0],
-        fine_max_step_s=steps[1],
     )
-    temporal_root = data_root / "temporal"
-    for result, maximum_step in zip(results, steps, strict=True):
-        write_csv_atomic(result, temporal_root / f"max_step_{_step_tag(maximum_step)}.csv")
-    comparison_path = temporal_root / (
-        f"comparison_{_step_tag(steps[0])}_to_{_step_tag(steps[1])}.csv"
-    )
-    write_csv_atomic(evidence, comparison_path)
-    write_csv_atomic(evidence, data_root / "time_step_convergence.csv")
     summarize(data_root)
 
-    status = "qualified" if bool(evidence["passed"].all()) else "not qualified"
+    verified = all(result["solver_settings_verified"].all() for result in results)
+    status = "qualified fine result" if evidence["passed"].all() and verified else "not qualified"
     print(f"Time-step convergence: {status}; evidence: {comparison_path}")
     return 0
 

@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from celltemp.domain import Trajectory
-from celltemp.engine import KalmanObserver, ObserverState, ThermalRCModel
+from celltemp.engine import KalmanObserver, ThermalRCModel
 
 from .initialization import (
     default_state_estimator,
@@ -31,9 +31,9 @@ class ForecastResult:
 
 def _state_uncertainty_std(
     model: ThermalRCModel,
-    state: ObserverState,
+    covariance: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    physical_covariance = state.covariance[: model.n_nodes, : model.n_nodes]
+    physical_covariance = covariance[: model.n_nodes, : model.n_nodes]
     node_std = torch.sqrt(torch.clamp(torch.diag(physical_covariance), min=0.0))
     sensor_covariance = model.observation @ physical_covariance @ model.observation.T
     sensor_std = torch.sqrt(torch.clamp(torch.diag(sensor_covariance), min=0.0))
@@ -62,36 +62,30 @@ def forecast(
     dt = model_tensor(model, trajectory.dt[origin:])
     # Past disturbance and bias estimates explain measurements but are not future inputs.
     # Their covariance remains part of the open-loop uncertainty propagation.
-    state = ObserverState(
-        posterior.temperature,
-        posterior.actuator,
-        torch.zeros_like(posterior.heat_disturbance),
-        torch.zeros_like(posterior.bias_state),
-        posterior.covariance,
+    temperatures, actuators = model.forward_trajectory(
+        posterior.temperature, commands, dt, posterior.actuator
     )
-    states = [state.temperature]
-    actuators = [state.actuator]
+    covariance = posterior.covariance
     node_stds: list[torch.Tensor] = []
     sensor_stds: list[torch.Tensor] = []
 
-    node_std, sensor_std = _state_uncertainty_std(model, state)
+    node_std, sensor_std = _state_uncertainty_std(model, covariance)
     node_stds.append(node_std)
     sensor_stds.append(sensor_std)
     for index in range(len(commands)):
-        state = estimator.predict(state, commands[index], dt[index])
-        states.append(state.temperature)
-        actuators.append(state.actuator)
-        node_std, sensor_std = _state_uncertainty_std(model, state)
+        covariance = estimator.predict_covariance(
+            covariance, actuators[index], commands[index], dt[index]
+        )
+        node_std, sensor_std = _state_uncertainty_std(model, covariance)
         node_stds.append(node_std)
         sensor_stds.append(sensor_std)
 
-    temperatures = torch.stack(states)
     return ForecastResult(
         time=trajectory.time[origin:].copy(),
         sensor_temperature=model.observe(temperatures).cpu().numpy(),
         sensor_temperature_std=torch.stack(sensor_stds).cpu().numpy(),
         node_temperature=temperatures.cpu().numpy(),
         node_temperature_std=torch.stack(node_stds).cpu().numpy(),
-        actuator=torch.stack(actuators).cpu().numpy(),
+        actuator=actuators.cpu().numpy(),
         forecast_origin_index=origin,
     )

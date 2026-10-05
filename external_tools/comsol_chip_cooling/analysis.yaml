@@ -1,0 +1,32 @@
+# Optional power-step analysis. Paths are relative to this file.
+system: system.yaml
+
+data:
+  directory: data/train
+  dt: 2.0
+
+analysis:
+  output_dir: work/outputs/impedance
+  overwrite: true
+  thermal_impedance:
+    baseline_window_s: 40.0
+    terminal_window_s: 60.0
+    max_baseline_drift_k_per_s: 0.00001
+    max_baseline_std_k: 0.001
+    max_terminal_zth_drift_k_per_w_s: 0.001
+    steps:
+      T01_power_step_4w:
+        {control: chip_power, transition_start_s: 60.0, transition_end_s: 64.0,
+         heat_step_w: 4.0}
+      T02_power_step_6w:
+        {control: chip_power, transition_start_s: 60.0, transition_end_s: 64.0,
+         heat_step_w: 6.0}
+      T03_power_step_8w:
+        {control: chip_power, transition_start_s: 60.0, transition_end_s: 64.0,
+         heat_step_w: 8.0}
+      T04_power_step_10w:
+        {control: chip_power, transition_start_s: 60.0, transition_end_s: 64.0,
+         heat_step_w: 10.0}
+      T05_power_step_12w:
+        {control: chip_power, transition_start_s: 60.0, transition_end_s: 64.0,
+         heat_step_w: 12.0}

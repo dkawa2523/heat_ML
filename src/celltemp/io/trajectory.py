@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
+import hashlib
+from collections import Counter
 from collections.abc import Mapping, Sequence
+from io import BytesIO
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from celltemp.config import as_path, require_bool
+from celltemp.config import as_path, require_bool, require_path_value
 from celltemp.domain import Trajectory
 
 _INITIAL_ACTUATOR_PREFIX = "initial_effective_"
+
+
+def _validate_column_names(columns: Sequence[object]) -> None:
+    names = [str(name).strip() for name in columns]
+    duplicates = sorted(name for name, count in Counter(names).items() if count > 1)
+    if duplicates:
+        raise ValueError(f"trajectory table has duplicate column names {duplicates}")
 
 
 def _initial_actuator(
@@ -22,13 +33,20 @@ def _initial_actuator(
 ) -> np.ndarray | None:
     """Read an optional effective actuator state from the first CSV row."""
     columns = tuple(f"{_INITIAL_ACTUATOR_PREFIX}{name}" for name in control_names)
+    unknown = [
+        name
+        for name in frame.columns
+        if str(name).startswith(_INITIAL_ACTUATOR_PREFIX) and name not in columns
+    ]
+    if unknown:
+        raise ValueError(f"initial effective columns refer to unknown controls {unknown}")
     present = tuple(name in frame.columns for name in columns)
     if not any(present):
         return None
     values = np.array(default, dtype=np.float64, copy=True)
     for index, (column, exists) in enumerate(zip(columns, present, strict=True)):
         if exists:
-            values[index] = float(frame.loc[frame.index[0], column])
+            values[index] = float(frame[column].iloc[0])
     if not np.isfinite(values).all():
         raise ValueError("initial actuator values on the first row must be finite")
     return values
@@ -45,6 +63,7 @@ def trajectory_from_frame(
     metadata: Mapping[str, object] | None = None,
 ) -> Trajectory:
     """Convert one self-contained timestamped table."""
+    _validate_column_names(frame.columns.tolist())
     sensor_names = tuple(sensor_cols)
     control_names = tuple(control_cols)
     required = [time_col, *sensor_names, *control_names]
@@ -53,6 +72,8 @@ def trajectory_from_frame(
     missing = [name for name in required if name not in frame.columns]
     if missing:
         raise ValueError(f"trajectory table is missing columns {missing}")
+    if len(frame) < 2:
+        raise ValueError("a trajectory table needs at least two rows")
 
     temperature = frame[list(sensor_names)].to_numpy(dtype=np.float64)
     if np.isinf(temperature).any():
@@ -79,6 +100,8 @@ def _validate_loaded_trajectory(
     trajectory: Trajectory,
     data_cfg: Mapping[str, Any],
     source: Path,
+    *,
+    require_initial_observation: bool = True,
 ) -> None:
     allow_missing = require_bool(
         data_cfg.get("allow_missing_temperatures", False),
@@ -86,29 +109,52 @@ def _validate_loaded_trajectory(
     )
     if not allow_missing and not trajectory.mask.all():
         raise ValueError(f"{source.name}: missing temperature observations are not enabled")
-    if not trajectory.mask[0].any():
+    if require_initial_observation and not trajectory.mask[0].any():
         raise ValueError(f"{source.name}: the initial row needs at least one temperature")
-    expected_dt = data_cfg.get("dt")
+    expected_dt = _numeric_setting(data_cfg, "dt")
+    if expected_dt is not None and expected_dt <= 0.0:
+        raise ValueError("data.dt must be positive")
     if expected_dt is not None and not np.allclose(
-        trajectory.dt, float(expected_dt), rtol=1e-4, atol=1e-8
+        trajectory.dt, expected_dt, rtol=1e-4, atol=1e-8
     ):
         raise ValueError(f"{source.name}: dt is not constant {expected_dt}")
     observed = trajectory.temperature[trajectory.mask]
-    low = data_cfg.get("temp_min")
-    high = data_cfg.get("temp_max")
-    if low is not None and observed.min() < float(low):
+    low = _numeric_setting(data_cfg, "temp_min")
+    high = _numeric_setting(data_cfg, "temp_max")
+    if low is not None and high is not None and low > high:
+        raise ValueError("data.temp_min must not exceed data.temp_max")
+    if observed.size and low is not None and observed.min() < low:
         raise ValueError(f"{source.name}: temperature below temp_min")
-    if high is not None and observed.max() > float(high):
+    if observed.size and high is not None and observed.max() > high:
         raise ValueError(f"{source.name}: temperature above temp_max")
 
 
-def load_trajectories(data_cfg: Mapping[str, Any], root: str | Path) -> list[Trajectory]:
+def _numeric_setting(data_cfg: Mapping[str, Any], name: str) -> float | None:
+    value = data_cfg.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"data.{name} must be a finite number or null")
+    try:
+        number = float(value)
+    except OverflowError as error:
+        raise ValueError(f"data.{name} must be a finite number or null") from error
+    if not np.isfinite(number):
+        raise ValueError(f"data.{name} must be a finite number or null")
+    return number
+
+
+def load_trajectories(
+    data_cfg: Mapping[str, Any],
+    root: str | Path,
+    *,
+    require_initial_observation: bool = True,
+) -> list[Trajectory]:
     """Discover self-contained trajectory CSVs under one configured directory."""
     project_root = Path(root)
-    directory_value = data_cfg.get("directory")
-    if not directory_value:
-        raise ValueError("data.directory is required")
-    directory = as_path(str(directory_value), project_root)
+    directory = as_path(
+        require_path_value(data_cfg.get("directory"), "data.directory"), project_root
+    )
     pattern = str(data_cfg.get("pattern", "*.csv"))
     paths = sorted(path for path in directory.glob(pattern) if path.is_file())
     if not paths:
@@ -123,7 +169,12 @@ def load_trajectories(data_cfg: Mapping[str, Any], root: str | Path) -> list[Tra
     separator = str(data_cfg.get("sep", ","))
     trajectories: list[Trajectory] = []
     for source in paths:
-        frame = pd.read_csv(source, sep=separator)
+        contents = source.read_bytes()
+        raw_header = pd.read_csv(
+            BytesIO(contents), sep=separator, header=None, nrows=1, dtype=str, keep_default_na=False
+        )
+        _validate_column_names(raw_header.iloc[0].tolist())
+        frame = pd.read_csv(BytesIO(contents), sep=separator)
         frame.columns = [name.strip() for name in frame.columns]
         trajectory = trajectory_from_frame(
             case_id=source.stem,
@@ -132,9 +183,14 @@ def load_trajectories(data_cfg: Mapping[str, Any], root: str | Path) -> list[Tra
             sensor_cols=sensors,
             control_cols=controls,
             control_convention=str(data_cfg.get("control_convention", "left")),
-            metadata={"path": str(source)},
+            metadata={"path": str(source), "sha256": hashlib.sha256(contents).hexdigest()},
         )
-        _validate_loaded_trajectory(trajectory, data_cfg, source)
+        _validate_loaded_trajectory(
+            trajectory,
+            data_cfg,
+            source,
+            require_initial_observation=require_initial_observation,
+        )
         trajectories.append(trajectory)
     return trajectories
 
@@ -152,4 +208,4 @@ def load_split_assignments(path: str | Path) -> dict[str, str]:
     if case_ids.duplicated().any():
         raise ValueError("split table case_id values must be unique")
     splits = table["split"].astype(str)
-    return dict(zip(case_ids.tolist(), splits.tolist(), strict=True))
+    return dict(zip(map(str, case_ids), map(str, splits), strict=True))

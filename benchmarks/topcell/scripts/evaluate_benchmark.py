@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -22,9 +23,19 @@ from celltemp.artifact import ThermalArtifact, load_artifact
 from celltemp.config import as_path, load_config
 from celltemp.domain import Trajectory
 from celltemp.engine import ThermalRCModel
-from celltemp.inference import forecast, monitor, sensor_bias_in_gauge
+from celltemp.inference import (
+    build_observer,
+    forecast,
+    forecast_origin_index,
+    resolve_observer_settings,
+    sensor_bias_in_gauge,
+)
 from celltemp.io import load_system_spec, load_trajectories
-from celltemp.workflows.common import resolve_artifact_path
+from celltemp.workflows.common import (
+    resolve_artifact_path,
+    resolve_runtime_values,
+    validate_runtime_manifest,
+)
 from celltemp.workflows.prediction_figures import PredictionCase, write_prediction_figures
 
 from .definition import PARAMETER_TRUTH
@@ -72,28 +83,75 @@ def _source_frame(trajectory: Trajectory) -> pd.DataFrame:
     return pd.read_csv(Path(str(trajectory.metadata["path"])))
 
 
-def evaluate_forecasts(
-    artifact: ThermalArtifact, prior_model: ThermalRCModel, directory: str
-) -> tuple[pd.DataFrame, pd.DataFrame, list[PredictionCase]]:
-    trajectories = load_trajectories(
-        _trajectory_config(directory, artifact.sensor_names, artifact.control_names), ROOT
+def _workflow_inputs(
+    artifact: ThermalArtifact, values: dict, workflow: str, config_path: Path
+) -> tuple[list[Trajectory], Path, dict[str, float | str | None]]:
+    """Bind saved workflow output to its current inputs, artifact, and settings once."""
+    root = config_path.resolve().parent
+    data_config = _trajectory_config(
+        str(values["input_dir"]), artifact.sensor_names, artifact.control_names
     )
+    data_config.update(
+        {
+            name: values[name]
+            for name in ("pattern", "time_col", "control_convention", "sep", "dt")
+            if name in values
+        }
+    )
+    trajectories = load_trajectories(data_config, root)
+    output_dir = as_path(str(values["output_dir"]), root)
+    observer_settings = resolve_observer_settings(workflow, values.get("observer"))
+    observer = build_observer(artifact.model, observer_settings)
+    validate_runtime_manifest(
+        output_dir / "run_manifest.json",
+        workflow=workflow,
+        artifact=artifact,
+        values=values,
+        trajectories=trajectories,
+        observer_settings=observer_settings,
+        disturbance_basis=observer.disturbance_basis,
+    )
+    return trajectories, output_dir, observer_settings
+
+
+def _saved_case(
+    output_dir: Path, trajectory: Trajectory, columns: list[str], *, origin: int = 0
+) -> pd.DataFrame:
+    frame = pd.read_csv(output_dir / "cases" / f"{trajectory.case_id}.csv")
+    if not {"time", *columns} <= set(frame):
+        raise ValueError(f"{trajectory.case_id}: saved predictions are missing required columns")
+    expected_time = trajectory.time[origin:]
+    if len(frame) != len(expected_time) or not np.allclose(
+        frame["time"].to_numpy(dtype=float), expected_time, rtol=1e-12, atol=1e-12
+    ):
+        raise ValueError(f"{trajectory.case_id}: saved prediction times differ from the inputs")
+    return frame
+
+
+def evaluate_forecasts(
+    artifact: ThermalArtifact, prior_model: ThermalRCModel, values: dict, config_path: Path
+) -> tuple[pd.DataFrame, pd.DataFrame, list[PredictionCase]]:
+    trajectories, output_dir, observer_settings = _workflow_inputs(
+        artifact, values, "forecast", config_path
+    )
+    prior_observer = build_observer(prior_model, observer_settings)
     rows: list[dict[str, object]] = []
     comparison_rows: list[dict[str, object]] = []
     prediction_cases: list[PredictionCase] = []
     truth_columns = [f"truth_{sensor}" for sensor in artifact.sensor_names]
     for trajectory in trajectories:
         frame = _source_frame(trajectory)
-        learned_result = forecast(artifact.model, trajectory)
-        prior_result = forecast(prior_model, trajectory)
-        origin = learned_result.forecast_origin_index
+        origin = forecast_origin_index(trajectory.mask)
+        learned_columns = [f"sensor.{sensor}.temperature" for sensor in artifact.sensor_names]
+        saved = _saved_case(output_dir, trajectory, learned_columns, origin=origin)
+        learned = saved[learned_columns].to_numpy(dtype=float)
+        truth = frame[truth_columns].to_numpy(dtype=float)[origin:]
+        learned_metrics = prediction_error_metrics(truth, learned)
+        prior_result = forecast(prior_model, trajectory, observer=prior_observer)
         if prior_result.forecast_origin_index != origin:
             raise RuntimeError("forecast implementations disagree on the history boundary")
-        truth = frame[truth_columns].to_numpy(dtype=float)[origin:]
-        learned = learned_result.sensor_temperature
         prior = prior_result.sensor_temperature
         persistence = persistence_prediction(trajectory.temperature, trajectory.mask, origin)
-        learned_metrics = prediction_error_metrics(truth, learned)
         prior_metrics = prediction_error_metrics(truth, prior)
         persistence_metrics = prediction_error_metrics(truth, persistence)
         case_group = str(frame["benchmark_group"].iat[0])
@@ -110,6 +168,10 @@ def evaluate_forecasts(
                 "time_end": float(trajectory.time[-1]),
                 "observed_initial_sensors": int(trajectory.mask[0].sum()),
                 "observed_history_sensors": int(trajectory.mask[: origin + 1].any(axis=0).sum()),
+                "predictions_finite": bool(np.isfinite(learned).all()),
+                "n_evaluation_points": learned_metrics["n_points"],
+                "expected_evaluation_points": truth.size,
+                "prediction_coverage_fraction": learned_metrics["prediction_coverage_fraction"],
                 "learned_rmse": learned_metrics["rmse_k"],
                 "learned_mae": learned_metrics["mae_k"],
                 "learned_max_abs": learned_metrics["max_abs_error_k"],
@@ -202,30 +264,128 @@ def _detection_delay(time: np.ndarray, alert: np.ndarray, event_start: float) ->
     return float("nan") if len(detected) == 0 else float(time[detected[0]] - event_start)
 
 
-def evaluate_monitors(
-    artifact: ThermalArtifact, directory: str, observer_config: dict
-) -> pd.DataFrame:
-    trajectories = load_trajectories(
-        _trajectory_config(directory, artifact.sensor_names, artifact.control_names), ROOT
+def evaluate_monitors(artifact: ThermalArtifact, values: dict, config_path: Path) -> pd.DataFrame:
+    trajectories, output_dir, observer_config = _workflow_inputs(
+        artifact, values, "monitor", config_path
     )
     rows: list[dict[str, object]] = []
     truth_columns = [f"truth_{sensor}" for sensor in artifact.sensor_names]
     bias_columns = [f"truth_bias_{sensor}" for sensor in artifact.sensor_names]
     disturbance_columns = [f"truth_disturbance_{node}_w" for node in artifact.model.spec.node_names]
+    bias_reference = cast(str | None, observer_config["bias_reference"])
+    bias_gauge = "zero_mean" if bias_reference is None else f"reference:{bias_reference}"
+    saved_columns = (
+        [
+            f"sensor.{sensor}.{quantity}"
+            for quantity in (
+                "measured",
+                "prior_physical",
+                "predicted_measurement",
+                "posterior_physical",
+                "reconstructed_measurement",
+                "innovation",
+                "innovation_std",
+                "bias",
+            )
+            for sensor in artifact.sensor_names
+        ]
+        + [
+            f"node.{node}.{quantity}"
+            for quantity in ("temperature", "disturbance_w")
+            for node in artifact.model.spec.node_names
+        ]
+        + [
+            f"control.{control}.{quantity}"
+            for quantity in ("command", "effective")
+            for control in artifact.control_names
+        ]
+        + ["nis", "nis_dof", "bias_gauge"]
+    )
     for trajectory in trajectories:
         frame = _source_frame(trajectory)
+        saved = _saved_case(output_dir, trajectory, saved_columns)
+        measured = saved[
+            [f"sensor.{sensor}.measured" for sensor in artifact.sensor_names]
+        ].to_numpy(dtype=float)
+        if not np.allclose(
+            measured, trajectory.temperature, rtol=1e-12, atol=1e-12, equal_nan=True
+        ):
+            raise ValueError(f"{trajectory.case_id}: saved measurements differ from the inputs")
+        if not saved["bias_gauge"].eq(bias_gauge).all():
+            raise ValueError(f"{trajectory.case_id}: saved bias gauge differs from the settings")
+        commands = saved[[f"control.{name}.command" for name in artifact.control_names]].to_numpy(
+            dtype=float
+        )
+        expected_commands = np.concatenate([trajectory.commands, trajectory.commands[-1:]], axis=0)
+        if not np.allclose(commands, expected_commands, rtol=1e-12, atol=1e-12):
+            raise ValueError(f"{trajectory.case_id}: saved commands differ from the inputs")
+        estimates = [
+            column
+            for column in saved_columns
+            if column.rsplit(".", 1)[-1]
+            in (
+                "posterior_physical",
+                "reconstructed_measurement",
+                "bias",
+                "temperature",
+                "disturbance_w",
+                "command",
+                "effective",
+            )
+        ]
+        prior_estimates = [
+            column
+            for column in saved_columns
+            if column.rsplit(".", 1)[-1] in ("prior_physical", "predicted_measurement")
+        ]
+        if not (
+            np.isfinite(saved[estimates].to_numpy(dtype=float)).all()
+            and np.isfinite(saved[prior_estimates].to_numpy(dtype=float)[1:]).all()
+        ):
+            raise ValueError(f"{trajectory.case_id}: saved monitor estimates must be finite")
+        posterior = saved[
+            [f"sensor.{sensor}.posterior_physical" for sensor in artifact.sensor_names]
+        ].to_numpy(dtype=float)
+        sensor_bias = saved[[f"sensor.{sensor}.bias" for sensor in artifact.sensor_names]].to_numpy(
+            dtype=float
+        )
+        disturbance = saved[
+            [f"node.{node}.disturbance_w" for node in artifact.model.spec.node_names]
+        ].to_numpy(dtype=float)
+        innovation = saved[
+            [f"sensor.{sensor}.innovation" for sensor in artifact.sensor_names]
+        ].to_numpy(dtype=float)
+        innovation_std = saved[
+            [f"sensor.{sensor}.innovation_std" for sensor in artifact.sensor_names]
+        ].to_numpy(dtype=float)
+        nis = saved["nis"].to_numpy(dtype=float)
+        dof = saved["nis_dof"].to_numpy(dtype=float)
+        expected_dof = trajectory.mask.sum(axis=1)
+        expected_dof[0] = 0
+        observed = trajectory.mask.copy()
+        observed[0] = False
+        if (
+            not np.array_equal(dof, expected_dof)
+            or not np.isfinite(nis[dof > 0]).all()
+            or not np.isfinite(innovation[observed]).all()
+            or not np.isfinite(innovation_std[observed]).all()
+            or not (innovation_std[observed] > 0).all()
+        ):
+            raise ValueError(
+                f"{trajectory.case_id}: saved observed monitor diagnostics must be finite"
+            )
         truth = frame[truth_columns].to_numpy(dtype=float)
         truth_bias = frame[bias_columns].to_numpy(dtype=float)
         truth_sensor_bias = sensor_bias_in_gauge(
             truth_bias,
             artifact.sensor_names,
-            observer_config.get("bias_reference"),
+            bias_reference,
         )
         truth_disturbance = frame[disturbance_columns].to_numpy(dtype=float)
-        result = monitor(artifact.model, trajectory, **observer_config)
-        threshold = _nis_threshold(result.nis_dof)
-        valid_nis = np.isfinite(result.nis) & np.isfinite(threshold)
-        alert = valid_nis & (result.nis >= threshold)
+        prediction_error_metrics(truth, posterior)
+        threshold = _nis_threshold(dof)
+        valid_nis = np.isfinite(nis) & np.isfinite(threshold)
+        alert = valid_nis & (nis >= threshold)
         burn_in = trajectory.time >= 30.0
         event_start = (
             float(frame["event_start"].iat[0]) if "event_start" in frame.columns else float("nan")
@@ -233,45 +393,43 @@ def evaluate_monitors(
         event = np.linalg.norm(truth_disturbance, axis=1) > 0.0
         if not np.any(event) and np.isfinite(event_start):
             event = trajectory.time >= event_start
-        disturbance_norm = np.linalg.norm(result.node_heat_disturbance, axis=1)
+        disturbance_norm = np.linalg.norm(disturbance, axis=1)
         event_alerts = np.flatnonzero(event & alert)
         first_alert_sensor = ""
         if event_alerts.size:
             alert_index = int(event_alerts[0])
-            marginal = np.abs(result.innovation[alert_index] / result.innovation_std[alert_index])
+            marginal = np.where(
+                trajectory.mask[alert_index],
+                np.abs(innovation[alert_index] / innovation_std[alert_index]),
+                np.nan,
+            )
             first_alert_sensor = artifact.sensor_names[int(np.nanargmax(marginal))]
         rows.append(
             {
                 "case_id": trajectory.case_id,
                 "group": str(frame["benchmark_group"].iat[0]),
                 "purpose": str(frame["benchmark_purpose"].iat[0]),
-                "bias_gauge": result.bias_gauge,
+                "bias_gauge": bias_gauge,
                 "measured_rmse_to_truth": rmse(trajectory.temperature - truth),
-                "posterior_physical_rmse": rmse(result.posterior_physical_temperature - truth),
+                "posterior_physical_rmse": rmse(posterior - truth),
                 "sensor_bias_rmse_after_burn_in": rmse(
-                    result.sensor_bias[burn_in] - truth_sensor_bias[burn_in]
+                    sensor_bias[burn_in] - truth_sensor_bias[burn_in]
                 ),
                 "max_final_sensor_bias_error": float(
-                    np.max(np.abs(result.sensor_bias[-1] - truth_sensor_bias[-1]))
+                    np.max(np.abs(sensor_bias[-1] - truth_sensor_bias[-1]))
                 ),
-                "innovation_rmse": rmse(result.innovation),
-                "max_nis": float(np.nanmax(result.nis[1:])),
-                "mean_nis_per_dof": float(
-                    np.mean(result.nis[valid_nis] / result.nis_dof[valid_nis])
-                ),
+                "innovation_rmse": rmse(innovation[observed]),
+                "max_nis": float(np.max(nis[valid_nis])) if valid_nis.any() else float("nan"),
+                "mean_nis_per_dof": float(np.mean(nis[valid_nis] / dof[valid_nis])),
                 "nis_alert_fraction": float(np.mean(alert[1:])),
                 "missing_fraction": float(np.mean(~trajectory.mask)),
-                "posterior_finite": bool(np.isfinite(result.posterior_physical_temperature).all()),
+                "posterior_finite": bool(np.isfinite(posterior).all()),
                 "peak_event_disturbance_w": (
                     float(np.max(disturbance_norm[event])) if np.any(event) else float("nan")
                 ),
-                "event_disturbance_rmse_w": rmse(
-                    result.node_heat_disturbance[event] - truth_disturbance[event]
-                ),
+                "event_disturbance_rmse_w": rmse(disturbance[event] - truth_disturbance[event]),
                 "max_event_sensor_bias_k": (
-                    float(np.max(np.abs(result.sensor_bias[event])))
-                    if np.any(event)
-                    else float("nan")
+                    float(np.max(np.abs(sensor_bias[event]))) if np.any(event) else float("nan")
                 ),
                 "first_alert_sensor": first_alert_sensor,
                 "event_start": event_start,
@@ -330,8 +488,15 @@ def acceptance_checks(forecast_cases: pd.DataFrame, monitor_cases: pd.DataFrame)
     disturbance = _row_by_group(monitor_cases, "disturbance_detection")
     sparse_initial = _row_by_case(forecast_cases, "F09_sparse_initial_observation")
     sparse_history = _row_by_case(forecast_cases, "F12_history_initialized_sparse")
+    complete_predictions = (
+        core["predictions_finite"].eq(True)
+        & core["prediction_coverage_fraction"].eq(1.0)
+        & core["n_evaluation_points"].gt(0)
+        & core["n_evaluation_points"].eq(core["expected_evaluation_points"])
+        & np.isfinite(core["learned_rmse"])
+    )
     return {
-        "forecast_core_all_finite": bool(np.isfinite(core["learned_rmse"].to_numpy()).all()),
+        "forecast_core_all_finite": bool(len(core) and complete_predictions.all()),
         "forecast_core_mean_rmse_below_1K": _json_bool(core["learned_rmse"].mean() < 1.0),
         "forecast_core_worst_rmse_below_1_5K": bool(core["learned_rmse"].max() < 1.5),
         "forecast_core_beats_engineering_prior": _json_bool(
@@ -384,13 +549,16 @@ def main() -> None:
     prior_model.eval()
 
     forecasts, model_comparison, prediction_cases = evaluate_forecasts(
-        artifact, prior_model, str(config["forecast"]["input_dir"])
+        artifact,
+        prior_model,
+        resolve_runtime_values(config, "forecast", artifact_metadata=artifact.metadata),
+        ROOT / "config.yaml",
     )
     forecast_groups = summarize_forecast_groups(forecasts)
     monitors = evaluate_monitors(
         artifact,
-        str(config["monitor"]["input_dir"]),
-        dict(config["monitor"].get("observer", {})),
+        resolve_runtime_values(config, "monitor", artifact_metadata=artifact.metadata),
+        ROOT / "config.yaml",
     )
     parameters = parameter_recovery(artifact)
     checks = acceptance_checks(forecasts, monitors)

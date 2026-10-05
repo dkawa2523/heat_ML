@@ -25,8 +25,7 @@ PATHS = [
     "src/celltemp",
     "tests",
     "quality.py",
-    "benchmarks/topcell/scripts",
-    "benchmarks/topcell/run.py",
+    "benchmarks",
     "external_tools/comsol_chip_cooling",
 ]
 
@@ -93,7 +92,10 @@ def check_lint() -> bool:
 
 
 def check_types() -> bool:
-    return report("types", run("pyrefly", "check", "--summarize-errors"))
+    return report(
+        "types",
+        run("pyrefly", "check", "--python-interpreter-path", sys.executable, "--summarize-errors"),
+    )
 
 
 def check_architecture() -> bool:

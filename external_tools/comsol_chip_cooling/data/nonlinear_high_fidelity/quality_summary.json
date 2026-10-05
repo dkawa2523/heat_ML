@@ -1,8 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "strict_mesh_qualified": false,
   "benchmark_mesh_qualified": true,
   "transient_time_discretization_qualified": false,
+  "transient_result_fingerprint": "4575d30bf8946f0e91b48887b4c4b18bd7fe272b7025a35973eaa033980353eb",
+  "transient_mesh_profile": "local-medium",
   "experiment_validated": false,
   "max_adjacent_mesh_temperature_difference_k": 0.4962085957,
   "dynamic_cases": [
@@ -45,6 +47,11 @@
   ],
   "time_step_convergence": {
     "qualified": false,
+    "comparison_passed": false,
+    "result_provenance_verified": false,
+    "case_id": "HV02_composite_radiation",
+    "mesh_profile": "local-medium",
+    "fine_result_fingerprint": null,
     "coarse_max_time_step_s": 2.0,
     "fine_max_time_step_s": 1.0,
     "max_sensor_temperature_difference_k": 0.08149587312,

@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from celltemp.config import (
+    DATA_OPTIONS,
     as_path,
     project_root_from_config,
     reject_unknown_keys,
+    require_path_value,
     validate_config_root,
 )
 from celltemp.engine import ThermalRCModel
@@ -18,20 +20,15 @@ from celltemp.learning import (
     split_trajectories,
 )
 
-from .common import output_target, project_options, project_run_path, staged_output_directory
-from .train_output import write_training_outputs
+from .common import (
+    output_target,
+    project_options,
+    project_run_path,
+    staged_output_directory,
+    trajectory_source_paths,
+)
+from .train_output import write_training_diagnostics, write_training_outputs
 
-_DATA_OPTIONS = {
-    "allow_missing_temperatures",
-    "control_convention",
-    "directory",
-    "dt",
-    "pattern",
-    "sep",
-    "temp_max",
-    "temp_min",
-    "time_col",
-}
 _SPLIT_OPTIONS = {
     "method",
     "recipe_atol",
@@ -53,16 +50,18 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
     validate_config_root(cfg)
     root = project_root_from_config(config_path)
     project_cfg = project_options(cfg)
-    reject_unknown_keys(cfg["data"], _DATA_OPTIONS, "data")
+    reject_unknown_keys(cfg["data"], DATA_OPTIONS, "data")
     reject_unknown_keys(cfg.get("engine", {}), {"integrator"}, "engine")
+    split_cfg = cfg.get("split", {})
+    reject_unknown_keys(split_cfg, _SPLIT_OPTIONS, "split")
+    if "table" in split_cfg:
+        require_path_value(split_cfg["table"], "split.table")
+    split_path = None
+    if str(split_cfg.get("method", "random")) == "explicit":
+        if "table" not in split_cfg:
+            raise ValueError("split.method=explicit requires split.table")
+        split_path = as_path(split_cfg["table"], root)
     run_name = str(project_cfg.get("run_name", "thermal_network"))
-    run_target, overwrite = output_target(
-        {
-            "output_dir": project_run_path(project_cfg),
-            "overwrite": project_cfg.get("overwrite_run", False),
-        },
-        root,
-    )
     seed = int(cfg.get("seed", 42))
     system_path = str(cfg["system"])
     model = ThermalRCModel(
@@ -75,19 +74,26 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
         "control_cols": model.spec.control_names,
     }
     all_trajectories = load_trajectories(data_cfg, root)
+    run_target, overwrite = output_target(
+        {
+            "output_dir": project_run_path(project_cfg),
+            "overwrite": project_cfg.get("overwrite_run", False),
+        },
+        root,
+        protected_paths=(
+            Path(config_path),
+            as_path(str(cfg["data"]["directory"]), root),
+            as_path(str(cfg["system"]), root),
+            *trajectory_source_paths(all_trajectories),
+            *((split_path,) if split_path is not None else ()),
+        ),
+    )
     unevaluable = sorted(
         trajectory.case_id for trajectory in all_trajectories if not trajectory.mask[1:].any()
     )
     if unevaluable:
         raise ValueError(f"training data needs an observation after the initial row: {unevaluable}")
-    split_cfg = cfg.get("split", {})
-    reject_unknown_keys(split_cfg, _SPLIT_OPTIONS, "split")
-    assignments = None
-    if str(split_cfg.get("method", "random")) == "explicit":
-        table = split_cfg.get("table")
-        if not table:
-            raise ValueError("split.method=explicit requires split.table")
-        assignments = load_split_assignments(as_path(str(table), root))
+    assignments = load_split_assignments(split_path) if split_path is not None else None
     trajectories = split_trajectories(
         all_trajectories,
         split_cfg,
@@ -106,7 +112,7 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
     )
 
     with staged_output_directory(run_target, overwrite=overwrite) as run_dir:
-        write_training_outputs(
+        evidence = write_training_outputs(
             run_dir,
             cfg=cfg,
             config_path=config_path,
@@ -118,5 +124,9 @@ def run_train(cfg: dict, config_path: str | Path) -> Path:
             trajectories=trajectories,
             training=training,
             result=result,
+            diagnostics=project_cfg["diagnostics"],
         )
+    if project_cfg["diagnostics"]:
+        with staged_output_directory(run_target / "diagnostics", overwrite=overwrite) as target:
+            write_training_diagnostics(target, model, evidence)
     return run_target

@@ -1,6 +1,7 @@
 seed: 42
 
 project:
+  diagnostics: true
   run_name: thermal_network_demo
   output_dir: work/outputs/runs
   overwrite_run: true
@@ -43,6 +44,8 @@ training:
   patience: 8
 
 forecast:
+  # Evaluation schedules may have a different or variable timestep.
+  dt: null
   input_dir: data/pred/forecast
   pattern: "*.csv"
   output_dir: work/outputs/forecast

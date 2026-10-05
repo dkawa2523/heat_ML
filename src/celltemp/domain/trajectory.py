@@ -181,3 +181,23 @@ class Trajectory:
             metadata=metadata or {},
             initial_actuator=initial_actuator,
         )
+
+
+def forecast_origin_index(observation_mask: np.ndarray) -> int:
+    """Return the last observed row before a wholly unobserved future suffix."""
+    mask = np.asarray(observation_mask, dtype=np.bool_)
+    if mask.ndim != 2 or len(mask) < 2:
+        raise ValueError("forecast observation mask must have shape [time, sensor]")
+    observed_rows: np.ndarray = np.asarray(mask.any(axis=1), dtype=np.bool_)
+    future_rows = np.flatnonzero(~observed_rows)
+    if not len(future_rows):
+        raise ValueError("forecast input needs at least one unobserved future row")
+    first_future = int(future_rows[0])
+    if first_future == 0:
+        raise ValueError("forecast input needs an observation on the initial row")
+    if observed_rows[first_future:].any():
+        raise ValueError(
+            "forecast observations must be a contiguous history prefix followed by "
+            "unobserved future rows"
+        )
+    return first_future - 1

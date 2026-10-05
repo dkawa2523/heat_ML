@@ -1,6 +1,7 @@
 seed: 42
 
 project:
+  diagnostics: true
   run_name: topcell
   output_dir: work/outputs/runs
   overwrite_run: true
@@ -39,6 +40,8 @@ training:
   patience: 8
 
 forecast:
+  # Evaluation schedules may have a different or variable timestep.
+  dt: null
   input_dir: work/data/eval/forecast
   pattern: "*.csv"
   output_dir: work/outputs/forecast

@@ -14,6 +14,26 @@ from celltemp.io import (
 )
 
 
+def test_initial_actuator_uses_row_position_with_duplicate_dataframe_index() -> None:
+    frame = pd.DataFrame(
+        {
+            "time": [0.0, 1.0, 2.0],
+            "tc": [20.0, 21.0, 22.0],
+            "heater": [10.0, 10.0, 10.0],
+            "initial_effective_heater": [3.0, np.nan, np.nan],
+        },
+        index=[0, 0, 1],
+    )
+    trajectory = trajectory_from_frame(
+        case_id="duplicate_index",
+        frame=frame,
+        time_col="time",
+        sensor_cols=("tc",),
+        control_cols=("heater",),
+    )
+    np.testing.assert_array_equal(trajectory.initial_actuator, [3.0])
+
+
 def _system_mapping() -> dict:
     return {
         "version": 3,
@@ -230,3 +250,104 @@ def test_load_trajectories_adapts_configured_cases(cae_project: Path, data_cfg: 
     trajectories = load_trajectories(data_cfg, cae_project)
     assert len(trajectories) == 8
     assert trajectories[0].commands.shape == (39, 3)
+
+
+@pytest.mark.parametrize("header", ["time,tc,power,power", "time,tc,power, power "])
+def test_csv_rejects_duplicate_headers_before_pandas_renames_them(
+    tmp_path: Path, header: str
+) -> None:
+    (tmp_path / "case.csv").write_text(f"{header}\n0,20,0,10\n1,21,10,0\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"duplicate column names.*power"):
+        load_trajectories(
+            {"directory": ".", "sensor_cols": ["tc"], "control_cols": ["power"]}, tmp_path
+        )
+
+
+@pytest.mark.parametrize("columns", [["time", "tc", "tc"], ["time", "tc", " tc "]])
+def test_frame_rejects_duplicate_columns_after_stripping(columns: list[str]) -> None:
+    frame = pd.DataFrame([[0.0, 20.0, 30.0], [1.0, 21.0, 31.0]], columns=columns)
+    with pytest.raises(ValueError, match=r"duplicate column names.*tc"):
+        trajectory_from_frame(
+            case_id="ambiguous", frame=frame, time_col="time", sensor_cols=["tc"], control_cols=[]
+        )
+
+
+def test_initial_effective_typo_is_rejected_but_unrelated_extra_columns_are_allowed() -> None:
+    frame = pd.DataFrame(
+        {"time": [0.0, 1.0], "tc": [20.0, 21.0], "power": [0.0, 5.0], "truth": [3.0, 4.0]}
+    )
+    arguments = {
+        "case_id": "case",
+        "time_col": "time",
+        "sensor_cols": ["tc"],
+        "control_cols": ["power"],
+    }
+    assert trajectory_from_frame(frame=frame, **arguments).initial_actuator is None
+    frame["initial_effective_powerr"] = [8.0, np.nan]
+    with pytest.raises(ValueError, match=r"unknown controls.*initial_effective_powerr"):
+        trajectory_from_frame(frame=frame, **arguments)
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        (name, value)
+        for name in ("dt", "temp_min", "temp_max")
+        for value in (True, "1", np.nan, np.inf, -np.inf)
+    ],
+)
+def test_csv_settings_reject_non_numeric_or_non_finite_limits(
+    tmp_path: Path, option: str, value: object
+) -> None:
+    (tmp_path / "case.csv").write_text("time,tc\n0,10000\n1,10001\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"data\.{option} must be a finite number"):
+        load_trajectories({"directory": ".", "sensor_cols": ["tc"], option: value}, tmp_path)
+
+
+@pytest.mark.parametrize("limits", [{"dt": 0.0}, {"dt": -1.0}, {"temp_min": 30, "temp_max": 20}])
+def test_csv_settings_require_positive_dt_and_ordered_temperature_bounds(
+    tmp_path: Path, limits: dict
+) -> None:
+    (tmp_path / "case.csv").write_text("time,tc\n0,20\n1,21\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"must be positive|must not exceed"):
+        load_trajectories({"directory": ".", "sensor_cols": ["tc"], **limits}, tmp_path)
+
+
+def test_initial_observation_requirement_can_be_disabled_for_waveform_analysis(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "case.csv").write_text("time,tc\n0,\n1,20\n2,21\n", encoding="utf-8")
+    cfg = {"directory": ".", "sensor_cols": ["tc"], "allow_missing_temperatures": True}
+    with pytest.raises(ValueError, match="initial row needs"):
+        load_trajectories(cfg, tmp_path)
+    trajectory = load_trajectories(cfg, tmp_path, require_initial_observation=False)[0]
+    np.testing.assert_array_equal(trajectory.mask[:, 0], [False, True, True])
+
+
+def test_csv_header_check_preserves_quoted_names_and_configured_separator(tmp_path: Path) -> None:
+    (tmp_path / "case.csv").write_text(
+        'time;"tc,center";power;truth\n0;20;1;100\n1;21;2;200\n', encoding="utf-8"
+    )
+    trajectory = load_trajectories(
+        {"directory": ".", "sensor_cols": ["tc,center"], "control_cols": ["power"], "sep": ";"},
+        tmp_path,
+    )[0]
+    np.testing.assert_array_equal(trajectory.temperature[:, 0], [20.0, 21.0])
+    np.testing.assert_array_equal(trajectory.commands[:, 0], [1.0])
+
+
+def test_all_missing_analysis_waveform_does_not_evaluate_extrema_for_bounds(tmp_path: Path) -> None:
+    (tmp_path / "case.csv").write_text("time,tc\n0,\n1,\n", encoding="utf-8")
+    trajectory = load_trajectories(
+        {
+            "directory": ".",
+            "sensor_cols": ["tc"],
+            "allow_missing_temperatures": True,
+            "temp_min": 0.0,
+            "temp_max": 100.0,
+            "dt": 1.0,
+        },
+        tmp_path,
+        require_initial_observation=False,
+    )[0]
+    assert not trajectory.mask.any()

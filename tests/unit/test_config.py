@@ -7,7 +7,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from celltemp.config import as_path, load_config, load_yaml, project_root_from_config, save_yaml
+from celltemp.config import (
+    as_path,
+    load_config,
+    load_yaml,
+    project_root_from_config,
+    require_path_value,
+    save_yaml,
+    temperature_unit_label,
+)
 
 
 def write_cfg(tmp_path: Path, payload: dict) -> Path:
@@ -104,3 +112,46 @@ def test_config_rejects_an_unknown_top_level_option(tmp_path: Path) -> None:
     path = write_cfg(tmp_path, {"engin": {"integrator": "exact"}})
     with pytest.raises(ValueError, match=r"unknown config options.*engin"):
         load_config(path)
+
+
+@pytest.mark.parametrize("value", [None, "", "  ", True, False, 3])
+def test_supplied_paths_reject_null_blank_and_non_path_values(value: object) -> None:
+    with pytest.raises(ValueError, match="input_dir must be a non-empty path"):
+        require_path_value(value, "input_dir")
+
+
+@pytest.mark.parametrize("option", ["system", "artifact"])
+def test_config_rejects_bad_root_paths(tmp_path: Path, option: str) -> None:
+    path = write_cfg(tmp_path, {option: None})
+    with pytest.raises(ValueError, match=rf"{option} must be a non-empty path"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "42", -1, None])
+def test_config_seed_is_an_integer(tmp_path: Path, value: object) -> None:
+    path = write_cfg(tmp_path, {"seed": value})
+    with pytest.raises(ValueError, match="seed must be a non-negative integer"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("key", ["", ".training", "training.", "training..epochs"])
+def test_override_rejects_empty_dot_key_segments(tmp_path: Path, key: str) -> None:
+    with pytest.raises(ValueError, match="non-empty names"):
+        load_config(write_cfg(tmp_path, {}), [f"{key}=2"])
+
+
+def test_override_cannot_silently_replace_a_scalar_section(tmp_path: Path) -> None:
+    path = write_cfg(tmp_path, {"training": 2})
+    with pytest.raises(ValueError, match="cannot descend into non-mapping"):
+        load_config(path, ["training.epochs=3"])
+
+
+@pytest.mark.parametrize("unit", [None, "C", "degF", True, []])
+def test_temperature_unit_rejects_unknown_or_untyped_labels(unit: object) -> None:
+    with pytest.raises(ValueError, match="temperature_unit must be"):
+        temperature_unit_label(unit)
+
+
+def test_temperature_unit_labels() -> None:
+    assert temperature_unit_label("degC") == "°C"
+    assert temperature_unit_label("K") == "K"

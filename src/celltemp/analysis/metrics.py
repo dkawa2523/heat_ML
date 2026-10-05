@@ -37,7 +37,7 @@ def _validate_fraction(value: float, name: str) -> float:
     return fraction
 
 
-def _finite_series(time: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _response_series(time: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     sample_time = np.asarray(time, dtype=np.float64)
     sample_values = np.asarray(values, dtype=np.float64)
     if sample_time.ndim != 1 or sample_values.ndim != 1:
@@ -46,6 +46,13 @@ def _finite_series(time: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np
         raise ValueError("time and values must have equal length of at least two")
     if not np.isfinite(sample_time).all() or not np.all(np.diff(sample_time) > 0.0):
         raise ValueError("time must be finite and strictly increasing")
+    if np.isinf(sample_values).any():
+        raise ValueError("temperature samples may be missing, but not infinite")
+    return sample_time, sample_values
+
+
+def _finite_series(time: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    sample_time, sample_values = _response_series(time, values)
     available = np.isfinite(sample_values)
     if available.sum() < 2:
         raise ValueError("a response needs at least two finite temperature samples")
@@ -102,8 +109,8 @@ def response_metrics(
 
     The 10--90 %, 63.2 %, settling, and overshoot values use the mean of the final
     portion of the record as the response endpoint. They are marked NaN for a flat
-    record. For multi-step recipes, use these as whole-case descriptors and compute
-    phase-specific values after segmenting the recipe.
+    record. Call this API only for a selected step-response interval; multi-step
+    recipes need explicit segmentation before interpreting these values.
     """
     final_fraction = _validate_fraction(final_fraction, "final_fraction")
     settling_fraction = _validate_fraction(settling_fraction, "settling_fraction")
@@ -294,30 +301,86 @@ def thermal_case_metrics(
     }
 
 
-def sensor_response_rows(
+def sensor_waveform_rows(
     time: np.ndarray,
     temperature: np.ndarray,
     sensor_names: tuple[str, ...],
-    *,
-    final_fraction: float = 0.1,
-    settling_fraction: float = 0.02,
 ) -> list[dict[str, float | str]]:
-    """Apply the standard response metrics to each sensor column."""
+    """Describe each waveform without assuming that the recipe is a single step.
+
+    The final temperature is the last observed sample. Missing or single-point
+    channels keep their observed extrema and explicit availability status.
+    """
     values = np.asarray(temperature, dtype=np.float64)
     if values.ndim != 2 or values.shape[1] != len(sensor_names):
         raise ValueError("temperature must have one column per sensor name")
-    return [
-        {
-            "sensor": sensor,
-            **response_metrics(
-                time,
-                values[:, index],
-                final_fraction=final_fraction,
-                settling_fraction=settling_fraction,
-            ),
-        }
-        for index, sensor in enumerate(sensor_names)
-    ]
+    rows: list[dict[str, float | str]] = []
+    for index, sensor in enumerate(sensor_names):
+        sample_time, column = _response_series(time, values[:, index])
+        available = np.isfinite(column)
+        count = int(available.sum())
+        metrics = (
+            _waveform_metrics(sample_time[available], column[available])
+            if count >= 2
+            else _unavailable_waveform(sample_time[available], column[available])
+        )
+        rows.append(
+            {
+                "sensor": sensor,
+                "n_observed_points": count,
+                "response_status": "available" if count >= 2 else "insufficient_observations",
+                **metrics,
+            }
+        )
+    return rows
+
+
+sensor_response_rows = sensor_waveform_rows
+
+
+def _waveform_metrics(time: np.ndarray, values: np.ndarray) -> dict[str, float | str]:
+    initial = float(values[0])
+    final = float(values[-1])
+    slopes = np.diff(values) / np.diff(time)
+    minimum_index = int(np.argmin(values))
+    maximum_index = int(np.argmax(values))
+    return {
+        "initial_temperature": initial,
+        "final_temperature": final,
+        "temperature_change": final - initial,
+        "minimum_temperature": float(values[minimum_index]),
+        "time_of_minimum_s": float(time[minimum_index]),
+        "maximum_temperature": float(values[maximum_index]),
+        "time_of_maximum_s": float(time[maximum_index]),
+        "max_heating_rate_per_s": float(np.max(slopes)),
+        "max_cooling_rate_per_s": float(np.min(slopes)),
+    }
+
+
+def _unavailable_waveform(time: np.ndarray, values: np.ndarray) -> dict[str, float | str]:
+    """Keep observed extrema without inventing a trend from zero or one point."""
+    fields = (
+        "initial_temperature",
+        "final_temperature",
+        "temperature_change",
+        "minimum_temperature",
+        "time_of_minimum_s",
+        "maximum_temperature",
+        "time_of_maximum_s",
+        "max_heating_rate_per_s",
+        "max_cooling_rate_per_s",
+    )
+    result: dict[str, float | str] = dict.fromkeys(fields, float("nan"))
+    if len(values):
+        result.update(
+            initial_temperature=float(values[0]),
+            final_temperature=float(values[0]),
+            minimum_temperature=float(values[0]),
+            maximum_temperature=float(values[0]),
+            time_of_minimum_s=float(time[0]),
+            time_of_maximum_s=float(time[0]),
+        )
+    return result
 
 
 def control_waveform_rows(

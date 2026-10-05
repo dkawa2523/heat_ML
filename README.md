@@ -25,17 +25,60 @@ uv run --locked --with-editable . celltemp train --config examples/topcell_quick
 uv run --locked --with-editable . celltemp forecast --config examples/topcell_quickstart/config.yaml
 ```
 
-最初に読む成果物を次へ固定します。その他のsplit、履歴、sensor別表、manifestは詳細確認と再現用です。
+自分のdataへ適用するときは、[最小config例](examples/topcell_quickstart/config.minimal.yaml)から始めます。
+この例はsystem、学習CSV directory、保存先、forecast入力だけを指定します。詳細な学習・observer設定は
+[通常のquickstart設定](examples/topcell_quickstart/config.yaml)で確認できます。
+
+| 設定 | 必須となる処理 | 省略時 |
+|---|---|---|
+| `system` | train。analyzeは代わりに`analysis.sensors`を指定可能 | 必須 |
+| `data.directory` | train。analyzeも既定で参照 | 必須 |
+| `project.output_dir` / `run_name` | 学習成果の保存先を変える場合 | `outputs/runs` / `thermal_network` |
+| `forecast.input_dir` / `output_dir` | forecast | 必須 |
+| `monitor.input_dir` / `output_dir` | monitorを使う場合 | 必須 |
+| `artifact` | 学習configと独立して運用する場合 | projectの学習runから取得 |
+| `project.temperature_unit` | Kを使う場合 | `degC`。`K`も指定可、値の変換なし |
+| `project.diagnostics` | 比較・熱経路・予測図を追加する場合 | `false` |
+| `training` / `split` / `engine` | 詳細調整が必要な場合 | 80 epochs / case単位random split / exact |
+
+`time_col: time`、`sep: ","`、`control_convention: left`、可変`dt`がCSV読込の既定です。
+共通の変更は`data`へ一度指定します。analysis/forecast/monitorで異なるCSV形式を読む場合だけ各sectionで
+上書きします。dataを持たないartifact単独運用では、指令規約はartifactの学習規約を使用します。
+欠測、unit、指令の時刻対応は次の入力規約を確認してください。
+
+最初に読む基本成果物を次へ示します。split、履歴、sensor別表、manifestは確認と再現用です。
 
 | 処理 | 最初に読む成果物 | 判断できること |
 |---|---|---|
 | analyze | `work/outputs/analysis/summary.json`、`case_metrics.csv`、`figures/<case_id>.png` | peak、応答、温度均一性、入力波形 |
-| train | `work/outputs/runs/thermal_network_demo/metrics_summary.json`、`model_comparison.csv`、`figures/test_prediction_timeseries.png`、`figures/test_prediction_parity.png`、`thermal_paths.csv` | 保持test波形、真値–予測一致、baseline優位性、主要熱経路 |
-| forecast | `work/outputs/forecast/forecast_summary.csv`、`figures/forecast_<case_id>.png`、`energy_balance.csv` | 未知recipeの温度・状態区間・入力・span・熱収支・適用範囲 |
+| train | `work/outputs/runs/thermal_network_demo/metrics_summary.json`、`artifact/` | 保持caseの因果・conditional誤差、運用するモデル |
+| forecast | `work/outputs/forecast/forecast_summary.csv`、`cases/<case_id>.csv`、`forecast_coverage.csv` | 未知recipeの温度・状態区間・入力・span・適用範囲 |
+
+通常のtrain/forecastは描画や熱経路診断を必要とせず、基本成果を保存します。
+`project.diagnostics`は既定`false`です。quickstartと公開benchmarkは`true`を指定し、
+比較表・熱経路・熱収支・図を各出力先の`diagnostics/`へ追加します。診断が失敗しても基本成果は残り、
+診断の失敗はコマンドのエラーとして通知されます。
 
 ここでの相対pathは`examples/topcell_quickstart/`基準です。quickstartは時間変化する入熱・冷却を含む
 操作例であり、特定solverや実機の妥当化結果ではありません。逐次観測同化が必要な設備だけ
 `monitor`を追加します。基本の解析・同定・予測にCOMSOL、notebook、外部report builderは不要です。
+
+## 設定の役割
+
+| 利用者が用意するもの | 役割 |
+|---|---|
+| `config.yaml` | CSVの場所、実行・保存条件。通常利用の入口 |
+| `system.yaml` | 装置ごとの熱回路、入力、観測の対応。全caseで共有 |
+| trajectory CSV | 時刻ごとの温度と指令。case別シナリオの登録は不要 |
+| `analysis.yaml`（任意） | 応答区間やZth/Rthなどの専門解析を使う場合だけ用意 |
+
+`analysis.yaml`は既存CLIへ直接渡す独立したconfigです。configの継承・自動mergeは行いません。
+熱回路は`system: system.yaml`で参照し、通常configへ同じ回路を重複記載しません。
+波形解析だけなら熱回路は不要です。学習後のforecast/monitorは保存済みartifactを使います。
+
+解析済みCOMSOLモデルがある場合は、[COMSOL取り込み](external_tools/comsol/README.md)で代表領域の熱容量と
+温度・入力時系列を通常の`system.yaml`とCSVへ変換できます。熱結合と観測対応は既存形式のtemplateへ記載し、
+本体へCOMSOL依存やscenario設定を追加しません。
 
 ## モデル
 
@@ -109,6 +152,11 @@ external_tools/comsol_chip_cooling/
   data/         公開可能な正本データと評価結果
   run*.py       COMSOL生成・変換entry point
   evaluate*.py  本体から独立した評価entry point
+external_tools/
+  comsol_import.py   保存済みCOMSOLからsystem YAML・trajectory CSVを生成
+  comsol_extract.py  保存解の数値抽出と単位変換
+  comsol_runtime.py  外部tool間で共有するCOMSOL起動
+  comsol/           取り込み手順とJava抽出処理
 docs/           モデル、単位、品質、拡張方針
 tests/          単体・property・workflow integration試験
 ```
@@ -162,8 +210,8 @@ forecastでは、各履歴行に少なくとも1つのsensor観測を置き、�
 
 `dt: null`にすれば可変刻みを許可します。trainで温度欠測を読む場合は
 `allow_missing_temperatures: true`を設定します。forecastとmonitorは空欄を自動的に欠測maskとして
-扱います。どのworkflowも初期状態を決めるため、先頭行には少なくとも1つのsensor温度が
-必要です。forecast履歴ではsensor単位の欠測を許しますが、全sensor空欄の行がforecast境界です。
+扱います。train、forecast、monitorは初期状態を決めるため、先頭行に少なくとも1つのsensor温度が
+必要です。analyzeは先頭の欠測を許し、観測がある区間を解析します。forecast履歴ではsensor単位の欠測を許しますが、全sensor空欄の行がforecast境界です。
 学習trajectoryには、先頭より後にも少なくとも1つの観測が必要です。
 学習時に直接観測されないnodeの開始温度は、選択した軌道区間への応答からcaseごとのnuisance
 stateとして解析的に推定します。物理係数へ誤った初期温度を吸収させず、artifactへcase固有状態も
@@ -174,46 +222,32 @@ best modelの選択には、deploymentと同じく将来観測を初期化へ使
 
 ## system.yaml
 
-熱系の構造は一つのYAMLに集約します。
+熱系の構造は一つのYAMLに集約します。次はCSV例に対応する2-nodeの最小構成です。
+heat capacityはJ/K、conductanceはW/K、heaterは対象への吸収熱[W]、coolantは冷媒温度です。
 
 ```yaml
 version: 3
 nodes:
-  - {name: wafer, heat_capacity: 2.0}
-  - {name: chuck, heat_capacity: 5.0}
+  - {name: core, heat_capacity: 2.0}
+  - {name: shell, heat_capacity: 5.0}
 actuators:
   - {name: heater, tau: 3.0, unit: W, role: heat_input}
-  - {name: clamp_pressure, tau: 0.0, learnable: false, unit: kPa, role: heat_transfer}
-  - {name: coolant_temperature, tau: 0.0, learnable: false,
-     unit: degC, role: reservoir_temperature}
-  - {name: coolant_flow, tau: 0.0, learnable: false, unit: L/min, role: heat_transfer}
+  - {name: coolant, unit: degC, role: reservoir_temperature}
 edges:
-  - nodes: [wafer, chuck]
-    conductance:
-      {type: power_law, control: clamp_pressure, reference: 1.0,
-       offset: 0.1, scale: 0.3, exponent: 0.8}
+  - nodes: [core, shell]
+    conductance: {type: constant, value: 0.3}
 sources:
-  - name: heater_power
-    node_weights: {chuck: 1.0}
-    heat_rate:
-      {type: positive_part, control: heater, gain: 0.2, threshold: 0.0}
+  - name: absorbed_heat
+    node_weights: {core: 1.0}
+    heat_rate: {type: positive_part, control: heater, gain: 1.0, learnable: false}
 boundaries:
-  - name: coolant
-    node_weights: {chuck: 1.0}
-    reservoir_temperature:
-      {control: coolant_temperature, intercept: 0.0, slope: 1.0}
-    conductance:
-      type: power_law
-      control: coolant_flow
-      reference: 1.0
-      offset: 0.01
-      scale: 0.04
-      exponent: 0.8
-      offset_learnable: false
-      scale_learnable: true
-      exponent_learnable: false
+  - name: cooling
+    node_weights: {shell: 1.0}
+    reservoir_temperature: {control: coolant, intercept: 0.0, slope: 1.0}
+    conductance: {type: constant, value: 0.05}
 sensors:
-  - {name: wafer_tc, node: wafer}
+  - {name: tc_core, node: core}
+  - {name: tc_shell, node: shell}
 ```
 
 scalar lawは配置先によってW/KのconductanceまたはWのheat rateになります。固定値は
@@ -242,38 +276,32 @@ quickstartは主経路のanalyze・train・forecastと、任意のmonitorで1つ
 ディレクトリから解決され、実行時のカレントディレクトリには依存しません。相対`output_dir`は
 そのproject内に置き、外部storageへ出す場合だけ絶対パスで明示します。完了した結果は既存結果を
 backupしてから置換され、処理失敗時は直前の結果を保持します。
+入力directory、実際に読み込むCSV、設定ファイル、明示split表、artifactと重なる出力先は拒否します。
+リンクやdirectory外を選ぶpatternでも、実入力の解決済みpathを検査します。CSV読込時のSHA-256を保存し、処理中に入力が
+変更された場合も出力の置換を中止します。
 
 `analyze`は学習前でも実行できます。`analysis`設定を省略した場合は`data.directory`を読み、
-`project.output_dir/project.run_name/analysis`へcase/sensor/control指標、uniformity時系列、
+`project.output_dir/<run_name>_analysis`へcase/sensor/control指標、uniformity時系列、
 case別波形図を保存します。入力先や出力先を分ける場合だけ`analysis.input_dir`と
 `analysis.output_dir`を設定します。
 
-吸収熱量が既知の単独step試験だけ、任意の`thermal_impedance`を追加できます。commandの単位や
-ファイル名から熱量を推測しないため、`heat_step_w`と有限transition区間を明示します。基準区間の
-drift/noise、他入力の不変性、前後各5点以上を満たしたsensorだけ
-`thermal_impedance.csv`へ`Zth(t)=DeltaT/P`を保存します。終端Zthの傾きも明示した上限を満たした場合だけ、
-`thermal_impedance_qualification.csv`の`effective_rth_k_per_w`を有効にします。`make_plots: true`では、
-適格caseをsensor別に重ねた対数時間軸の`figures/thermal_impedance.png`も保存します。
+欠測が多いsensorも`sensor_metrics.csv`へ残し、`n_observed_points`と`response_status`で算出可能性を
+明示します。基本表は開始・終了温度、peakと時刻、最低温度、最大昇温/冷却速度です。
+観測が0点または1点の場合は速度を空欄にし、他sensorの解析を継続します。
+1点だけでも、その観測温度と時刻はpeakとして記録します。
+
+波形解析だけなら、熱回路を作らず列名だけで実行できます。control列は任意です。
 
 ```yaml
 analysis:
-  thermal_impedance:
-    baseline_window_s: 40.0
-    terminal_window_s: 60.0
-    max_baseline_drift_k_per_s: 0.00001
-    max_baseline_std_k: 0.001
-    max_terminal_zth_drift_k_per_w_s: 0.001
-    steps:
-      power_step_8w:
-        control: absorbed_power_command
-        transition_start_s: 60.0
-        transition_end_s: 64.0
-        heat_step_w: 8.0
+  input_dir: measurements
+  output_dir: outputs/analysis
+  sensors: [tc_core, tc_shell]
+  controls: [heater, coolant]
 ```
 
-ここで`heat_step_w`は電源指令ではなく、校正またはCAE条件から既知の対象への吸収熱変化です。終端が
-まだ上昇中なら過渡Zthは残りますが、定常Rthは空欄になります。通常レシピ、複合入力、rampへこの設定を
-付けないでください。
+応答時間・整定・Zth/Rthが必要な場合だけ、専門解析を追加します。通常の解析・学習・予測には不要です。
+区間・吸収熱量・判定閾値の設定例は[専門解析](docs/model_notes.md#専門解析)へ分離しています。
 
 任意のオンライン監視（予測だけなら不要）:
 
@@ -307,18 +335,47 @@ forecast出力は温度平均に加え、履歴末端の状態共分散と設定
 `disturbance_process_std`は保持データの残差に合わせて調整します。`forecast_summary.csv`と
 `forecast_coverage.csv`には、将来command、予測sensor温度、時間刻み、予測時間、control slewが
 artifactの学習範囲内かも保存され、範囲外caseはCLIにも警告されます。
+範囲比較にはfloat64のmachine epsilonと保存境界のscaleだけから求めた丸め許容を使い、
+約10⁻¹² Kの数値誤差による誤警告を避けます。比較許容はcoverage表の`comparison_tolerance`へ保存します。
 
-各予測CSVは`command_*`、`effective_*`、予測温度、sensor平均・span・標準偏差を同じ時刻軸で持ちます。
-case別の`figures/forecast_<case_id>.png`は、このCSVを数値の正本として、予測sensor温度と95%状態区間、
+case CSVは同じ時刻軸で次の列を持ちます。名前に`std_`などを含んでも列が衝突しません。
+
+| 列 | 内容 |
+|---|---|
+| `time` | 時刻[s] |
+| `sensor.<名前>.temperature` / `.std` / `.lower95` / `.upper95` | 予測温度、状態標準偏差、95%状態区間 |
+| `node.<名前>.temperature` / `.std` | 内部node温度と状態標準偏差 |
+| `control.<名前>.command` / `.effective` | 区間指令と実効actuator値 |
+| `mean_temperature` / `sensor_span` / `sensor_std` | sensor平均、最大−最小温度差、sensor間の標準偏差 |
+
+monitorは同じ命名で`.measured`、`.prior_physical`、`.posterior_physical`、`.predicted_measurement`、
+`.reconstructed_measurement`、`.innovation`、`.innovation_std`、`.bias`を保存します。
+`node.<名前>.disturbance_w`は未知発熱[W]です。運用時に最初に読む列は`.measured`と`.posterior_physical`で、
+innovationとNISは状態推定の点検用です。commandも保存するため、外部ツールで入力と温度を同じ表から描画できます。
+
+forecastとmonitorのcase別CSVは、出力先の`cases/<case_id>.csv`へ保存します。summaryの`output`列は
+出力directoryからの相対pathです。従来の出力直下のcase CSVを読むコードはこのpathへ変更してください。
+集計CSVは従来どおり出力直下にあり、`forecast_summary`等のcase名でも衝突しません。
+以前の`temperature_<名前>`等の列を読む後処理は上表の列へ更新し、forecast/monitorを再実行してください。
+旧列を併記せず、単一の出力形式を使います。
+`tau=0`の`control.<名前>.effective`と熱流は、その行から始まる区間のcommandに一致し、最終行は最後のcommandを保持します。
+診断を有効にした場合、`diagnostics/figures/forecast_<case_id>.png`は保存済みCSVから予測sensor温度と95%状態区間、
 時間変化するcommand、sensor spanを3段で示す主要予測図です。将来truthや誤差は通常forecastには
 存在しないため描きません。
 さらに`forecast_case_metrics.csv`、`forecast_sensor_metrics.csv`、
-`forecast_control_metrics.csv`へ、peakと時刻、10–90%応答、整定、昇温・冷却速度、均一性、入力積分と
-slewを自動保存します。`energy_balance.csv`はedgeの向き別熱流、source入熱、boundary入熱または冷却、
-node蓄熱率、収支残差をWで保存します。同じ表からcase別の`figures/energy_balance_<case_id>.png`を
-生成し、source・boundaryの符号付き熱流、外部からの正味入熱と蓄熱率、数値残差を3段で確認できます。
+`forecast_control_metrics.csv`へ、peakと時刻、昇温・冷却速度、均一性、入力積分と
+slewを自動保存します。任意診断の`diagnostics/energy_balance.csv`はedgeの向き別熱流、source入熱、boundary入熱または冷却、
+node蓄熱率、収支残差をWで保存します。列は`source.<名前>.heat_w`、`boundary.<名前>.heat_w`、
+`node.<名前>.storage_w/balance_residual_w`、`total.source_heat_w/boundary_heat_w/storage_w/balance_residual_w`です。
+edgeはartifactの`system.edges`順に`edge.<index>.heat_w`とし、定義した最初のnodeから次のnodeへの向きを正とします。
+名前がtotalでも集計値と衝突しません。同じ表から`diagnostics/figures/energy_balance_<case_id>.png`を
+生成します。case単位で読込・保存・解放し、推論の再実行や全caseの波形保持は行いません。
+source・boundaryの符号付き熱流、外部からの正味入熱と蓄熱率、数値残差を3段で確認できます。
 boundaryの負値はnodeから外へ出る熱です。元CAE/実験データ自体の波形図には独立した
 `celltemp analyze`を使います。
+
+`analysis.output_dir`を省略した解析先は、学習runと兄弟の
+`project.output_dir/<run_name>_analysis/`です。学習の上書きで解析結果を削除しません。
 
 すべての設定は`key=value`で上書きできます。
 
@@ -326,7 +383,8 @@ boundaryの負値はnodeから外へ出る熱です。元CAE/実験データ自�
 uv run --locked --with-editable . celltemp train --config examples/topcell_quickstart/config.yaml training.epochs=100 training.horizon=90
 ```
 
-未知の設定名は`config.yaml`と`system.yaml`の両方でtypoとして拒否されます。
+未知の設定名は使用するsectionと`system.yaml`でtypoとして拒否されます。YAML booleanは`true`/`false`、
+整数項目は整数で指定します。nullの保存先、重複CSVヘッダ、存在しないcontrolの`initial_effective_`列は拒否します。
 
 forecast/monitorが読むartifactは、既定では
 `project.output_dir/project.run_name/artifact`です。学習runと異なるartifactを使う場合だけ、
@@ -373,19 +431,27 @@ artifact/
 metrics_by_case.csv     case-balanced train/val/test評価
 metrics_by_sensor.csv   センサー別評価
 metrics_summary.json    平均・中央値・worst-case
-model_comparison.csv    保持caseのfitted RC・prior RC・persistence因果比較
-figures/
-  test_prediction_timeseries.png  worst test caseの真値・因果予測波形
-  test_prediction_parity.png      全test予測の真値–予測散布図とR²
-thermal_paths.csv       代表学習入力でのnode C、path G/R、source heat
-thermal_modes.csv       代表学習入力でのpole、時定数、支配node
 training_history.csv
 split.csv
-test_predictions/
-config.snapshot.yaml      監査用snapshot。元の基準directoryはartifact metadataに保存
+data_summary.csv
+config.snapshot.yaml      設定記録。相対pathは元config directory基準
+diagnostics/              project.diagnostics: true の場合だけ別途保存
+  model_comparison.csv    保持caseのfitted RC・prior RC・persistence因果比較
+  thermal_paths.csv       代表学習入力でのnode C、path G/R、source heat
+  thermal_modes.csv       代表学習入力でのpole、時定数、支配node
+  test_predictions/
+  figures/
+    test_prediction_timeseries.png  worst test caseの真値・因果予測波形
+    test_prediction_parity.png      全test予測の真値–予測散布図とR²
 ```
 
-`thermal_paths.csv`と`thermal_modes.csv`のoperating pointは、学習commandの成分別中央値に最も近い
+`config.snapshot.yaml`は設定の記録です。再実行には元のconfig、または元のconfig directoryに置いた
+snapshotを使います。snapshotを出力directoryからそのまま実行すると、相対pathの基準が変わります。
+
+`diagnostics/test_predictions/*.csv`は`sensor.<名前>.observed/conditional/causal/error`を持ちます。
+observedが欠測の点ではobservedとerrorを空欄にし、conditional/causalの計算値は保持します。
+
+`diagnostics/thermal_paths.csv`と`diagnostics/thermal_modes.csv`のoperating pointは、学習commandの成分別中央値に最も近い
 実在の学習行です。入力依存係数を、学習範囲と無関係な任意値で評価しないための選び方であり、選択値と
 入力単位はartifact metadataにも保存します。
 
@@ -394,11 +460,11 @@ splitは行ではなくtrajectory単位です。同じcontrol履歴で初期温�
 長大ログで計算量を制限するときだけ`training.horizon`へ区間数を指定し、観測可能な開始点から
 window rolloutを行います。model選択は完全なvalidation軌道を先頭観測だけから予測したcase平均
 `causal_rmse`です。`mean_case_conditional_rmse`も併記し、係数fitと初期化感度を分けて確認できます。
-保持caseがある場合は、同じ先頭観測・時刻境界でfitted RC、未学習engineering prior RC、最後の観測を
-保持するpersistenceを`model_comparison.csv`へ並べます。比較は先頭観測行を誤差から除き、worst sensor、
+診断を有効にして保持caseがある場合は、同じ先頭観測・時刻境界でfitted RC、未学習engineering prior RC、最後の観測を
+保持するpersistenceを`diagnostics/model_comparison.csv`へ並べます。比較は先頭観測行を誤差から除き、worst sensor、
 peak温度、記録内部に真値peakがあるsensorだけのpeak時刻を示します。`test_prediction_timeseries.png`は
 fitted RCのworst test caseを全sensorで真値と比較し、`test_prediction_parity.png`は先頭観測行を除く全test
-予測を真値と比較してpooled R²を示します。R²だけで採否を決めず、過渡波形と`model_comparison.csv`の
+予測を真値と比較してpooled R²を示します。R²だけで採否を決めず、過渡波形と`diagnostics/model_comparison.csv`の
 case別誤差を併読します。
 
 ## Benchmark evidence
@@ -410,7 +476,8 @@ case別誤差を併読します。
 [validation figures](docs/validation_figures/)で波形と真値–予測散布図を確認してください。TopCell固有のケースと合否条件は
 [TopCell benchmark](benchmarks/topcell/README.md)を参照してください。
 
-全benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、独立評価まで実行します。
+TopCell benchmarkは次の1コマンドで、入力再生成、学習、forecast、monitor、保存された予測の独立評価まで実行します。
+COMSOLとニューラル比較の実行方法は、それぞれのREADMEと[benchmark evidence](docs/benchmark_evidence.md)を参照してください。
 
 ```powershell
 uv run --locked python -m benchmarks.topcell.run

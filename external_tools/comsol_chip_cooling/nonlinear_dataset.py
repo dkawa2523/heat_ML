@@ -179,6 +179,9 @@ def _ordered(frame: pd.DataFrame, *, include_truth: bool) -> pd.DataFrame:
             "source_model",
         ]
     )
+    columns.extend(
+        name for name in ("maximum_time_step_s", "solver_settings_verified") if name in frame
+    )
     return frame[columns]
 
 

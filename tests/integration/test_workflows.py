@@ -55,7 +55,7 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert np.isfinite(summary["test"]["mean_case_causal_rmse"])
     split = pd.read_csv(run_dir / "split.csv")
     assert len(split) == 8
-    comparison = pd.read_csv(run_dir / "model_comparison.csv")
+    comparison = pd.read_csv(run_dir / "diagnostics" / "model_comparison.csv")
     held_out = split[split["split"].isin(["val", "test"])]
     assert len(comparison) == len(held_out) * 3
     assert set(comparison["split"]) == {"val", "test"}
@@ -70,15 +70,22 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     fitted = comparison[comparison["model"] == "fitted_rc"]
     for row in fitted.itertuples(index=False):
         assert row.rmse_k == pytest.approx(causal_by_case.loc[(row.split, row.case_id)])
-    assert (run_dir / "figures" / "test_prediction_timeseries.png").stat().st_size > 0
-    assert (run_dir / "figures" / "test_prediction_parity.png").stat().st_size > 0
-    thermal_paths = pd.read_csv(run_dir / "thermal_paths.csv")
+    assert (
+        run_dir / "diagnostics" / "figures" / "test_prediction_timeseries.png"
+    ).stat().st_size > 0
+    assert (run_dir / "diagnostics" / "figures" / "test_prediction_parity.png").stat().st_size > 0
+    thermal_paths = pd.read_csv(run_dir / "diagnostics" / "thermal_paths.csv")
     assert {"node", "internal_edge", "source", "boundary"} <= set(thermal_paths["element_type"])
-    thermal_modes = pd.read_csv(run_dir / "thermal_modes.csv")
+    thermal_modes = pd.read_csv(run_dir / "diagnostics" / "thermal_modes.csv")
     assert len(thermal_modes) == len(SENSORS)
     assert (thermal_modes["pole_real_per_s"] <= 0.0).all()
     metadata = json.loads((run_dir / "artifact" / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["training"]["model_selection_metric"] == "causal_rmse"
+    assert len(metadata["training_inputs"]) == len(split)
+    assert all(len(item["sha256"]) == 64 for item in metadata["training_inputs"])
+    assert {(item["case_id"], item["split"]) for item in metadata["training_inputs"]} == set(
+        zip(split["case_id"], split["split"], strict=True)
+    )
     assert "train_temporal_ranges" in metadata
     assert metadata["model_characterization"]["operating_point"] == (
         "representative_training_command"
@@ -93,22 +100,22 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     forecast_dir = cae_project / "outputs" / "forecast"
     monitor_dir = cae_project / "outputs" / "monitor"
 
-    forecast = pd.read_csv(forecast_dir / "const_case.csv")
+    forecast = pd.read_csv(forecast_dir / "cases" / "const_case.csv")
     assert len(forecast) == 11
-    assert np.isfinite(forecast[[f"temperature_{name}" for name in SENSORS]]).all().all()
-    assert np.isfinite(forecast[[f"temperature_std_{name}" for name in SENSORS]]).all().all()
-    assert (forecast[[f"temperature_std_{name}" for name in SENSORS]] >= 0.0).all().all()
-    assert {"command_heater", "mean_temperature", "sensor_span"} <= set(forecast)
+    assert np.isfinite(forecast[[f"sensor.{name}.temperature" for name in SENSORS]]).all().all()
+    assert np.isfinite(forecast[[f"sensor.{name}.std" for name in SENSORS]]).all().all()
+    assert (forecast[[f"sensor.{name}.std" for name in SENSORS]] >= 0.0).all().all()
+    assert {"control.heater.command", "mean_temperature", "sensor_span"} <= set(forecast)
     assert len(pd.read_csv(forecast_dir / "forecast_case_metrics.csv")) == 1
     assert len(pd.read_csv(forecast_dir / "forecast_sensor_metrics.csv")) == len(SENSORS)
     control_metrics = pd.read_csv(forecast_dir / "forecast_control_metrics.csv")
     assert set(control_metrics["control"]) == set(CONTROLS)
-    energy = pd.read_csv(forecast_dir / "energy_balance.csv")
-    assert {"source_total_w", "boundary_total_w", "storage_total_w"} <= set(energy)
-    assert energy["balance_residual_total_w"].abs().max() < 1e-10
-    energy_figure = forecast_dir / "figures" / "energy_balance_const_case.png"
+    energy = pd.read_csv(forecast_dir / "diagnostics" / "energy_balance.csv")
+    assert {"total.source_heat_w", "total.boundary_heat_w", "total.storage_w"} <= set(energy)
+    assert energy["total.balance_residual_w"].abs().max() < 1e-10
+    energy_figure = forecast_dir / "diagnostics" / "figures" / "energy_balance_const_case.png"
     assert energy_figure.stat().st_size > 0
-    forecast_figure = forecast_dir / "figures" / "forecast_const_case.png"
+    forecast_figure = forecast_dir / "diagnostics" / "figures" / "forecast_const_case.png"
     assert forecast_figure.stat().st_size > 0
     forecast_manifest = json.loads((forecast_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert forecast_manifest["settings"]["observer"]["initial_temperature_std"] == 100.0
@@ -116,10 +123,16 @@ def test_end_to_end_workflow(cae_project: Path, monkeypatch: pytest.MonkeyPatch)
     assert forecast_manifest["input"]["files"][0]["sha256"]
     coverage = pd.read_csv(forecast_dir / "forecast_coverage.csv")
     assert coverage["within_training_range"].all()
-    monitored = pd.read_csv(monitor_dir / "monitor_case.csv")
-    assert np.isfinite(monitored[[f"posterior_physical_{name}" for name in SENSORS]]).all().all()
+    assert np.isfinite(coverage["comparison_tolerance"]).all()
+    assert (coverage["comparison_tolerance"] > 0.0).all()
+    monitored = pd.read_csv(monitor_dir / "cases" / "monitor_case.csv")
+    assert (
+        np.isfinite(monitored[[f"sensor.{name}.posterior_physical" for name in SENSORS]])
+        .all()
+        .all()
+    )
     assert set(monitored["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
-    assert np.equal(monitored[f"sensor_bias_{SENSORS[-1]}"], 0.0).all()
+    assert np.equal(monitored[f"sensor.{SENSORS[-1]}.bias"], 0.0).all()
     summary = pd.read_csv(monitor_dir / "monitor_summary.csv")
     assert set(summary["bias_gauge"]) == {f"reference:{SENSORS[-1]}"}
     assert np.isfinite(summary["innovation_rmse"]).all()
@@ -182,12 +195,12 @@ def test_forecast_uses_history_without_accepting_measurements_after_the_boundary
     )
 
     _run_cli(monkeypatch, "forecast", "--config", str(config_path))
-    output_path = tmp_path / "outputs" / "forecast" / "hidden_case.csv"
+    output_path = tmp_path / "outputs" / "forecast" / "cases" / "hidden_case.csv"
     output = pd.read_csv(output_path)
-    assert "temperature_surface_tc" in output
-    assert "state_core" in output
-    assert "state_shell" in output
-    assert np.isfinite(output[["state_core", "state_shell"]]).all().all()
+    assert "sensor.surface_tc.temperature" in output
+    assert "node.core.temperature" in output
+    assert "node.shell.temperature" in output
+    assert np.isfinite(output[["node.core.temperature", "node.shell.temperature"]]).all().all()
 
     request.loc[1, "surface_tc"] = 26.0
     request.to_csv(request_path, index=False)

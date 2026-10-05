@@ -20,9 +20,11 @@ from .operators import system_matrix as _system_matrix
 from .rollout import actuator_step as _actuator_step
 from .rollout import forward_batch as _forward_batch
 from .rollout import forward_trajectory as _forward_trajectory
+from .rollout import point_actuator as _point_actuator
 from .rollout import step as _step
 from .rollout import temperature_transition_matrix as _temperature_transition_matrix
 from .state import ThermalState
+from .validation import require_finite
 
 
 def _tensor(values: Any, *, dtype: torch.dtype) -> torch.Tensor:
@@ -145,7 +147,7 @@ class ThermalRCModel(nn.Module):
 
     def _positive(self, prior: torch.Tensor, raw: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         learnable = mask.to(dtype=torch.bool)
-        if not torch.any(learnable):
+        if not any(actuator.learnable for actuator in self.spec.actuators):
             return prior
         value = prior.clone()
         value[learnable] = prior[learnable] * torch.exp(raw[learnable])
@@ -197,13 +199,32 @@ class ThermalRCModel(nn.Module):
         """Evaluate the exact first-order actuator response over one interval."""
         return _actuator_step(self, actuator, command, dt)
 
+    def point_actuator(self, actuator: torch.Tensor, command: torch.Tensor) -> torch.Tensor:
+        """Apply zero-tau commands at a timestamp without advancing lagged inputs.
+
+        Point outputs use the command starting at that timestamp. At the final
+        point, where no new interval exists, callers hold the last command.
+        """
+        return _point_actuator(self, actuator, command)
+
     def system_matrix(self, actuator: torch.Tensor | None = None) -> torch.Tensor:
         """Return ``A`` in ``dT/dt = A T + b`` for effective controls."""
-        return _system_matrix(self, actuator)
+        if actuator is not None:
+            if actuator.shape[-1] != self.n_controls:
+                raise ValueError("actuator has the wrong number of controls")
+            require_finite(actuator, "actuator")
+        elif self.edge_laws._has_dependent or self.boundary_laws._has_dependent:
+            raise ValueError("actuator is required for an input-dependent scalar law")
+        matrix = _system_matrix(self, actuator)
+        require_finite(matrix, "system_matrix", computed=True)
+        return matrix
 
     def forcing(self, actuator: torch.Tensor) -> torch.Tensor:
         """Return the actuator-dependent ``b`` in ``dT/dt = A T + b``."""
-        return _forcing(self, actuator)
+        require_finite(actuator, "actuator")
+        value = _forcing(self, actuator)
+        require_finite(value, "forcing", computed=True)
+        return value
 
     def heat_flow_breakdown(
         self,
@@ -260,32 +281,42 @@ class ThermalRCModel(nn.Module):
     ) -> torch.Tensor:
         """Infer node temperatures from any observed sensor subset.
 
-        The small ridge term supplies the mean observed temperature to unobserved
-        nodes while leaving directly observed nodes effectively unchanged.
+        A centered, augmented QR solve supplies the mean observed temperature to
+        unobserved nodes. It avoids squaring the condition number, and retains the
+        small ridge even in float32 when sensors observe weighted averages.
         """
+        observation = observation.to(dtype=self.capacity.dtype, device=self.capacity.device)
         if observation.shape != (self.n_sensors,):
             raise ValueError("observation must have one value per sensor")
         if mask is None:
             mask = torch.isfinite(observation)
         mask = mask.to(dtype=torch.bool, device=observation.device)
+        if mask.shape != observation.shape:
+            raise ValueError("observation mask must have one value per sensor")
         if not torch.any(mask):
             raise ValueError("at least one sensor is required to initialize temperature")
         observed = observation[mask]
-        matrix = self.observation[mask]
-        prior = torch.full(
-            (self.n_nodes,),
-            float(observed.mean()),
-            dtype=observation.dtype,
-            device=observation.device,
-        )
-        ridge = torch.as_tensor(1e-8, dtype=observation.dtype, device=observation.device)
-        lhs = matrix.T @ matrix + ridge * torch.eye(
+        require_finite(observed, "observed temperatures")
+        # The solve is tiny, and extra working precision keeps noisy duplicate
+        # sensors from injecting rounding error into the weakly constrained modes.
+        solve_dtype = torch.float64 if observed.dtype == torch.float32 else observed.dtype
+        observed = observed.to(dtype=solve_dtype)
+        matrix = self.observation[mask].to(dtype=solve_dtype)
+        prior = observed.mean().expand(self.n_nodes)
+        regularizer = 1e-4 * torch.eye(
             self.n_nodes,
-            dtype=observation.dtype,
+            dtype=solve_dtype,
             device=observation.device,
         )
-        rhs = matrix.T @ observed + ridge * prior
-        return torch.linalg.solve(lhs, rhs)
+        augmented = torch.cat([matrix, regularizer], dim=0)
+        residual = torch.cat([observed - matrix @ prior, torch.zeros_like(prior)])
+        orthogonal, triangular = torch.linalg.qr(augmented, mode="reduced")
+        correction = torch.linalg.solve_triangular(
+            triangular, (orthogonal.T @ residual).unsqueeze(-1), upper=True
+        ).squeeze(-1)
+        temperature = (prior + correction).to(dtype=self.capacity.dtype)
+        require_finite(temperature, "initial temperature", computed=True)
+        return temperature
 
     def stored_energy(self, temperature: torch.Tensor) -> torch.Tensor:
         """Return capacity-weighted energy relative to the temperature origin."""

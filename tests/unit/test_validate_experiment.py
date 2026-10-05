@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from external_tools.comsol_chip_cooling import validate_experiment
+from external_tools.comsol_chip_cooling.run_high_fidelity import DEFAULT_ROOT
 
 
 def _comparison_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -97,6 +98,27 @@ def test_empty_experiment_template_is_not_measurement_data() -> None:
 
     with pytest.raises(ValueError, match="non-finite experiment values"):
         validate_experiment._read(template, kind="experiment")
+
+
+def test_published_dynamic_reference_uses_the_shared_provenance_contract(tmp_path: Path) -> None:
+    relative_paths = (
+        "mesh_convergence.csv",
+        "mesh_convergence_deltas.csv",
+        "mesh_acceptance.csv",
+        "time_step_convergence.csv",
+        "dynamic/cae_reference.csv",
+        "dynamic/eval/model_gap/HV02_composite_radiation.csv",
+    )
+    for relative in relative_paths:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((DEFAULT_ROOT / relative).read_bytes())
+    path = tmp_path / "dynamic/cae_reference.csv"
+    assert validate_experiment._read(path, kind="cae")["benchmark_qualified"].all()
+    source_path = tmp_path / "dynamic/eval/model_gap/HV02_composite_radiation.csv"
+    pd.read_csv(source_path).assign(mesh_profile="local-coarse").to_csv(source_path, index=False)
+    with pytest.raises(ValueError, match="source/evidence"):
+        validate_experiment._read(path, kind="cae")
 
 
 def test_run_validation_preserves_the_complete_result_on_write_failure(

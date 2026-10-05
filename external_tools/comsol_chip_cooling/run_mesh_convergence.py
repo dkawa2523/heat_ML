@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import re
-from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +13,11 @@ from .comsol_runtime import ComsolRuntime, select_comsol
 from .dataset_support import write_csv_atomic
 from .nonlinear_cases import NonlinearCase, mesh_convergence_cases
 from .nonlinear_dataset import truth_frame
+from .qualification import (
+    DEFAULT_PROFILES,
+    PROFILE_RANK,
+    compare_meshes,
+)
 from .run_nonlinear import (
     JAVA_SOURCE,
     MESH_PROFILES,
@@ -25,24 +29,6 @@ from .run_nonlinear import (
 
 TOOL_ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA_ROOT = TOOL_ROOT / "data" / "nonlinear_high_fidelity"
-DEFAULT_PROFILES = ("global-8", "local-coarse", "local-medium", "local-fine")
-PROFILE_RANK = {profile: index for index, profile in enumerate(DEFAULT_PROFILES)}
-QOI_TOLERANCES = {
-    "chip_average_c": 0.25,
-    "chip_max_c": 0.50,
-    "sink_base_average_c": 0.25,
-    "fins_average_c": 0.25,
-    "fins_max_c": 0.50,
-    "outlet_air_average_c": 0.20,
-}
-BENCHMARK_QOI_TOLERANCES = {
-    "chip_average_c": 0.50,
-    "chip_max_c": 0.75,
-    "sink_base_average_c": 0.50,
-    "fins_average_c": 0.50,
-    "fins_max_c": 0.75,
-    "outlet_air_average_c": 0.20,
-}
 
 
 def _solver_seconds(case: NonlinearCase, profile: str) -> float:
@@ -69,56 +55,6 @@ def _qoi_row(truth: pd.DataFrame, case: NonlinearCase, profile: str) -> dict[str
         "energy_residual_w": final["truth_energy_residual"],
         "solver_seconds": _solver_seconds(case, profile),
     }
-
-
-def _relative_delta(current: float, finer: float) -> float:
-    scale = max(abs(finer), 1e-12)
-    return abs(current - finer) / scale
-
-
-def _comparison_rows(qoi: pd.DataFrame) -> pd.DataFrame:
-    rows: list[dict[str, object]] = []
-    for case_id, group in qoi.groupby("case_id", sort=False):
-        ordered = group.assign(_rank=group["mesh_profile"].map(PROFILE_RANK)).sort_values("_rank")
-        records = ordered.to_dict("records")
-        for current, finer in pairwise(records):
-            row: dict[str, object] = {
-                "case_id": case_id,
-                "mesh_profile": current["mesh_profile"],
-                "finer_mesh_profile": finer["mesh_profile"],
-            }
-            accepted = True
-            benchmark_accepted = True
-            for qoi_name, tolerance in QOI_TOLERANCES.items():
-                delta = abs(float(current[qoi_name]) - float(finer[qoi_name]))
-                row[f"{qoi_name}_absolute_delta"] = delta
-                row[f"{qoi_name}_tolerance"] = tolerance
-                row[f"{qoi_name}_benchmark_tolerance"] = BENCHMARK_QOI_TOLERANCES[qoi_name]
-                accepted &= delta <= tolerance
-                benchmark_accepted &= delta <= BENCHMARK_QOI_TOLERANCES[qoi_name]
-            pressure_relative = _relative_delta(
-                float(current["pressure_drop_pa"]), float(finer["pressure_drop_pa"])
-            )
-            row["pressure_drop_relative_delta"] = pressure_relative
-            row["pressure_drop_relative_tolerance"] = 0.02
-            accepted &= pressure_relative <= 0.02
-            benchmark_accepted &= pressure_relative <= 0.02
-            if abs(float(finer["radiative_heat_rate_w"])) > 1e-8:
-                radiation_relative = _relative_delta(
-                    float(current["radiative_heat_rate_w"]),
-                    float(finer["radiative_heat_rate_w"]),
-                )
-                row["radiative_heat_rate_relative_delta"] = radiation_relative
-                row["radiative_heat_rate_relative_tolerance"] = 0.02
-                accepted &= radiation_relative <= 0.02
-                benchmark_accepted &= radiation_relative <= 0.02
-            else:
-                row["radiative_heat_rate_relative_delta"] = np.nan
-                row["radiative_heat_rate_relative_tolerance"] = np.nan
-            row["passes_qoi_tolerances"] = accepted
-            row["passes_benchmark_tolerances"] = benchmark_accepted
-            rows.append(row)
-    return pd.DataFrame(rows)
 
 
 def _acceptance(comparisons: pd.DataFrame, profiles: list[str]) -> pd.DataFrame:
@@ -283,7 +219,7 @@ def _publish_evidence(
     profiles: list[str],
     data_root: Path,
 ) -> None:
-    comparisons = _comparison_rows(qoi)
+    comparisons = compare_meshes(qoi)
     acceptance = _acceptance(comparisons, profiles)
     reference = _cae_reference(qoi, comparisons, cases)
 

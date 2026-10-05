@@ -39,7 +39,10 @@ def _request_from_frame(case_id: str, frame: pd.DataFrame):
 
 
 def _model_forecast(model: ThermalRCModel, case_id: str, frame: pd.DataFrame) -> np.ndarray:
-    return forecast(model, _request_from_frame(case_id, frame)).sensor_temperature
+    predicted = forecast(model, _request_from_frame(case_id, frame)).sensor_temperature
+    if not np.isfinite(predicted).all():
+        raise ValueError(f"{case_id}: forecast contains a non-finite temperature")
+    return predicted
 
 
 def _sensor_rows(
@@ -136,9 +139,9 @@ def evaluate_forecasts(
     for source_path in sorted(source_dir.glob("*.csv")):
         case_id = source_path.stem
         source = pd.read_csv(source_path)
-        result = pd.read_csv(result_dir / source_path.name)
+        result = pd.read_csv(result_dir / "cases" / source_path.name)
         assert_aligned(source, result, case_id)
-        written = result[[f"temperature_{sensor}" for sensor in SENSORS]].to_numpy()
+        written = result[[f"sensor.{sensor}.temperature" for sensor in SENSORS]].to_numpy()
         predicted = _model_forecast(artifact.model, case_id, source)
         if not np.allclose(written, predicted, rtol=1e-10, atol=1e-10):
             raise ValueError(f"{case_id}: saved forecast differs from the saved artifact")

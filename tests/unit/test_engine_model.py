@@ -446,3 +446,29 @@ def test_trajectory_loss_can_differentiate_through_the_integrator() -> None:
     edge_gradient = model.edge_laws.log_offset_multiplier.grad
     assert edge_gradient is not None
     assert torch.isfinite(edge_gradient).all()
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_weighted_initial_temperature_handles_hidden_modes_and_duplicate_sensors(
+    dtype: torch.dtype,
+) -> None:
+    model = ThermalRCModel(
+        ThermalSystemSpec(
+            node_names=("a", "b"),
+            heat_capacity=(1.0, 1.0),
+            edges=(),
+            actuators=(),
+            sensor_names=("left", "right"),
+            sensor_weights=((0.5, 0.5), (0.5, 0.5)),
+        ),
+        dtype=dtype,
+    )
+    observation = torch.tensor([30.0, 40.0], dtype=dtype, requires_grad=True)
+    temperature = model.initialize_temperature(observation)
+    torch.testing.assert_close(temperature, torch.tensor([35.0, 35.0], dtype=dtype))
+    temperature.sum().backward()
+    torch.testing.assert_close(observation.grad, torch.ones_like(observation))
+    partial = model.initialize_temperature(
+        torch.tensor([float("nan"), 40.0], dtype=dtype), torch.tensor([False, True])
+    )
+    torch.testing.assert_close(partial, torch.tensor([40.0, 40.0], dtype=dtype))

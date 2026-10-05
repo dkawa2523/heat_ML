@@ -5,30 +5,16 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
 from .comsol_runtime import ComsolRuntime, select_comsol
 from .dataset_support import write_csv_atomic
 from .nonlinear_cases import high_fidelity_cases
+from .qualification_support import require_mesh_qualified
 from .run_nonlinear import JAVA_SOURCE, build_dataset, raw_tables_available
 from .summarize_high_fidelity import summarize
 
 TOOL_ROOT = Path(__file__).resolve().parent
 DEFAULT_ROOT = TOOL_ROOT / "data" / "nonlinear_high_fidelity"
 LOCAL_PROFILES = ("local-coarse", "local-medium", "local-fine")
-
-
-def _require_qualified(profile: str, evidence_root: Path) -> None:
-    path = evidence_root / "mesh_acceptance.csv"
-    if not path.is_file():
-        raise ValueError(f"missing mesh qualification evidence: {path}")
-    evidence = pd.read_csv(path)
-    selected = evidence[evidence["mesh_profile"] == profile]
-    if len(selected) != 1 or not bool(selected["all_cases_pass_benchmark"].iloc[0]):
-        raise ValueError(
-            f"mesh profile {profile} is not benchmark-qualified against its next refinement "
-            f"in {path}"
-        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,6 +24,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reuse-raw", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--allow-unqualified", action="store_true")
+    parser.add_argument(
+        "--maximum-time-step", type=float, help="Maximum internal BDF step in seconds"
+    )
     parser.add_argument("--data-root", type=Path, default=DEFAULT_ROOT / "dynamic")
     parser.add_argument("--evidence-root", type=Path, default=DEFAULT_ROOT)
     return parser.parse_args()
@@ -47,7 +36,7 @@ def main() -> int:
     args = parse_args()
     evidence_root = args.evidence_root.resolve()
     if not args.allow_unqualified:
-        _require_qualified(args.mesh_profile, evidence_root)
+        require_mesh_qualified(args.mesh_profile, evidence_root)
     cases = high_fidelity_cases()
     reusable = args.reuse_raw and raw_tables_available(cases, args.mesh_profile)
     runtime: ComsolRuntime | None = None
@@ -64,6 +53,7 @@ def main() -> int:
         mesh_profile=args.mesh_profile,
         reuse_raw=args.reuse_raw,
         overwrite=args.overwrite,
+        maximum_time_step_s=args.maximum_time_step,
     )
     summary_path = args.data_root.resolve() / "qa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)

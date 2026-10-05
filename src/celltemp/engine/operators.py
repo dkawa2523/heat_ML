@@ -81,7 +81,7 @@ def system_matrix(
     """Return ``A`` in ``dT/dt = A T + b`` for effective controls."""
     laplacian = torch.einsum(
         "...e,eij->...ij",
-        model.conductance(actuator),
+        model.edge_laws._evaluate(actuator),
         model.edge_basis,
     )
     boundary_total = torch.zeros(
@@ -90,7 +90,7 @@ def system_matrix(
         device=model.capacity.device,
     )
     if model.spec.boundaries:
-        boundary_h = model.boundary_conductance(actuator)[..., :, None] * model.boundary_weights
+        boundary_h = model.boundary_laws._evaluate(actuator)[..., :, None] * model.boundary_weights
         boundary_total = boundary_h.sum(dim=-2)
     return -(laplacian + torch.diag_embed(boundary_total)) / model.capacity[..., None]
 
@@ -105,9 +105,9 @@ def forcing(model: ThermalRCModel, actuator: torch.Tensor) -> torch.Tensor:
         device=actuator.device,
     )
     if model.spec.sources:
-        heat = heat + model.source_heat_rate(actuator) @ model.source_weights
+        heat = heat + model.source_laws._evaluate(actuator) @ model.source_weights
     if model.spec.boundaries:
-        boundary_h = model.boundary_conductance(actuator)[..., :, None] * model.boundary_weights
+        boundary_h = model.boundary_laws._evaluate(actuator)[..., :, None] * model.boundary_weights
         reservoir_temperature = boundary_temperature(model, actuator)
         heat = heat + (reservoir_temperature[..., :, None] * boundary_h).sum(dim=-2)
     return heat / model.capacity
@@ -117,6 +117,7 @@ def joint_affine_system(
     model: ThermalRCModel,
     command: torch.Tensor,
     active_sources: torch.Tensor,
+    tau: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Build ``dx/dt = F x + c`` for ``x = [temperature, actuator]``."""
     batch_shape = command.shape[:-1]
@@ -167,13 +168,13 @@ def joint_affine_system(
         direct = ~positive
         if torch.any(direct):
             direct_heat = (
-                model.source_heat_rate(command)[..., direct] @ model.source_weights[direct]
+                model.source_laws._evaluate(command)[..., direct] @ model.source_weights[direct]
             )
             thermal_offset = thermal_offset + direct_heat / model.capacity
 
     if model.spec.boundaries:
         boundary_rate = (
-            model.boundary_conductance(command)[..., :, None]
+            model.boundary_laws._evaluate(command)[..., :, None]
             * model.boundary_weights
             / model.capacity[None, :]
         )
@@ -197,7 +198,8 @@ def joint_affine_system(
     matrix[..., : model.n_nodes, model.n_nodes :] = actuator_coefficient
     affine[..., : model.n_nodes] = thermal_offset
 
-    tau = model.actuator_tau().to(dtype=command.dtype, device=command.device)
+    if tau is None:
+        tau = model.actuator_tau().to(dtype=command.dtype, device=command.device)
     inverse_tau = torch.where(tau > 0.0, torch.reciprocal(tau), torch.zeros_like(tau))
     matrix[..., model.n_nodes :, model.n_nodes :] = torch.diag(-inverse_tau)
     affine[..., model.n_nodes :] = command * inverse_tau
@@ -218,7 +220,7 @@ def source_activity(model: ThermalRCModel, actuator: torch.Tensor) -> torch.Tens
         device=actuator.device,
     )
     positive = model.source_laws.positive_part_mask
-    if torch.any(positive):
+    if model.source_laws._has_positive:
         activity[..., positive] = (
             actuator[..., model.source_laws.control_index[positive]]
             > model.source_laws.threshold[positive]
@@ -231,7 +233,7 @@ def operator_context(model: ThermalRCModel, actuator: torch.Tensor) -> tuple[flo
     controls = [
         laws.control_index[laws.dependent_mask]
         for laws in (model.edge_laws, model.boundary_laws)
-        if torch.any(laws.dependent_mask)
+        if laws._has_dependent
     ]
     if not controls:
         return ()

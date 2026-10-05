@@ -12,7 +12,7 @@ from .topology import (
     SourceSpec,
     ThermalSystemSpec,
 )
-from .trajectory import Trajectory
+from .trajectory import Trajectory, forecast_origin_index
 
 __all__ = [
     "ActuatorSpec",
@@ -26,4 +26,5 @@ __all__ = [
     "SourceSpec",
     "ThermalSystemSpec",
     "Trajectory",
+    "forecast_origin_index",
 ]

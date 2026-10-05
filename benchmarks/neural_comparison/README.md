@@ -23,12 +23,15 @@ product APIへmodel選択optionを増やさず、採用判断に必要な証拠�
 `T[k+1] = T[k] + dT/dt * dt[k]`で積分します。学習lossはcase-balanced one-step Huber、
 best epochは将来温度を入力しない完全なcausal open-loop validation RMSEで選びます。
 
-`TPU`というmodel classは現行sourceにもGit履歴にもありません。履歴にあった名称は`TCN`であり、
-この比較ではTCNを評価しています。TPU hardwareを使った学習も行っておらず、deviceはCPUです。
+この比較の実行deviceはCPUです。
 
 ## 実行
 
 既存のCOMSOL CSVと現行RC artifactを再利用するため、新しいCOMSOL solveは行いません。
+比較前に、RCの入力CSV SHA256、case split、seed、system、指令規約、integratorを現在の設定と照合します。
+入力hashがない旧artifactや変更前のartifactは拒否します。その場合はTopCell、線形COMSOL、非線形COMSOLの
+各configで`celltemp train`を実行し、同じ入力と分割でRC artifactを更新してから比較してください。
+非線形COMSOLには`high_fidelity_benchmark.yaml`を使います。
 
 ```powershell
 uv run --locked --with-editable . python -m benchmarks.neural_comparison.run `
@@ -38,6 +41,8 @@ uv run --locked --with-editable . python -m benchmarks.neural_comparison.run `
 
 乱数seedは42、hidden widthは32、dropoutは0.05、最大300 epochです。TopCell、線形COMSOL、
 非線形COMSOLで学習し、非線形COMSOLで学習したmodelはhigh-fidelity COMSOLへ再学習なしで適用します。
+予測NaN/infは失敗として停止し、有限truthのすべての評価点を採点します。truthのNaNだけを欠測として許可し、
+case別評価点数と保存波形の点数が一致することも確認します。
 
 ## 内部予測と外部予測の境界
 

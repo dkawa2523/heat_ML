@@ -7,8 +7,15 @@ from typing import TYPE_CHECKING, TypeAlias
 import torch
 
 from .integrator import exact_affine_operators, exact_affine_step, implicit_euler_step
-from .operators import joint_affine_system, operator_context, source_activity
+from .operators import (
+    forcing,
+    joint_affine_system,
+    operator_context,
+    source_activity,
+    system_matrix,
+)
 from .state import ThermalState
+from .validation import require_finite, require_time_step
 
 if TYPE_CHECKING:
     from .rc import ThermalRCModel
@@ -26,15 +33,31 @@ def actuator_step(
     """Evaluate the exact first-order actuator response over one interval."""
     if actuator.shape != command.shape or actuator.shape[-1] != model.n_controls:
         raise ValueError("actuator and command must have equal [..., n_controls] shape")
+    require_finite(actuator, "actuator")
+    require_finite(command, "command")
     step = torch.as_tensor(dt, dtype=actuator.dtype, device=actuator.device)
+    require_time_step(step)
+    tau = model.actuator_tau().to(device=actuator.device, dtype=actuator.dtype)
+    require_finite(tau, "actuator tau", computed=True)
+    return _actuator_response(actuator, command, step, tau)
+
+
+def _actuator_response(
+    actuator: torch.Tensor,
+    command: torch.Tensor,
+    step: torch.Tensor,
+    tau: torch.Tensor,
+) -> torch.Tensor:
+    """Integrate validated interval inputs with the rollout's shared tau values."""
     while step.ndim < actuator.ndim:
         step = step.unsqueeze(-1)
-    tau = model.actuator_tau().to(device=actuator.device, dtype=actuator.dtype)
     lagged = tau > 0.0
     safe_tau = torch.where(lagged, tau, torch.ones_like(tau))
     decay = torch.exp(-step / safe_tau)
     response = command + (actuator - command) * decay
-    return torch.where(lagged, response, command)
+    result = torch.where(lagged, response, command)
+    require_finite(result, "actuator response", computed=True)
+    return result
 
 
 def threshold_crossing_times(
@@ -42,17 +65,20 @@ def threshold_crossing_times(
     actuator: torch.Tensor,
     command: torch.Tensor,
     dt: torch.Tensor,
+    tau: torch.Tensor,
 ) -> list[torch.Tensor]:
     """Return exact threshold crossing times for monotone first-order actuators."""
-    if not model.spec.sources:
+    positive = model.source_laws._positive_indices
+    controls = model.source_laws._control_indices
+    lagged_sources = [
+        index for index in positive if model.spec.actuators[controls[index]].tau > 0.0
+    ]
+    if not lagged_sources:
         return []
-    tau = model.actuator_tau().to(dtype=actuator.dtype, device=actuator.device)
     step_value = float(dt.detach().cpu().item())
     crossings: list[torch.Tensor] = []
-    for source_index in range(len(model.spec.sources)):
-        if not bool(model.source_laws.positive_part_mask[source_index].item()):
-            continue
-        control_index = int(model.source_laws.control_index[source_index].item())
+    for source_index in lagged_sources:
+        control_index = controls[source_index]
         if float(tau[control_index].detach().cpu().item()) <= 0.0:
             continue
         threshold = model.source_laws.threshold[source_index]
@@ -70,12 +96,18 @@ def threshold_crossing_times(
     return sorted(crossings, key=lambda value: float(value.detach().cpu().item()))
 
 
-def _interval_start_actuator(
+def point_actuator(
     model: ThermalRCModel,
     actuator: torch.Tensor,
     command: torch.Tensor,
 ) -> torch.Tensor:
+    """Apply instantaneous controls at a point; retain continuous lagged states."""
+    if actuator.shape != command.shape or actuator.shape[-1] != model.n_controls:
+        raise ValueError("actuator and command must have equal [..., n_controls] shape")
+    require_finite(actuator, "actuator")
+    require_finite(command, "command")
     tau = model.actuator_tau().to(dtype=actuator.dtype, device=actuator.device)
+    require_finite(tau, "actuator tau", computed=True)
     return torch.where(tau > 0.0, actuator, command)
 
 
@@ -85,10 +117,11 @@ def _exact_joint_segment(
     actuator: torch.Tensor,
     command: torch.Tensor,
     dt: torch.Tensor,
+    tau: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    midpoint = actuator_step(model, actuator, command, dt * 0.5)
+    midpoint = _actuator_response(actuator, command, dt * 0.5, tau)
     active_sources = source_activity(model, midpoint)
-    matrix, affine = joint_affine_system(model, command, active_sources)
+    matrix, affine = joint_affine_system(model, command, active_sources, tau)
     joint = torch.cat([temperature, actuator], dim=-1)
     result = exact_affine_step(joint, matrix, affine, dt)
     return result[..., : model.n_nodes], result[..., model.n_nodes :]
@@ -100,10 +133,11 @@ def exact_joint_step(
     actuator: torch.Tensor,
     command: torch.Tensor,
     dt: torch.Tensor,
+    tau: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Advance one exact interval, splitting at positive-part source thresholds."""
-    actuator = _interval_start_actuator(model, actuator, command)
-    crossings = threshold_crossing_times(model, actuator, command, dt)
+    actuator = torch.where(tau > 0.0, actuator, command)
+    crossings = threshold_crossing_times(model, actuator, command, dt, tau)
     start = torch.zeros((), dtype=dt.dtype, device=dt.device)
     for end in [*crossings, dt]:
         temperature, actuator = _exact_joint_segment(
@@ -112,6 +146,7 @@ def exact_joint_step(
             actuator,
             command,
             end - start,
+            tau,
         )
         start = end
     return temperature, actuator
@@ -124,9 +159,10 @@ def exact_joint_batch_step(
     command: torch.Tensor,
     dt: torch.Tensor,
     cache: OperatorCache,
+    tau: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Advance a batch and reuse exact operators for matching interval contexts."""
-    actuator = _interval_start_actuator(model, actuator, command)
+    actuator = torch.where(tau > 0.0, actuator, command)
     outputs: dict[int, torch.Tensor] = {}
     groups: dict[OperatorKey, list[int]] = {}
 
@@ -136,6 +172,7 @@ def exact_joint_batch_step(
             actuator[batch_index],
             command[batch_index],
             dt[batch_index],
+            tau,
         )
         if crossings:
             next_temperature, next_actuator = exact_joint_step(
@@ -144,14 +181,15 @@ def exact_joint_batch_step(
                 actuator[batch_index],
                 command[batch_index],
                 dt[batch_index],
+                tau,
             )
             outputs[batch_index] = torch.cat([next_temperature, next_actuator])
             continue
-        midpoint = actuator_step(
-            model,
+        midpoint = _actuator_response(
             actuator[batch_index],
             command[batch_index],
             dt[batch_index] * 0.5,
+            tau,
         )
         activity = source_activity(model, midpoint)
         pattern = tuple(bool(value) for value in activity.detach().cpu().tolist())
@@ -165,19 +203,16 @@ def exact_joint_batch_step(
     for key, indices in groups.items():
         group_command = command[indices]
         group_actuator = actuator[indices]
-        midpoint = actuator_step(
-            model,
-            group_actuator,
-            group_command,
-            dt[indices] * 0.5,
+        activity = torch.tensor(key[1], dtype=torch.bool, device=command.device).expand(
+            len(indices), -1
         )
-        activity = source_activity(model, midpoint)
-        matrix, affine = joint_affine_system(model, group_command, activity)
+        matrix, affine = joint_affine_system(model, group_command, activity, tau)
         if key not in cache:
             cache[key] = exact_affine_operators(matrix[0], dt[indices[0]])
         phi, gamma = cache[key]
         joint = torch.cat([temperature[indices], group_actuator], dim=-1)
         result = joint @ phi.T + affine @ gamma.T
+        require_finite(result, "exact batch state", computed=True)
         for group_index, batch_index in enumerate(indices):
             outputs[batch_index] = result[group_index]
 
@@ -193,16 +228,21 @@ def temperature_transition_matrix(
     """Return the linear sensitivity of next temperature to current temperature."""
     system_matrix = model.system_matrix(actuator)
     step = torch.as_tensor(dt, dtype=model.capacity.dtype, device=model.capacity.device)
+    require_time_step(step)
     if step.ndim != 0:
         raise ValueError("temperature transition dt must be scalar")
     if model.integrator == "exact":
-        return torch.matrix_exp(system_matrix * step)
+        transition = torch.matrix_exp(system_matrix * step)
+        require_finite(transition, "temperature transition", computed=True)
+        return transition
     identity = torch.eye(
         model.n_nodes,
         dtype=model.capacity.dtype,
         device=model.capacity.device,
     )
-    return torch.linalg.solve(identity - step * system_matrix, identity)
+    transition = torch.linalg.solve(identity - step * system_matrix, identity)
+    require_finite(transition, "temperature transition", computed=True)
+    return transition
 
 
 def step(
@@ -218,6 +258,15 @@ def step(
         dtype=state.temperature.dtype,
         device=state.temperature.device,
     )
+    require_time_step(interval)
+    require_finite(command, "command")
+    if state.temperature.shape[-1] != model.n_nodes:
+        raise ValueError("temperature has the wrong number of nodes")
+    if state.actuator.shape != command.shape or command.shape[-1] != model.n_controls:
+        raise ValueError("actuator and command must have equal [..., n_controls] shape")
+    require_finite(state.actuator, "actuator")
+    tau = model.actuator_tau().to(dtype=command.dtype, device=command.device)
+    require_finite(tau, "actuator tau", computed=True)
     if model.integrator == "exact":
         temperature, actuator = exact_joint_step(
             model,
@@ -225,18 +274,19 @@ def step(
             state.actuator,
             command,
             interval,
+            tau,
         )
-        return ThermalState(temperature, actuator)
+        return ThermalState._from_validated(temperature, actuator)
 
-    midpoint = actuator_step(model, state.actuator, command, interval * 0.5)
-    next_actuator = actuator_step(model, state.actuator, command, interval)
+    midpoint = _actuator_response(state.actuator, command, interval * 0.5, tau)
+    next_actuator = _actuator_response(state.actuator, command, interval, tau)
     next_temperature = implicit_euler_step(
         state.temperature,
-        model.system_matrix(midpoint),
-        model.forcing(midpoint),
+        system_matrix(model, midpoint),
+        forcing(model, midpoint),
         interval,
     )
-    return ThermalState(next_temperature, next_actuator)
+    return ThermalState._from_validated(next_temperature, next_actuator)
 
 
 def prepare_batch_inputs(
@@ -258,10 +308,13 @@ def prepare_batch_inputs(
             dtype=model.capacity.dtype,
             device=model.capacity.device,
         )
+        require_finite(initial_actuator, "initial_actuator")
     if initial_temperature.ndim != 2 or initial_temperature.shape[1] != model.n_nodes:
         raise ValueError("initial_temperature must have shape [batch, n_nodes]")
     if commands.ndim != 3 or commands.shape[2] != model.n_controls:
         raise ValueError("commands must have shape [batch, steps, n_controls]")
+    if commands.shape[1] == 0 or commands.shape[0] == 0:
+        raise ValueError("commands need at least one trajectory and interval")
     if commands.shape[0] != initial_temperature.shape[0]:
         raise ValueError("initial_temperature and commands batch sizes must match")
     if dt.ndim == 1:
@@ -274,6 +327,9 @@ def prepare_batch_inputs(
     actuator = commands[:, 0] if initial_actuator is None else initial_actuator
     if actuator.shape != (commands.shape[0], model.n_controls):
         raise ValueError("initial_actuator must have shape [batch, n_controls]")
+    require_finite(initial_temperature, "initial_temperature")
+    require_finite(commands, "commands")
+    require_time_step(dt)
     return initial_temperature, commands, dt, actuator
 
 
@@ -284,7 +340,11 @@ def forward_batch(
     dt: torch.Tensor,
     initial_actuator: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Integrate equal-length trajectories as one differentiable batch."""
+    """Integrate trajectories and return point values aligned to starting commands.
+
+    Zero-tau actuator values at time[k] equal commands[k]. Lagged actuator states
+    remain continuous. The final point holds the last interval's command.
+    """
     initial_temperature, commands, dt, actuator = prepare_batch_inputs(
         model,
         initial_temperature,
@@ -294,8 +354,11 @@ def forward_batch(
     )
     temperature = initial_temperature
     temperatures = [temperature]
-    actuators = [actuator]
     operator_cache: OperatorCache = {}
+    tau = model.actuator_tau()
+    require_finite(tau, "actuator tau", computed=True)
+    actuator = torch.where(tau > 0.0, actuator, commands[:, 0])
+    actuators = [actuator]
 
     for index in range(commands.shape[1]):
         interval_dt = dt[:, index]
@@ -308,17 +371,20 @@ def forward_batch(
                 command,
                 interval_dt,
                 operator_cache,
+                tau,
             )
         else:
-            midpoint = actuator_step(model, actuator, command, interval_dt * 0.5)
-            actuator = actuator_step(model, actuator, command, interval_dt)
+            midpoint = _actuator_response(actuator, command, interval_dt * 0.5, tau)
+            actuator = _actuator_response(actuator, command, interval_dt, tau)
             temperature = implicit_euler_step(
                 temperature,
-                model.system_matrix(midpoint),
-                model.forcing(midpoint),
+                system_matrix(model, midpoint),
+                forcing(model, midpoint),
                 interval_dt,
             )
         temperatures.append(temperature)
+        point_command = commands[:, min(index + 1, commands.shape[1] - 1)]
+        actuator = torch.where(tau > 0.0, actuator, point_command)
         actuators.append(actuator)
     return torch.stack(temperatures, dim=1), torch.stack(actuators, dim=1)
 

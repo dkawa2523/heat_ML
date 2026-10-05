@@ -11,6 +11,12 @@ from matplotlib import font_manager
 from matplotlib import pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
+from .evaluation import (
+    validate_case_metrics,
+    validate_evaluation_points,
+    validate_prediction_points,
+)
+
 matplotlib.use("Agg", force=True)
 
 
@@ -65,9 +71,10 @@ def configure_japanese_plotting() -> None:
 
 
 def pooled_r2(frame: pd.DataFrame) -> float:
+    validate_prediction_points(frame)
     truth = frame["truth"].to_numpy(dtype=float)
     predicted = frame["predicted"].to_numpy(dtype=float)
-    paired = np.isfinite(truth) & np.isfinite(predicted)
+    paired = np.isfinite(truth)
     truth = truth[paired]
     predicted = predicted[paired]
     if len(truth) < 2:
@@ -81,6 +88,10 @@ def summarize_predictions(
     prediction_points: pd.DataFrame,
 ) -> pd.DataFrame:
     """Summarize external cases without mixing different benchmark categories."""
+    validate_case_metrics(case_metrics)
+    validate_evaluation_points(
+        case_metrics, prediction_points, ("evaluation", "category", "case_id", "model")
+    )
     rows: list[dict[str, object]] = []
     keys = ["evaluation", "category", "model"]
     for key, cases in case_metrics.groupby(keys, sort=False):
@@ -112,6 +123,12 @@ def summarize_internal_predictions(
     test_points: pd.DataFrame,
 ) -> pd.DataFrame:
     """Summarize internal splits; pooled R² is retained for the held-out test only."""
+    validate_case_metrics(case_metrics)
+    validate_evaluation_points(
+        case_metrics[case_metrics["split"] == "test"],
+        test_points,
+        ("dataset", "split", "case_id", "model"),
+    )
     rows: list[dict[str, object]] = []
     for key, cases in case_metrics.groupby(["dataset", "split", "model"], sort=False):
         dataset, split, model = key

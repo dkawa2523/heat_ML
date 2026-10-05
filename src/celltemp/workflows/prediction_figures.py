@@ -9,6 +9,8 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 
+from celltemp.analysis import prediction_error_metrics, validate_prediction_arrays
+
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
@@ -32,6 +34,7 @@ class PredictionCase:
             raise ValueError("time must have one value for every prediction row")
         if not 0 <= self.evaluation_start_index < len(self.time):
             raise ValueError("evaluation_start_index is outside the prediction rows")
+        validate_prediction_arrays(self.truth, self.predicted)
 
 
 @dataclass(frozen=True)
@@ -46,30 +49,41 @@ class PredictionFigureResult:
 
 
 def coefficient_of_determination(truth: np.ndarray, predicted: np.ndarray) -> float:
-    """Return ordinary R-squared after excluding non-finite pairs."""
-    valid = np.isfinite(truth) & np.isfinite(predicted)
+    """Return ordinary R-squared with missing truth and fully finite predictions."""
+    truth, predicted = validate_prediction_arrays(truth, predicted)
+    valid = np.isfinite(truth)
     observed = truth[valid]
-    estimate = predicted[valid]
     if not observed.size:
         raise ValueError("no finite truth/prediction pairs")
-    denominator = float(np.sum((observed - observed.mean()) ** 2))
+    with np.errstate(over="ignore", invalid="ignore"):
+        denominator = float(np.sum((observed - observed.mean()) ** 2))
+        observed_error = predicted[valid] - observed
+        numerator = float(np.sum(observed_error**2))
+    if not np.isfinite(denominator) or not np.isfinite(numerator):
+        raise ValueError("R-squared sums must remain finite at observed truth values")
     if denominator <= np.finfo(np.float64).eps:
         return float("nan")
-    return float(1.0 - np.sum((estimate - observed) ** 2) / denominator)
+    score = 1.0 - numerator / denominator
+    if not np.isfinite(score):
+        raise ValueError("R-squared must remain finite for nonconstant observed truth")
+    return float(score)
 
 
 def _evaluated_pairs(case: PredictionCase) -> tuple[np.ndarray, np.ndarray]:
+    truth, predicted = validate_prediction_arrays(case.truth, case.predicted)
     start = case.evaluation_start_index
-    truth = case.truth[start:]
-    predicted = case.predicted[start:]
-    valid = np.isfinite(truth) & np.isfinite(predicted)
+    truth = truth[start:]
+    predicted = predicted[start:]
+    valid = np.isfinite(truth)
     return truth[valid], predicted[valid]
 
 
 def _representative_case(cases: Sequence[PredictionCase]) -> PredictionCase:
     def rmse(case: PredictionCase) -> float:
         truth, predicted = _evaluated_pairs(case)
-        return float(np.sqrt(np.mean((predicted - truth) ** 2))) if truth.size else -np.inf
+        return (
+            float(prediction_error_metrics(truth, predicted)["rmse_k"]) if truth.size else -np.inf
+        )
 
     return max(cases, key=rmse)
 
@@ -139,7 +153,7 @@ def _plot_parity(
         sensor_predicted = np.concatenate(
             [case.predicted[case.evaluation_start_index :, index] for case in cases]
         )
-        valid = np.isfinite(sensor_truth) & np.isfinite(sensor_predicted)
+        valid = np.isfinite(sensor_truth)
         sensor_truth = sensor_truth[valid]
         sensor_predicted = sensor_predicted[valid]
         truth_parts.append(sensor_truth)

@@ -5,11 +5,12 @@
 問題の入熱位置、冷却境界、計測領域は先に
 [benchmark problem setups](benchmark_problem_setups.md)、数値結果は
 [benchmark evidence](benchmark_evidence.md)を参照してください。
+現行の出力・責務は[product architecture](product_architecture.md)、実行手順は[README](../README.md)を正本とします。
 
 > **重要:** productの主modelである`ThermalRCModel`はニューラルネットではありません。PyTorchの
 > `nn.Module`と自動微分は、仮定した熱回路の物理係数を同定するために使います。MLP、1D-CNN、TCN、GRU、
 > LSTMは公平な採否判断のため`benchmarks/neural_comparison`へ評価専用で実装しましたが、現時点では
-> product APIへ追加していません。`TPU`というmodelはsourceにも履歴にもなく、名称が近いTCNを評価しています。
+> product APIへ追加していません。
 
 ## 1. 現在評価している手法
 
@@ -78,7 +79,7 @@ C_i dT_i/dt
 各項は次の実物と対応します。
 
 - `C_i [J/K]`: partまたは領域の熱容量。
-- `G_ij [W/K]`: node間の相反・対称な熱伝導経路。正値なので高温側から低温側へ熱が流れます。
+- `G_ij [W/K]`: node間の相反・対称な熱伝導経路。非負なので高温側から低温側へ熱が流れます。
 - `q_source [W]`: heater、plasma、chip powerなどから入る熱。
 - `q_boundary [W]`: ambient、brine、coolantなどreservoirとの熱交換。
 
@@ -137,7 +138,8 @@ parameter探索空間が小さく、未観測command列へ工学的に外挿し�
 
 学習処理は次の順です。
 
-1. case単位でtrain / validation / testを分離し、同じrecipeを別splitへ跨がせません。
+1. case単位でtrain / validation / testを分離します。random splitは数値的に同じtime gridとcontrol履歴を
+   一つのgroupへまとめ、初期温度だけが異なる反復caseを分離しません。
 2. 各caseの開始観測からnode温度を初期化します。sensorから見えない初期温度方向だけは、学習区間への応答から
    case固有nuisance stateとして解析的にprofileします。これはartifactへ保存しません。
 3. commandと可変`dt`を使って物理RCを区間全体へrolloutし、`H`でsensor予測へ戻します。
@@ -158,6 +160,13 @@ loss = mean_over_cases(case_loss_c)
 
 training lossが小さくても、hidden initial stateのprofileへ依存した条件付きfitに過ぎない場合があります。そのため
 `conditional_rmse`と`causal_rmse`を分け、deployed modelの選択には後者だけを使います。
+入力Tensorは一つのfit内で再利用します。hidden初期状態のprofileは、候補軌道のbaselineと線形感度から
+補正後の軌道を得るため、同じ温度応答を二度積分しません。actuatorの開始点までの再生も共有します。
+どちらも物理係数やcase重み、autogradを変える近似ではありません。
+
+通常trainはscore・metadata・artifactを保存し、`project.diagnostics: true`の場合だけ
+`diagnostics/model_comparison.csv`、熱経路・mode、test予測詳細と図を追加します。
+baseline比較を読むときはこの診断を要求し、基本run保存後の別transactionで生成します。
 
 ## 5. Forecastとmonitorは何が違うか
 
@@ -167,8 +176,14 @@ training lossが小さくても、hidden initial stateのprofileへ依存した�
 2. 最後のposterior node温度とeffective actuatorを初期状態にする。
 3. origin以後は将来command scheduleと`dt`だけを使い、open-loopで温度を予測する。
 
+観測prefixの境界は`domain.forecast_origin_index`が定義し、履歴だけを状態推定へ渡します。
+将来平均はtrainと共通のphysical rollout、covarianceは同じeffective actuatorとdtで独立に伝播します。
+過去の未知熱・biasの推定平均は未来forcingへ持ち越さず、履歴末端のcovarianceと相関は保持します。
+
 出力の95%区間は現行ではstate uncertaintyとprocess noiseを表します。parameter、将来入力、model-formの不確かさは
 含まないため、特に放射などの適用外条件で「95%以内ならmodelも正しい」とは解釈できません。
+基本の予測CSV・summary・coverage・指標・manifestを先に保存し、要求した診断だけ保存済みCSVから
+case単位で熱収支・図を生成します。再推論せず、診断失敗でも基本予測を保持します。
 
 ### Monitor
 
@@ -232,24 +247,10 @@ causal open-loop RMSEで選びます。このため「次の1点だけ当たる�
 
 ![内部予測と外部予測を分けるデータ境界](validation_figures/00_internal_external_definition.png)
 
-300 epoch上限とearly stoppingによる内部held-out testのcase平均RMSE [K]は次の通りです。testはweight更新にも
-epoch選択にも使わず、時刻0以後の温度真値を隠して評価しています。
-
-| 内部test | cases | 物理RC | MLP | 1D-CNN | TCN | GRU | LSTM |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| TopCell | 37 | **0.019** | 0.343 | 0.199 | 0.551 | 0.113 | 0.164 |
-| 線形COMSOL | 2 | **0.027** | 0.087 | 0.072 | 0.169 | 0.132 | 0.125 |
-| 非線形COMSOL | 1 | **0.405** | 1.291 | 1.958 | 1.577 | 2.767 | 2.699 |
-
-外部coreのcase平均RMSE [K]は次の通りです。外部は別case集合で、dataset所定の観測prefixを使うため、
-内部testとの差を単純な難易度差とは解釈しません。
-
-| 評価 | 物理RC | MLP | 1D-CNN | TCN | GRU | LSTM |
-|---|---:|---:|---:|---:|---:|---:|
-| TopCell | **0.143** | 1.520 | 1.317 | 1.868 | 1.372 | 1.955 |
-| 線形COMSOL | **0.036** | 0.345 | 0.175 | 0.326 | 0.920 | 0.812 |
-| 非線形COMSOL | **0.191** | 1.958 | 1.443 | 1.130 | 1.767 | 1.993 |
-| high-fidelity COMSOL core | **0.048** | 0.657 | 0.650 | 0.786 | 0.328 | 0.710 |
+300 epoch上限とearly stoppingによる内部held-out testは、weight更新にもepoch選択にも使わず、
+時刻0以後の温度真値を隠して評価します。外部は別case集合でdataset所定の観測prefixを使うため、
+内部testとの差を単純な難易度差とは解釈しません。case数・RMSE・波形・R²の現在値は
+[benchmark evidence](benchmark_evidence.md)と[neural model comparison](neural_model_comparison/)へ集約します。
 
 ![data量、解釈性、柔軟性から見たmodelの使い分け](figures/model_methods/imagegen/04_model_selection_ja.png)
 
@@ -280,6 +281,8 @@ epoch選択にも使わず、時刻0以後の温度真値を隠して評価し�
 | Adam、prior、causal validation | [`src/celltemp/learning/trainer.py`](../src/celltemp/learning/trainer.py) |
 | observer | [`src/celltemp/engine/observer.py`](../src/celltemp/engine/observer.py) |
 | forecast / monitor API | [`src/celltemp/inference/forecast.py`](../src/celltemp/inference/forecast.py)、[`monitor.py`](../src/celltemp/inference/monitor.py) |
+| 観測prefixの契約 | [`src/celltemp/domain/trajectory.py`](../src/celltemp/domain/trajectory.py) |
+| 配列指標とlazy model inspection | [`src/celltemp/analysis`](../src/celltemp/analysis/) |
 | ニューラル比較architecture | [`benchmarks/neural_comparison/models.py`](../benchmarks/neural_comparison/models.py) |
 | ニューラル学習・因果rollout | [`benchmarks/neural_comparison/training.py`](../benchmarks/neural_comparison/training.py) |
 | 比較手順と結果の読み方 | [`benchmarks/neural_comparison/README.md`](../benchmarks/neural_comparison/README.md) |

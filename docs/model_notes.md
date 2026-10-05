@@ -38,7 +38,8 @@ TopCell synthetic generatorは区間内actuator midpointとforward Euler、model
 integrationなので完全に同じ離散化ではありません。最新の外部評価値は
 [TopCell benchmark](../benchmarks/topcell/README.md)に集約しています。実データでは、command
 timestampが「開始時刻」か「終了時刻」かを必ず確認し、必要な場合だけ
-`control_convention: right`を指定してください。
+`data.control_convention: right`を指定してください。forecast/monitorで異なる形式を読む場合だけ
+各sectionの`control_convention`で上書きします。artifact単独運用では保存済み学習規約が既定です。
 
 ## 初期状態
 
@@ -52,7 +53,9 @@ RC係数でもartifactの一部でもありません。条件付きRMSEは未知
 分けて保存し、best modelの選択には後者を使います。
 
 sensorとnodeが一対一なら、初期node温度は観測値です。時刻0だけを使う最小forecastでは、
-隠れnodeを観測写像のridge逆問題で観測平均へ弱く寄せます。連続するburn-in観測をCSV先頭へ
+隠れnodeを観測平均を中心とするridge付き最小二乗で初期化します。正規方程式ではなく拡大行列のQR分解を使い、
+float32モデルでも内部の初期化計算はfloat64で行います。加重平均・重複sensorでも有限の初期温度と勾配を保ちます。
+連続するburn-in観測をCSV先頭へ
 置けば、forecastは物理observerで未観測nodeとeffective actuatorを因果推定し、履歴末端の
 posterior物理状態からopen-loopへ引き渡します。将来区間の未知熱・sensor biasを既知と仮定
 しないよう、observerの外乱・bias状態はhandoffしません。
@@ -94,3 +97,51 @@ penaltyではなく、不十分な励起に対する識別性regularizationで�
 
 単一caseのノイズに合わせて自由度を追加しないでください。運転条件単位のholdoutで再現する
 残差だけを構造不足の根拠とします。
+
+## 専門解析
+
+通常の波形解析・学習・予測とは別の任意処理です。必要なprojectだけ、独立した`analysis.yaml`へ設定します。
+同じ熱系は`system: system.yaml`で参照し、入力CSVと保存先もそのconfigに指定します。
+実行できる例は[COMSOLの専門解析config](../external_tools/comsol_chip_cooling/analysis.yaml)です。
+
+10–90%応答、63.2%到達、整定、overshootは通常recipeへ自動付与しません。単一stepまたは目的に合う区間を
+明示した場合だけ`response_metrics.csv`へ保存します。区間はCSVの絶対時刻[s]で指定します。
+指定区間は`start_s/end_s`、その中の有効観測範囲は`observation_start_s/observation_end_s`へ保存します。
+63.2%到達・整定時間の起点は最初の有効観測、10–90%応答時間は二つの到達時刻の差です。
+
+```yaml
+analysis:
+  response:
+    power_step_case: {start_s: 20.0, end_s: 120.0}
+```
+
+末尾10%の平均を区間の到達温度、温度変化の2%を整定帯として使います。これは選んだ区間の記述であり、
+任意recipeの物理時定数を自動推定する機能ではありません。詳細な分率調整は`analysis.response_metrics`配列APIを使います。
+
+
+吸収熱量が既知の単独step試験だけ、任意の`thermal_impedance`を追加できます。commandの単位や
+ファイル名から熱量を推測しないため、`heat_step_w`と有限transition区間を明示します。基準区間の
+drift/noise、他入力の不変性、前後各5点以上を満たしたsensorだけ
+`thermal_impedance.csv`へ`Zth(t)=DeltaT/P`を保存します。終端Zthの傾きも明示した上限を満たした場合だけ、
+`thermal_impedance_qualification.csv`の`effective_rth_k_per_w`を有効にします。`make_plots: true`では、
+適格caseをsensor別に重ねた対数時間軸の`figures/thermal_impedance.png`も保存します。
+
+```yaml
+analysis:
+  thermal_impedance:
+    baseline_window_s: 40.0
+    terminal_window_s: 60.0
+    max_baseline_drift_k_per_s: 0.00001
+    max_baseline_std_k: 0.001
+    max_terminal_zth_drift_k_per_w_s: 0.001
+    steps:
+      power_step_8w:
+        control: absorbed_power_command
+        transition_start_s: 60.0
+        transition_end_s: 64.0
+        heat_step_w: 8.0
+```
+
+ここで`heat_step_w`は電源指令ではなく、校正またはCAE条件から既知の対象への吸収熱変化です。終端が
+まだ上昇中なら過渡Zthは残りますが、定常Rthは空欄になります。通常レシピ、複合入力、rampへこの設定を
+付けないでください。

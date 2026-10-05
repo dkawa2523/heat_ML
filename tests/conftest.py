@@ -154,6 +154,7 @@ def train_config() -> dict:
     return {
         "seed": 42,
         "project": {
+            "diagnostics": True,
             "run_name": "test_run",
             "output_dir": "outputs/runs",
             "overwrite_run": True,

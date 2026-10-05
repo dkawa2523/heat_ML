@@ -1,6 +1,7 @@
 seed: 42
 
 project:
+  diagnostics: true
   run_name: nonlinear_high_fidelity_network
   output_dir: work/high_fidelity_benchmark/runs
   overwrite_run: true
@@ -42,6 +43,8 @@ training:
 # The benchmark runner executes this public forecast workflow once for each
 # member of the high-fidelity pair, changing only input_dir and output_dir.
 forecast:
+  # Published forecast exports use a different timestep from the training data.
+  dt: null
   input_dir: data/nonlinear_high_fidelity/dynamic/eval/forecast
   pattern: "*.csv"
   output_dir: work/high_fidelity_benchmark/forecast/conjugate

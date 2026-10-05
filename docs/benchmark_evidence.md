@@ -1,8 +1,12 @@
 # Benchmark evidence
 
 この文書は、用途の異なるbenchmarkを一つの点数へ混ぜず、現在の証拠と利用限界を読むための索引です。
-数値の正本は各workflowが出力するJSON/CSVであり、この文書は2026-10-01時点の要約です。外部report
+数値の正本は各workflowが出力するJSON/CSVであり、この文書は2026-10-04時点の要約です。外部report
 builderや別の集計schemaは設けません。
+
+入力出力簡素化版ではquickstart、TopCell、線形COMSOLを既定条件で再実行し、下表の数値を維持しました。
+forecast/monitor CSVはmanifest schema 3の列へ更新済みです。非線形・high-fidelity・neural比較の数値は
+既存のscreening結果として扱い、今回再学習した結果とは区別します。全体検証は[quality](quality.md)を参照してください。
 
 入熱位置、冷却境界、計測領域、各評価で使用したモデル、COMSOL `.mph`の所在は、先に
 [problem setup figures](benchmark_problem_setups.md)で確認できます。
@@ -21,6 +25,11 @@ builderや別の集計schemaは設けません。
 すべてcase平均RMSEです。`worst`はfitted RCのcase別最大値です。将来truthは予測入力へ渡していません。
 metric originは既存benchmarkの定義を維持し、TopCell外部は推定originを含め、COMSOL外部は初期化行を
 除外します。下記の内部比較は全問題で時刻0を初期条件として誤差から除外します。
+
+予測のNaN・infは欠測として除外せず、評価失敗として拒否します。truthの正当な欠測は保持し、
+全観測truthを採点した点数とcoverageを検査します。2026-10-04の改良時には、保存済みneural比較の
+外部128,184点・内部test173,340点と集計222行をこの契約で再検証し、既存集計値との一致を確認しました。
+RCをneural比較へ再利用する際は、入力CSVのSHA-256とsplitをartifactへ照合します。
 
 | 評価境界 | cases | fitted RC [K] | engineering prior [K] | persistence [K] | worst [K] | 判定 |
 |---|---:|---:|---:|---:|---:|---|
@@ -155,7 +164,7 @@ sensor不足、sensor biasとの非識別性では誤帰属し得るため、こ
 
 | 評価 | 正本 | 再実行 |
 |---|---|---|
-| quickstart | `examples/topcell_quickstart/work/outputs/runs/thermal_network_demo/metrics_summary.json`、同directoryの`model_comparison.csv` | `celltemp train --config examples/topcell_quickstart/config.yaml` |
+| quickstart | `examples/topcell_quickstart/work/outputs/runs/thermal_network_demo/metrics_summary.json`、同directoryの`diagnostics/model_comparison.csv` | `celltemp train --config examples/topcell_quickstart/config.yaml` |
 | TopCell | `benchmarks/topcell/work/outputs/benchmark/benchmark_summary.json`、同directoryの`model_comparison.csv` | `python -m benchmarks.topcell.run` |
 | 線形COMSOL | `external_tools/comsol_chip_cooling/work/evaluation/summary.json`、同directoryの`model_comparison.csv` | COMSOL READMEの`train -> forecast -> monitor -> evaluate` |
 | 非線形COMSOL | [`summary.json`](../external_tools/comsol_chip_cooling/data/nonlinear/benchmark/summary.json)、[`model_comparison.csv`](../external_tools/comsol_chip_cooling/data/nonlinear/benchmark/model_comparison.csv) | `python -m external_tools.comsol_chip_cooling.benchmark_nonlinear` |

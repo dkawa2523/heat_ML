@@ -8,8 +8,11 @@ from dataclasses import dataclass
 
 import torch
 
+from .integrator import exact_process_operators
+from .operators import system_matrix
 from .rc import ThermalRCModel
 from .state import ThermalState
+from .validation import require_finite
 
 _OPERATOR_CACHE_SIZE = 256
 
@@ -30,6 +33,37 @@ class ObserverState:
     heat_disturbance: torch.Tensor
     bias_state: torch.Tensor
     covariance: torch.Tensor
+
+    @classmethod
+    def _from_validated(
+        cls,
+        temperature: torch.Tensor,
+        actuator: torch.Tensor,
+        heat_disturbance: torch.Tensor,
+        bias_state: torch.Tensor,
+        covariance: torch.Tensor,
+    ) -> ObserverState:
+        """Carry checked results and unchanged coordinates through an internal step."""
+        state = object.__new__(cls)
+        for name, value in (
+            ("temperature", temperature),
+            ("actuator", actuator),
+            ("heat_disturbance", heat_disturbance),
+            ("bias_state", bias_state),
+            ("covariance", covariance),
+        ):
+            object.__setattr__(state, name, value)
+        return state
+
+    def __post_init__(self) -> None:
+        values = (self.temperature, self.actuator, self.heat_disturbance, self.bias_state)
+        if any(value.ndim != 1 for value in values):
+            raise ValueError("observer state coordinates must be one-dimensional")
+        size = len(self.temperature) + len(self.heat_disturbance) + len(self.bias_state)
+        if self.covariance.shape != (size, size):
+            raise ValueError("observer covariance must match the state dimension")
+        for name in ("temperature", "actuator", "heat_disturbance", "bias_state", "covariance"):
+            require_finite(getattr(self, name), f"observer {name}")
 
 
 class KalmanObserver:
@@ -92,7 +126,7 @@ class KalmanObserver:
         )
         self.bias_basis = self._bias_basis()
         self._operator_cache: OrderedDict[
-            tuple[float, tuple[float, ...]],
+            tuple[float, float, float, tuple[float, ...]],
             tuple[torch.Tensor, torch.Tensor],
         ] = OrderedDict()
 
@@ -269,7 +303,7 @@ class KalmanObserver:
             device=self.model.capacity.device,
         )
         n_node = self.model.n_nodes
-        matrix[:n_node, :n_node] = self.model.system_matrix(actuator)
+        matrix[:n_node, :n_node] = system_matrix(self.model, actuator)
         matrix[:n_node, n_node : n_node + self.n_disturbances] = (
             self.disturbance_weights.T / self.model.capacity[:, None]
         )
@@ -303,15 +337,29 @@ class KalmanObserver:
         if not math.isfinite(step_value) or step_value < 0.0:
             raise ValueError("observer dt must be non-negative and finite")
         continuous = self._continuous_state_matrix(actuator)
-        matrix_key = tuple(float(value) for value in continuous.detach().cpu().flatten().tolist())
-        cache_key = (step_value, matrix_key)
-        cached = self._operator_cache.get(cache_key)
-        if cached is not None:
-            self._operator_cache.move_to_end(cache_key)
-            return cached
+        cacheable = not torch.is_grad_enabled() or not (
+            continuous.requires_grad or step.requires_grad
+        )
+        cache_key = None
+        if cacheable:
+            matrix_key = tuple(
+                float(value) for value in continuous.detach().cpu().flatten().tolist()
+            )
+            cache_key = (
+                step_value,
+                self.disturbance_process_std,
+                self.bias_process_std,
+                matrix_key,
+            )
+            cached = self._operator_cache.get(cache_key)
+            if cached is not None:
+                self._operator_cache.move_to_end(cache_key)
+                return cached
 
         density = self._process_spectral_density()
         if self.model.integrator == "implicit":
+            require_finite(continuous, "observer dynamics")
+            require_finite(density, "process spectral density")
             identity = torch.eye(
                 self.state_size,
                 dtype=continuous.dtype,
@@ -319,38 +367,58 @@ class KalmanObserver:
             )
             transition = torch.linalg.solve(identity - step * continuous, identity)
             process_covariance = transition @ (density * step) @ transition.T
+            process_covariance = (process_covariance + process_covariance.T) * 0.5
+            require_finite(transition, "observer transition", computed=True)
+            require_finite(process_covariance, "observer process covariance", computed=True)
         else:
-            # Van Loan discretization of integral exp(Fs) Q exp(F' s) ds.
-            zero = torch.zeros_like(continuous)
-            van_loan = torch.cat(
-                [
-                    torch.cat([continuous, density], dim=1),
-                    torch.cat([zero, -continuous.T], dim=1),
-                ],
-                dim=0,
-            )
-            exponential = torch.matrix_exp(van_loan * step)
-            transition = exponential[: self.state_size, : self.state_size]
-            process_covariance = exponential[: self.state_size, self.state_size :] @ transition.T
-        process_covariance = (process_covariance + process_covariance.T) * 0.5
-        self._operator_cache[cache_key] = transition, process_covariance
-        if len(self._operator_cache) > _OPERATOR_CACHE_SIZE:
-            self._operator_cache.popitem(last=False)
+            transition, process_covariance = exact_process_operators(continuous, density, step)
+        if cache_key is not None:
+            self._operator_cache[cache_key] = transition, process_covariance
+            if len(self._operator_cache) > _OPERATOR_CACHE_SIZE:
+                self._operator_cache.popitem(last=False)
         return transition, process_covariance
+
+    @staticmethod
+    def _propagate_covariance(
+        covariance: torch.Tensor,
+        transition: torch.Tensor,
+        process_covariance: torch.Tensor,
+    ) -> torch.Tensor:
+        propagated = transition @ covariance @ transition.T + process_covariance
+        propagated = (propagated + propagated.T) * 0.5
+        require_finite(propagated, "observer predicted covariance", computed=True)
+        return propagated
+
+    def predict_covariance(
+        self,
+        covariance: torch.Tensor,
+        actuator: torch.Tensor,
+        command: torch.Tensor,
+        dt: float | torch.Tensor,
+    ) -> torch.Tensor:
+        """Propagate uncertainty without recomputing a deterministic mean rollout."""
+        if covariance.shape != (self.state_size, self.state_size):
+            raise ValueError("observer covariance must match the state dimension")
+        require_finite(covariance, "observer covariance")
+        interval_actuator = self.model.actuator_step(actuator, command, dt * 0.5)
+        transition, process_covariance = self._operators(dt, interval_actuator)
+        return self._propagate_covariance(covariance, transition, process_covariance)
 
     def predict(
         self, state: ObserverState, command: torch.Tensor, dt: float | torch.Tensor
     ) -> ObserverState:
         interval_actuator = self.model.actuator_step(state.actuator, command, dt * 0.5)
-        nominal = self.model.step(ThermalState(state.temperature, state.actuator), command, dt)
+        nominal = self.model.step(
+            ThermalState._from_validated(state.temperature, state.actuator), command, dt
+        )
         transition, process_covariance = self._operators(dt, interval_actuator)
         n_node = self.model.n_nodes
         disturbance_end = n_node + self.n_disturbances
         disturbance_response = transition[:n_node, n_node:disturbance_end]
         temperature = nominal.temperature + disturbance_response @ state.heat_disturbance
-        covariance = transition @ state.covariance @ transition.T + process_covariance
-        covariance = (covariance + covariance.T) * 0.5
-        return ObserverState(
+        covariance = self._propagate_covariance(state.covariance, transition, process_covariance)
+        require_finite(temperature, "observer predicted temperature", computed=True)
+        return ObserverState._from_validated(
             temperature,
             nominal.actuator,
             state.heat_disturbance,
@@ -387,6 +455,9 @@ class KalmanObserver:
         if mask is None:
             mask = torch.isfinite(observation)
         mask = mask.to(dtype=torch.bool, device=observation.device)
+        if mask.shape != observation.shape:
+            raise ValueError("observation mask must have one value per sensor")
+        require_finite(observation[mask], "observed temperatures")
         if not torch.any(mask):
             return predicted, torch.empty(
                 0,
@@ -426,10 +497,12 @@ class KalmanObserver:
             residual_map @ predicted.covariance @ residual_map.T + gain @ measurement_noise @ gain.T
         )
         covariance = (covariance + covariance.T) * 0.5
+        require_finite(updated, "observer posterior state", computed=True)
+        require_finite(covariance, "observer posterior covariance", computed=True)
         n_node = self.model.n_nodes
         disturbance_end = n_node + self.n_disturbances
         return (
-            ObserverState(
+            ObserverState._from_validated(
                 updated[:n_node],
                 predicted.actuator,
                 updated[n_node:disturbance_end],

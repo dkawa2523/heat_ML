@@ -11,6 +11,8 @@ import pandas as pd
 
 from celltemp.workflows.common import staged_output_directory
 
+from .qualification_support import load_verified_dynamic_reference
+
 SENSORS = ("chip", "sink_base", "fins")
 CONTROLS = ("chip_power", "coolant_temperature", "inlet_air_velocity")
 KEY = ("case_id", "time")
@@ -28,7 +30,13 @@ def _temporal_uncertainty_columns(frame: pd.DataFrame, path: Path, kind: str) ->
 
 
 def _read(path: Path, *, kind: str) -> pd.DataFrame:
-    frame = pd.read_csv(path)
+    # The published dynamic view belongs to this evidence root. Other CAE CSVs
+    # retain the general comparison contract and need no COMSOL-specific schema.
+    frame = (
+        load_verified_dynamic_reference(path.parent.parent)
+        if kind == "cae" and path.name == "cae_reference.csv" and path.parent.name == "dynamic"
+        else pd.read_csv(path)
+    )
     uncertainty_prefix = {"cae": "mesh_uncertainty", "experiment": "uncertainty"}.get(kind)
     if uncertainty_prefix is None:
         raise ValueError(f"unsupported comparison data kind: {kind}")

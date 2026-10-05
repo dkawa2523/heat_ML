@@ -18,6 +18,7 @@ from celltemp.domain import (
     ThermalSystemSpec,
 )
 from celltemp.engine import KalmanObserver, ThermalRCModel
+from celltemp.engine.integrator import exact_process_operators
 from tests.unit._engine_cases import DTYPE, conduction_model
 
 
@@ -90,6 +91,50 @@ def test_observer_cache_depends_on_dynamics_not_source_command() -> None:
     observer._operators(1.0, torch.tensor([100.0], dtype=DTYPE))
 
     assert len(observer._operator_cache) == 1
+
+
+def test_observer_cache_tracks_parameter_mutations_and_process_noise() -> None:
+    observer = KalmanObserver(conduction_model(), bias_process_std=0.0)
+    actuator = torch.empty(0, dtype=DTYPE)
+    with torch.no_grad():
+        initial_transition, initial_noise = observer._operators(1.0, actuator)
+        observer.disturbance_process_std *= 2.0
+        same_transition, larger_noise = observer._operators(1.0, actuator)
+        torch.testing.assert_close(same_transition, initial_transition)
+        torch.testing.assert_close(larger_noise, initial_noise * 4.0)
+
+        # Direct .data edits do not increment Tensor._version; value keys still notice.
+        observer.model.edge_laws.log_offset_multiplier.data.add_(0.5)
+        changed_transition, _ = observer._operators(1.0, actuator)
+        assert not torch.allclose(changed_transition, same_transition)
+
+
+def test_observer_differentiable_operators_skip_cache_serialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observer = KalmanObserver(conduction_model())
+
+    def unexpected_serialization(_: torch.Tensor) -> list[object]:
+        raise AssertionError("differentiable operators must not serialize a cache key")
+
+    monkeypatch.setattr(torch.Tensor, "tolist", unexpected_serialization)
+    for _ in range(2):
+        transition, covariance = observer._operators(1.0, torch.empty(0, dtype=DTYPE))
+        (transition.square().sum() + covariance.square().sum()).backward()
+        gradient = observer.model.edge_laws.log_offset_multiplier.grad
+        assert gradient is not None
+        assert torch.isfinite(gradient).all()
+    assert not observer._operator_cache
+
+
+def test_covariance_only_prediction_rejects_invalid_input() -> None:
+    observer = KalmanObserver(conduction_model())
+    empty = torch.empty(0, dtype=DTYPE)
+    with pytest.raises(ValueError, match="dimension"):
+        observer.predict_covariance(torch.eye(1, dtype=DTYPE), empty, empty, 1.0)
+    invalid = torch.full((observer.state_size, observer.state_size), float("nan"), dtype=DTYPE)
+    with pytest.raises(ValueError, match="finite"):
+        observer.predict_covariance(invalid, empty, empty, 1.0)
 
 
 def test_observer_can_skip_a_completely_missing_measurement() -> None:
@@ -211,3 +256,49 @@ def test_implicit_observer_uses_matching_backward_euler_process_covariance() -> 
     expected = transition @ (density * 5.0) @ transition.T
 
     torch.testing.assert_close(process_covariance, expected)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_exact_observer_covariance_stays_finite_over_many_thermal_time_constants(
+    dtype: torch.dtype,
+) -> None:
+    spec = ThermalSystemSpec(
+        node_names=("body",),
+        heat_capacity=(1.0,),
+        edges=(),
+        actuators=(),
+        boundaries=(
+            BoundarySpec("ambient", (1.0,), ReservoirTemperatureSpec(10.0), ConstantLawSpec(1.0)),
+        ),
+    )
+    observer = KalmanObserver(
+        ThermalRCModel(spec, dtype=dtype),
+        disturbance_process_std=0.02,
+        initial_temperature_std=0.0,
+        initial_disturbance_std=0.0,
+    )
+    state = observer.initialize(torch.tensor([20.0], dtype=dtype))
+    predicted = observer.predict(state, torch.empty(0, dtype=dtype), 1000.0)
+    expected = torch.tensor([[0.3994, 0.3996], [0.3996, 0.4]], dtype=dtype)
+    tolerance = 2e-4 if dtype == torch.float32 else 1e-11
+    torch.testing.assert_close(predicted.covariance, expected, rtol=tolerance, atol=tolerance)
+    torch.testing.assert_close(predicted.temperature, torch.tensor([10.0], dtype=dtype))
+    assert torch.linalg.eigvalsh(predicted.covariance).min() >= 0.0
+
+
+def test_exact_process_covariance_composition_and_gradients() -> None:
+    conductance = torch.tensor(2.0, dtype=DTYPE, requires_grad=True)
+    matrix = torch.zeros((2, 2), dtype=DTYPE)
+    matrix[0, 0] = -conductance
+    matrix[0, 1] = 0.5
+    density = torch.diag(torch.tensor([0.0, 0.04], dtype=DTYPE))
+    transition, covariance = exact_process_operators(matrix, density, 1000.0)
+    half_transition, half_covariance = exact_process_operators(matrix, density, 500.0)
+    torch.testing.assert_close(transition, half_transition @ half_transition)
+    torch.testing.assert_close(
+        covariance,
+        half_covariance + half_transition @ half_covariance @ half_transition.T,
+    )
+    (transition.sum() + covariance.sum()).backward()
+    assert conductance.grad is not None
+    assert torch.isfinite(conductance.grad)
